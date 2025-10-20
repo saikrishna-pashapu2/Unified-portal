@@ -147,8 +147,8 @@ export default function AIAssistantStatsPage() {
 
   if (!stats) return null;
 
-  const formatCurrency = (amount: number) => `$${amount.toFixed(4)}`;
-  const formatNumber = (num: number) => num.toLocaleString();
+  const formatCurrency = (amount: number | undefined) => `$${(amount || 0).toFixed(4)}`;
+  const formatNumber = (num: number | undefined) => (num || 0).toLocaleString();
   const formatDate = (date: string) => new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
   return (

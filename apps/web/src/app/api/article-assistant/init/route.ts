@@ -13,8 +13,14 @@ import {
   getOrCreateConversation,
   updateConversationSummary,
   hasFreshSummary,
+  getConversationMessages,
+  getConversationHistory,
 } from "@/lib/article-assistant-db";
-import { generateArticleSummary, generateSuggestedQuestions } from "@/lib/article-assistant-agent";
+import { 
+  generateArticleSummary, 
+  generateSuggestedQuestions,
+  generateFollowUpQuestions,
+} from "@/lib/article-assistant-agent";
 
 export async function POST(request: NextRequest) {
   try {
@@ -119,6 +125,7 @@ export async function POST(request: NextRequest) {
 
       summary = generatedSummary;
       
+      // For new conversations, no existing messages yet
       return NextResponse.json({
         success: true,
         conversation: {
@@ -127,8 +134,63 @@ export async function POST(request: NextRequest) {
           summary,
           suggestedQuestions,
           totalMessages: conversation.total_messages,
+          messages: [],
         },
       });
+    }
+
+    // Fetch existing messages if this is a returning conversation
+    let existingMessages: any[] = [];
+    let followUpQuestions: string[] = [];
+    
+    if (conversation.total_messages > 0) {
+      const { getConversationMessages } = await import("@/lib/article-assistant-db");
+      const messages = await getConversationMessages(domain, conversation.id);
+      existingMessages = messages.map((msg: any) => ({
+        role: msg.role,
+        content: msg.content,
+      }));
+
+      // Generate contextual follow-up questions based on conversation history
+      try {
+        const openaiKey = process.env.OPENAI_API_KEY;
+        if (openaiKey) {
+          // Get article for context
+          const prisma = getPrisma(domain);
+          let article: any = null;
+
+          if (domain === "credit") {
+            const rows = await prisma.$queryRaw<any[]>`
+              SELECT id, title, content
+              FROM credit_articles
+              WHERE id = ${conversation.article_id}
+              LIMIT 1
+            `;
+            article = rows[0] || null;
+          } else {
+            const rows = await prisma.$queryRaw<any[]>`
+              SELECT id, title, summary as content
+              FROM esg_articles
+              WHERE id = ${conversation.article_id}
+              LIMIT 1
+            `;
+            article = rows[0] || null;
+          }
+
+          if (article) {
+            const history = await getConversationHistory(domain, conversation.id, 10);
+            followUpQuestions = await generateFollowUpQuestions(
+              history,
+              article.content || "",
+              article.title || "Untitled",
+              openaiKey
+            );
+          }
+        }
+      } catch (error) {
+        console.error("Error generating follow-up questions:", error);
+        followUpQuestions = [];
+      }
     }
 
     return NextResponse.json({
@@ -137,8 +199,9 @@ export async function POST(request: NextRequest) {
         id: conversation.id,
         sessionId: conversation.session_id,
         summary,
-        suggestedQuestions: [],
+        suggestedQuestions: followUpQuestions,
         totalMessages: conversation.total_messages,
+        messages: existingMessages,
       },
     });
   } catch (error) {

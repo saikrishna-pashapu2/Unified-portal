@@ -56,262 +56,364 @@ export async function GET(req: NextRequest) {
     }
 
     // ============================================================
-    // 1. OVERALL STATISTICS
+    // FETCH REAL DATA FROM article_conversations and article_messages
     // ============================================================
-    const [
-      totalSessions,
-      activeSessions,
-      totalMessages,
-      uniqueUsers,
-      totalTokens,
-      totalCost,
-    ] = await Promise.all([
-      // Total sessions created
-      esgPrisma.article_ai_sessions.count({
-        where: whereClause,
-      }),
 
-      // Active sessions (not expired)
-      esgPrisma.article_ai_sessions.count({
-        where: {
-          ...whereClause,
-          expires_at: {
-            gt: new Date(),
-          },
-        },
-      }),
+    // Total conversations in period
+    const totalSessionsQuery = domain !== 'all' 
+      ? esgPrisma.$queryRaw<Array<{ count: bigint }>>`
+          SELECT COUNT(*)::bigint as count
+          FROM article_conversations
+          WHERE created_at >= ${startDate}
+          AND article_source = ${domain}
+        `
+      : esgPrisma.$queryRaw<Array<{ count: bigint }>>`
+          SELECT COUNT(*)::bigint as count
+          FROM article_conversations
+          WHERE created_at >= ${startDate}
+        `;
+    
+    const totalSessions = await totalSessionsQuery.then(result => Number(result[0]?.count || 0));
 
-      // Total messages (sum of conversation lengths)
-      esgPrisma.article_ai_sessions.aggregate({
-        where: whereClause,
-        _sum: {
-          tokens_used: true,
-        },
-      }).then(result => {
-        // Approximate: 1 token = 0.75 words, avg message = 50 words
-        const totalTokens = result._sum.tokens_used || 0;
-        return Math.floor(totalTokens / 40); // Rough message count estimate
-      }),
+    // Active sessions (with messages in last 24 hours)
+    const last24Hours = new Date();
+    last24Hours.setHours(last24Hours.getHours() - 24);
+    
+    const activeSessionsQuery = domain !== 'all'
+      ? esgPrisma.$queryRaw<Array<{ count: bigint }>>`
+          SELECT COUNT(DISTINCT ac.id)::bigint as count
+          FROM article_conversations ac
+          WHERE ac.last_message_at >= ${last24Hours}
+          AND ac.article_source = ${domain}
+        `
+      : esgPrisma.$queryRaw<Array<{ count: bigint }>>`
+          SELECT COUNT(DISTINCT ac.id)::bigint as count
+          FROM article_conversations ac
+          WHERE ac.last_message_at >= ${last24Hours}
+        `;
+    
+    const activeSessions = await activeSessionsQuery.then(result => Number(result[0]?.count || 0));
 
-      // Unique users
-      esgPrisma.article_ai_sessions.findMany({
-        where: whereClause,
-        select: {
-          user_id: true,
-        },
-        distinct: ['user_id'],
-      }).then(results => results.length),
+    // Total messages
+    const totalMessagesQuery = domain !== 'all'
+      ? esgPrisma.$queryRaw<Array<{ count: bigint }>>`
+          SELECT COUNT(*)::bigint as count
+          FROM article_messages am
+          JOIN article_conversations ac ON am.conversation_id = ac.id
+          WHERE am.created_at >= ${startDate}
+          AND ac.article_source = ${domain}
+        `
+      : esgPrisma.$queryRaw<Array<{ count: bigint }>>`
+          SELECT COUNT(*)::bigint as count
+          FROM article_messages am
+          JOIN article_conversations ac ON am.conversation_id = ac.id
+          WHERE am.created_at >= ${startDate}
+        `;
+    
+    const totalMessages = await totalMessagesQuery.then(result => Number(result[0]?.count || 0));
 
-      // Total tokens used
-      esgPrisma.article_ai_sessions.aggregate({
-        where: whereClause,
-        _sum: {
-          tokens_used: true,
-        },
-      }).then(result => result._sum.tokens_used || 0),
+    // Unique users
+    const uniqueUsersQuery = domain !== 'all'
+      ? esgPrisma.$queryRaw<Array<{ count: bigint }>>`
+          SELECT COUNT(DISTINCT user_id)::bigint as count
+          FROM article_conversations
+          WHERE created_at >= ${startDate}
+          AND user_id IS NOT NULL
+          AND article_source = ${domain}
+        `
+      : esgPrisma.$queryRaw<Array<{ count: bigint }>>`
+          SELECT COUNT(DISTINCT user_id)::bigint as count
+          FROM article_conversations
+          WHERE created_at >= ${startDate}
+          AND user_id IS NOT NULL
+        `;
+    
+    const uniqueUsers = await uniqueUsersQuery.then(result => Number(result[0]?.count || 0));
 
-      // Total cost
-      esgPrisma.article_ai_sessions.aggregate({
-        where: whereClause,
-        _sum: {
-          cost_usd: true,
-        },
-      }).then(result => result._sum.cost_usd || 0),
-    ]);
+    // Total tokens and cost
+    const tokenStatsQuery = domain !== 'all'
+      ? esgPrisma.$queryRaw<Array<{ total_tokens: bigint; total_cost: number }>>`
+          SELECT 
+            COALESCE(SUM(total_tokens_used), 0)::bigint as total_tokens,
+            COALESCE(SUM(total_cost_usd), 0) as total_cost
+          FROM article_conversations
+          WHERE created_at >= ${startDate}
+          AND article_source = ${domain}
+        `
+      : esgPrisma.$queryRaw<Array<{ total_tokens: bigint; total_cost: number }>>`
+          SELECT 
+            COALESCE(SUM(total_tokens_used), 0)::bigint as total_tokens,
+            COALESCE(SUM(total_cost_usd), 0) as total_cost
+          FROM article_conversations
+          WHERE created_at >= ${startDate}
+        `;
+    
+    const tokenStats = await tokenStatsQuery;
+    
+    const totalTokens = Number(tokenStats[0]?.total_tokens || 0);
+    const totalCost = Number(tokenStats[0]?.total_cost || 0);
 
-    // ============================================================
-    // 2. DOMAIN BREAKDOWN
-    // ============================================================
-    const domainStats = await esgPrisma.article_ai_sessions.groupBy({
-      by: ['domain'],
-      where: {
-        created_at: {
-          gte: startDate,
-        },
-      },
-      _count: {
-        id: true,
-      },
-      _sum: {
-        tokens_used: true,
-        cost_usd: true,
-      },
-    });
+    // Domain stats
+    const domainStatsRaw = await esgPrisma.$queryRaw<Array<{ 
+      domain: string; 
+      sessions: bigint; 
+      messages: bigint; 
+      tokens: bigint; 
+      cost: number;
+    }>>`
+      SELECT 
+        ac.article_source as domain,
+        COUNT(DISTINCT ac.id)::bigint as sessions,
+        COUNT(am.id)::bigint as messages,
+        COALESCE(SUM(ac.total_tokens_used), 0)::bigint as tokens,
+        COALESCE(SUM(ac.total_cost_usd), 0) as cost
+      FROM article_conversations ac
+      LEFT JOIN article_messages am ON am.conversation_id = ac.id
+      WHERE ac.created_at >= ${startDate}
+      GROUP BY ac.article_source
+      ORDER BY sessions DESC
+    `;
 
-    // ============================================================
-    // 3. DAILY USAGE TREND
-    // ============================================================
-    const sessions = await esgPrisma.article_ai_sessions.findMany({
-      where: whereClause,
-      select: {
-        created_at: true,
-        tokens_used: true,
-        cost_usd: true,
-      },
-      orderBy: {
-        created_at: 'asc',
-      },
-    });
-
-    // Group by day
-    const dailyStats: Record<string, { sessions: number; tokens: number; cost: number }> = {};
-    sessions.forEach(session => {
-      const day = session.created_at.toISOString().split('T')[0];
-      if (!dailyStats[day]) {
-        dailyStats[day] = { sessions: 0, tokens: 0, cost: 0 };
-      }
-      dailyStats[day].sessions += 1;
-      dailyStats[day].tokens += session.tokens_used || 0;
-      dailyStats[day].cost += Number(session.cost_usd) || 0;
-    });
-
-    const dailyTrend = Object.entries(dailyStats).map(([date, stats]) => ({
-      date,
-      sessions: stats.sessions,
-      tokens: stats.tokens,
-      cost: stats.cost,
+    const domainStats = domainStatsRaw.map(stat => ({
+      domain: stat.domain,
+      sessions: Number(stat.sessions),
+      messages: Number(stat.messages),
+      tokens: Number(stat.tokens),
+      cost: Number(stat.cost),
     }));
 
-    // ============================================================
-    // 4. TOP USERS
-    // ============================================================
-    const topUsers = await esgPrisma.article_ai_sessions.groupBy({
-      by: ['user_id'],
-      where: whereClause,
-      _count: {
-        id: true,
-      },
-      _sum: {
-        tokens_used: true,
-        cost_usd: true,
-      },
-      orderBy: {
-        _count: {
-          id: 'desc',
-        },
-      },
-      take: 10,
-    });
+    // Daily trend (last 7 days)
+    const dailyTrendQuery = domain !== 'all'
+      ? esgPrisma.$queryRaw<Array<{
+          date: Date;
+          sessions: bigint;
+          messages: bigint;
+        }>>`
+          SELECT 
+            DATE(ac.created_at) as date,
+            COUNT(DISTINCT ac.id)::bigint as sessions,
+            COUNT(am.id)::bigint as messages
+          FROM article_conversations ac
+          LEFT JOIN article_messages am ON am.conversation_id = ac.id
+          WHERE ac.created_at >= ${startDate}
+          AND ac.article_source = ${domain}
+          GROUP BY DATE(ac.created_at)
+          ORDER BY date DESC
+          LIMIT 7
+        `
+      : esgPrisma.$queryRaw<Array<{
+          date: Date;
+          sessions: bigint;
+          messages: bigint;
+        }>>`
+          SELECT 
+            DATE(ac.created_at) as date,
+            COUNT(DISTINCT ac.id)::bigint as sessions,
+            COUNT(am.id)::bigint as messages
+          FROM article_conversations ac
+          LEFT JOIN article_messages am ON am.conversation_id = ac.id
+          WHERE ac.created_at >= ${startDate}
+          GROUP BY DATE(ac.created_at)
+          ORDER BY date DESC
+          LIMIT 7
+        `;
+    
+    const dailyTrendRaw = await dailyTrendQuery;
 
-    // Fetch user details
-    const userIds = topUsers.map(u => u.user_id);
-    const users = await esgPrisma.users.findMany({
-      where: {
-        id: {
-          in: userIds,
-        },
-      },
-      select: {
-        id: true,
-        first_name: true,
-        last_name: true,
-        username: true,
-        email: true,
-      },
-    });
+    const dailyTrend = dailyTrendRaw.map(day => ({
+      date: day.date,
+      sessions: Number(day.sessions),
+      messages: Number(day.messages),
+    }));
 
-    const userMap = new Map(users.map(u => [u.id, u]));
+    // Top users
+    const topUsersQuery = domain !== 'all'
+      ? esgPrisma.$queryRaw<Array<{
+          user_id: number;
+          sessions: bigint;
+          messages: bigint;
+          tokens: bigint;
+        }>>`
+          SELECT 
+            ac.user_id,
+            COUNT(DISTINCT ac.id)::bigint as sessions,
+            COUNT(am.id)::bigint as messages,
+            COALESCE(SUM(ac.total_tokens_used), 0)::bigint as tokens
+          FROM article_conversations ac
+          LEFT JOIN article_messages am ON am.conversation_id = ac.id
+          WHERE ac.created_at >= ${startDate}
+          AND ac.user_id IS NOT NULL
+          AND ac.article_source = ${domain}
+          GROUP BY ac.user_id
+          ORDER BY sessions DESC
+          LIMIT 10
+        `
+      : esgPrisma.$queryRaw<Array<{
+          user_id: number;
+          sessions: bigint;
+          messages: bigint;
+          tokens: bigint;
+        }>>`
+          SELECT 
+            ac.user_id,
+            COUNT(DISTINCT ac.id)::bigint as sessions,
+            COUNT(am.id)::bigint as messages,
+            COALESCE(SUM(ac.total_tokens_used), 0)::bigint as tokens
+          FROM article_conversations ac
+          LEFT JOIN article_messages am ON am.conversation_id = ac.id
+          WHERE ac.created_at >= ${startDate}
+          AND ac.user_id IS NOT NULL
+          GROUP BY ac.user_id
+          ORDER BY sessions DESC
+          LIMIT 10
+        `;
+    
+    const topUsersRaw = await topUsersQuery;
 
-    const topUsersWithDetails = topUsers.map(stat => {
-      const user = userMap.get(stat.user_id);
-      const name = user ? `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username : 'Unknown';
-      
-      return {
-        userId: stat.user_id,
-        name,
-        email: user?.email || 'unknown@email.com',
-        sessions: stat._count.id,
-        tokens: stat._sum.tokens_used || 0,
-        cost: Number(stat._sum.cost_usd) || 0,
-      };
-    });
+    // Get user details
+    const topUsersWithDetails = await Promise.all(
+      topUsersRaw.map(async (user) => {
+        const userDetails = await esgPrisma.users.findUnique({
+          where: { id: user.user_id },
+          select: { id: true, email: true, first_name: true, last_name: true },
+        });
+        return {
+          ...userDetails,
+          sessions: Number(user.sessions),
+          messages: Number(user.messages),
+          tokens: Number(user.tokens),
+        };
+      })
+    );
 
-    // ============================================================
-    // 5. TOP ARTICLES (Most Asked About)
-    // ============================================================
-    const topArticles = await esgPrisma.article_ai_sessions.groupBy({
-      by: ['article_id', 'domain'],
-      where: whereClause,
-      _count: {
-        id: true,
-      },
-      _sum: {
-        tokens_used: true,
-      },
-      orderBy: {
-        _count: {
-          id: 'desc',
-        },
-      },
-      take: 10,
-    });
+    // Top articles
+    const topArticlesQuery = domain !== 'all'
+      ? esgPrisma.$queryRaw<Array<{
+          article_id: number;
+          article_source: string;
+          sessions: bigint;
+          messages: bigint;
+        }>>`
+          SELECT 
+            ac.article_id,
+            ac.article_source,
+            COUNT(DISTINCT ac.id)::bigint as sessions,
+            COUNT(am.id)::bigint as messages
+          FROM article_conversations ac
+          LEFT JOIN article_messages am ON am.conversation_id = ac.id
+          WHERE ac.created_at >= ${startDate}
+          AND ac.article_source = ${domain}
+          GROUP BY ac.article_id, ac.article_source
+          ORDER BY sessions DESC
+          LIMIT 10
+        `
+      : esgPrisma.$queryRaw<Array<{
+          article_id: number;
+          article_source: string;
+          sessions: bigint;
+          messages: bigint;
+        }>>`
+          SELECT 
+            ac.article_id,
+            ac.article_source,
+            COUNT(DISTINCT ac.id)::bigint as sessions,
+            COUNT(am.id)::bigint as messages
+          FROM article_conversations ac
+          LEFT JOIN article_messages am ON am.conversation_id = ac.id
+          WHERE ac.created_at >= ${startDate}
+          GROUP BY ac.article_id, ac.article_source
+          ORDER BY sessions DESC
+          LIMIT 10
+        `;
+    
+    const topArticles = await topArticlesQuery.then(results => results.map(r => ({
+      article_id: r.article_id,
+      article_source: r.article_source,
+      sessions: Number(r.sessions),
+      messages: Number(r.messages),
+    })));
 
-    // ============================================================
-    // 6. PERFORMANCE METRICS
-    // ============================================================
+    // Recent activity
+    const recentActivityQuery = domain !== 'all'
+      ? esgPrisma.$queryRaw<Array<{
+          id: number;
+          session_id: string;
+          user_id: number | null;
+          article_id: number;
+          article_source: string;
+          total_messages: number;
+          created_at: Date;
+          last_message_at: Date | null;
+        }>>`
+          SELECT 
+            id,
+            session_id,
+            user_id,
+            article_id,
+            article_source,
+            total_messages,
+            created_at,
+            last_message_at
+          FROM article_conversations
+          WHERE created_at >= ${startDate}
+          AND article_source = ${domain}
+          ORDER BY last_message_at DESC NULLS LAST
+          LIMIT 20
+        `
+      : esgPrisma.$queryRaw<Array<{
+          id: number;
+          session_id: string;
+          user_id: number | null;
+          article_id: number;
+          article_source: string;
+          total_messages: number;
+          created_at: Date;
+          last_message_at: Date | null;
+        }>>`
+          SELECT 
+            id,
+            session_id,
+            user_id,
+            article_id,
+            article_source,
+            total_messages,
+            created_at,
+            last_message_at
+          FROM article_conversations
+          WHERE created_at >= ${startDate}
+          ORDER BY last_message_at DESC NULLS LAST
+          LIMIT 20
+        `;
+    
+    const recentActivity = await recentActivityQuery;
+
+    // Performance metrics
     const avgTokensPerSession = totalSessions > 0 ? Math.round(totalTokens / totalSessions) : 0;
-    const avgCostPerSession = totalSessions > 0 ? (Number(totalCost) / totalSessions) : 0;
+    const avgCostPerSession = totalSessions > 0 ? (totalCost / totalSessions) : 0;
     const avgSessionsPerUser = uniqueUsers > 0 ? (totalSessions / uniqueUsers) : 0;
 
-    // ============================================================
-    // 7. RECENT ACTIVITY
-    // ============================================================
-    const recentSessions = await esgPrisma.article_ai_sessions.findMany({
-      where: whereClause,
-      select: {
-        id: true,
-        article_id: true,
-        domain: true,
-        user_id: true,
-        created_at: true,
-        tokens_used: true,
-        cost_usd: true,
-        session_data: true,
-      },
-      orderBy: {
-        created_at: 'desc',
-      },
-      take: 20,
-    });
-
-    // Fetch user details for recent sessions
-    const recentUserIds = Array.from(new Set(recentSessions.map(s => s.user_id)));
-    const recentUsers = await esgPrisma.users.findMany({
-      where: {
-        id: {
-          in: recentUserIds,
-        },
-      },
-      select: {
-        id: true,
-        first_name: true,
-        last_name: true,
-        username: true,
-        email: true,
-      },
-    });
-
-    const recentUserMap = new Map(recentUsers.map(u => [u.id, u]));
-
-    const recentActivity = recentSessions.map(session => {
-      const sessionData = session.session_data as any;
-      const messageCount = sessionData?.messages?.length || 0;
-      const user = recentUserMap.get(session.user_id);
-      const userName = user ? `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username : 'Unknown';
-
-      return {
-        sessionId: session.id,
-        articleId: session.article_id,
-        domain: session.domain,
-        userId: session.user_id,
-        userName,
-        userEmail: user?.email || 'unknown@email.com',
-        createdAt: session.created_at,
-        messageCount,
-        tokens: session.tokens_used || 0,
-        cost: Number(session.cost_usd) || 0,
-      };
-    });
+    // Get user details for recent activity
+    const recentActivityWithUsers = await Promise.all(
+      recentActivity.map(async (activity) => {
+        const user = activity.user_id ? await esgPrisma.users.findUnique({
+          where: { id: activity.user_id },
+          select: { id: true, email: true, first_name: true, last_name: true },
+        }) : null;
+        
+        return {
+          sessionId: activity.session_id,
+          articleId: activity.article_id,
+          domain: activity.article_source,
+          userId: activity.user_id || 0,
+          userName: user ? `${user.first_name || ''} ${user.last_name || ''}`.trim() : 'Unknown',
+          userEmail: user?.email || 'N/A',
+          createdAt: activity.created_at.toISOString(),
+          messageCount: activity.total_messages,
+          tokens: 0, // Not tracked per conversation yet
+          cost: 0, // Not tracked per conversation yet
+        };
+      })
+    );
 
     // ============================================================
     // RESPONSE
@@ -329,26 +431,41 @@ export async function GET(req: NextRequest) {
         totalMessages,
         uniqueUsers,
         totalTokens,
-        totalCost: Number(totalCost.toFixed(4)),
+        totalCost,
         avgTokensPerSession,
-        avgCostPerSession: Number(avgCostPerSession.toFixed(4)),
-        avgSessionsPerUser: Number(avgSessionsPerUser.toFixed(2)),
+        avgCostPerSession,
+        avgSessionsPerUser,
       },
       domainBreakdown: domainStats.map(stat => ({
         domain: stat.domain,
-        sessions: stat._count.id,
-        tokens: stat._sum.tokens_used || 0,
-        cost: Number(stat._sum.cost_usd) || 0,
+        sessions: stat.sessions,
+        tokens: stat.tokens,
+        cost: stat.cost,
+        messages: stat.messages,
       })),
-      dailyTrend,
-      topUsers: topUsersWithDetails,
-      topArticles: topArticles.map(stat => ({
-        articleId: stat.article_id,
-        domain: stat.domain,
-        sessions: stat._count.id,
-        tokens: stat._sum.tokens_used || 0,
+      dailyTrend: dailyTrend.map(day => ({
+        date: day.date.toISOString().split('T')[0],
+        sessions: day.sessions,
+        tokens: 0, // Not tracked in daily aggregation yet
+        cost: 0, // Not tracked in daily aggregation yet
+        messages: day.messages,
       })),
-      recentActivity,
+      topUsers: topUsersWithDetails.map(user => ({
+        userId: user.id,
+        name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Unknown',
+        email: user.email || 'N/A',
+        sessions: user.sessions,
+        tokens: user.tokens,
+        cost: 0, // Cost not tracked yet
+      })),
+      topArticles: topArticles.map(article => ({
+        articleId: article.article_id,
+        domain: article.article_source,
+        sessions: article.sessions,
+        tokens: 0, // Not tracked per article yet
+        messages: article.messages,
+      })),
+      recentActivity: recentActivityWithUsers,
     });
   } catch (error: any) {
     console.error('[Admin AI Stats] Error:', error);

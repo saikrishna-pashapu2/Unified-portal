@@ -9,12 +9,36 @@ import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/nextauth-options";
 import { getPrisma } from "@/lib/db";
+import { encoding_for_model } from "tiktoken";
 import {
   getConversationBySessionId,
   addMessage,
   getConversationHistory,
+  updateConversationCost,
 } from "@/lib/article-assistant-db";
-import { streamArticleChat } from "@/lib/article-assistant-agent";
+import { streamArticleChat, generateFollowUpQuestions } from "@/lib/article-assistant-agent";
+
+// Token counting helper
+function countTokens(text: string, model: string = "gpt-4o-mini"): number {
+  try {
+    const encoding = encoding_for_model(model as any);
+    const tokens = encoding.encode(text);
+    const count = tokens.length;
+    encoding.free();
+    return count;
+  } catch (error) {
+    // Fallback: rough estimate (1 token ≈ 4 characters)
+    return Math.ceil(text.length / 4);
+  }
+}
+
+// Cost calculation helper for gpt-4o-mini
+// Pricing: $0.150 per 1M input tokens, $0.600 per 1M output tokens
+function calculateCost(inputTokens: number, outputTokens: number): number {
+  const inputCost = (inputTokens / 1000000) * 0.150;
+  const outputCost = (outputTokens / 1000000) * 0.600;
+  return inputCost + outputCost;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -76,7 +100,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Add user message to database
-    await addMessage(domain, conversation.id, "user", message, 0);
+    const userTokens = countTokens(message);
+    await addMessage(domain, conversation.id, "user", message, userTokens);
 
     // Get conversation history
     const history = await getConversationHistory(domain, conversation.id, 10);
@@ -95,6 +120,8 @@ export async function POST(request: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
+          console.log("[Chat] Starting stream...");
+          
           // Stream the response
           const responseStream = await streamArticleChat(
             history,
@@ -104,15 +131,68 @@ export async function POST(request: NextRequest) {
             openaiKey
           );
 
+          console.log("[Chat] Got response stream");
           let fullResponse = "";
+          let chunkCount = 0;
 
-          for await (const chunk of responseStream) {
-            fullResponse += chunk;
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ chunk })}\n\n`));
+          try {
+            for await (const chunk of responseStream) {
+              chunkCount++;
+              fullResponse += chunk;
+              const data = JSON.stringify({ chunk });
+              controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+            }
+          } catch (streamError) {
+            console.error("[Chat] Error during streaming:", streamError);
+            throw streamError;
           }
 
+          console.log(`[Chat] Stream complete: ${chunkCount} chunks, ${fullResponse.length} chars`);
+
+          // Remove search indicator before saving to database
+          const cleanResponse = fullResponse.replace(/🔍 Searching the web\.\.\.\n\n/g, '').trim();
+
+          // Count tokens for assistant response
+          const assistantTokens = countTokens(cleanResponse);
+          
           // Save assistant response to database
-          await addMessage(domain, conversation.id, "assistant", fullResponse, 0);
+          await addMessage(domain, conversation.id, "assistant", cleanResponse, assistantTokens);
+
+          // Calculate cost and update conversation
+          // Input tokens = user message + system prompt + article content + history (approximate)
+          const systemPromptApprox = 800; // Rough estimate of system prompt tokens
+          const articleContentTokens = countTokens(article.content || "");
+          const historyTokens = history.reduce((sum, msg) => sum + countTokens(msg.content), 0);
+          const inputTokens = userTokens + systemPromptApprox + articleContentTokens + historyTokens;
+          const outputTokens = assistantTokens;
+          const cost = calculateCost(inputTokens, outputTokens);
+          
+          // Update conversation with tokens and cost
+          await updateConversationCost(domain, conversation.id, inputTokens + outputTokens, cost);
+          
+          console.log(`[Chat] Tokens - Input: ${inputTokens}, Output: ${outputTokens}, Total: ${inputTokens + outputTokens}, Cost: $${cost.toFixed(6)}`);
+
+          // Generate follow-up questions (don't await - run in background)
+          let followUpQuestions: string[] = [];
+          try {
+            const updatedHistory = await getConversationHistory(domain, conversation.id, 10);
+            followUpQuestions = await generateFollowUpQuestions(
+              updatedHistory,
+              article.content || "",
+              article.title || "Untitled",
+              openaiKey
+            );
+          } catch (error) {
+            console.error("Error generating follow-up questions:", error);
+            followUpQuestions = [];
+          }
+
+          // Send follow-up questions
+          if (followUpQuestions.length > 0) {
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ followUpQuestions })}\n\n`)
+            );
+          }
 
           // Send done signal
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true })}\n\n`));

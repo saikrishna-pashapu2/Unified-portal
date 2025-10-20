@@ -74,11 +74,6 @@ export type articleview = $Result.DefaultSelection<Prisma.$articleviewPayload>
  */
 export type credit_articles = $Result.DefaultSelection<Prisma.$credit_articlesPayload>
 /**
- * Model article_ai_sessions
- * 
- */
-export type article_ai_sessions = $Result.DefaultSelection<Prisma.$article_ai_sessionsPayload>
-/**
  * Model email_alerts
  * 
  */
@@ -476,16 +471,6 @@ export class PrismaClient<
     * ```
     */
   get credit_articles(): Prisma.credit_articlesDelegate<ExtArgs>;
-
-  /**
-   * `prisma.article_ai_sessions`: Exposes CRUD operations for the **article_ai_sessions** model.
-    * Example usage:
-    * ```ts
-    * // Fetch zero or more Article_ai_sessions
-    * const article_ai_sessions = await prisma.article_ai_sessions.findMany()
-    * ```
-    */
-  get article_ai_sessions(): Prisma.article_ai_sessionsDelegate<ExtArgs>;
 
   /**
    * `prisma.email_alerts`: Exposes CRUD operations for the **email_alerts** model.
@@ -1149,7 +1134,6 @@ export namespace Prisma {
     articlestar: 'articlestar',
     articleview: 'articleview',
     credit_articles: 'credit_articles',
-    article_ai_sessions: 'article_ai_sessions',
     email_alerts: 'email_alerts',
     event: 'event',
     eventregistration: 'eventregistration',
@@ -1186,7 +1170,7 @@ export namespace Prisma {
 
   export type TypeMap<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, ClientOptions = {}> = {
     meta: {
-      modelProps: "activity_logs" | "activitylog" | "ai_assistant_config" | "ai_conversations" | "ai_entity_memory" | "ai_knowledge_base" | "ai_session_memory" | "article" | "article_tags" | "articlestar" | "articleview" | "credit_articles" | "article_ai_sessions" | "email_alerts" | "event" | "eventregistration" | "events" | "methodologies" | "newsletter_logs" | "newsletter_preferences" | "newsletter_subscriptions" | "permission" | "publications" | "refreshtoken" | "roles" | "tag" | "user" | "user_activity" | "user_alerts" | "user_article_stars" | "user_events" | "user_permissions" | "users" | "usersession"
+      modelProps: "activity_logs" | "activitylog" | "ai_assistant_config" | "ai_conversations" | "ai_entity_memory" | "ai_knowledge_base" | "ai_session_memory" | "article" | "article_tags" | "articlestar" | "articleview" | "credit_articles" | "email_alerts" | "event" | "eventregistration" | "events" | "methodologies" | "newsletter_logs" | "newsletter_preferences" | "newsletter_subscriptions" | "permission" | "publications" | "refreshtoken" | "roles" | "tag" | "user" | "user_activity" | "user_alerts" | "user_article_stars" | "user_events" | "user_permissions" | "users" | "usersession"
       txIsolationLevel: Prisma.TransactionIsolationLevel
     }
     model: {
@@ -2027,76 +2011,6 @@ export namespace Prisma {
           count: {
             args: Prisma.credit_articlesCountArgs<ExtArgs>
             result: $Utils.Optional<Credit_articlesCountAggregateOutputType> | number
-          }
-        }
-      }
-      article_ai_sessions: {
-        payload: Prisma.$article_ai_sessionsPayload<ExtArgs>
-        fields: Prisma.article_ai_sessionsFieldRefs
-        operations: {
-          findUnique: {
-            args: Prisma.article_ai_sessionsFindUniqueArgs<ExtArgs>
-            result: $Utils.PayloadToResult<Prisma.$article_ai_sessionsPayload> | null
-          }
-          findUniqueOrThrow: {
-            args: Prisma.article_ai_sessionsFindUniqueOrThrowArgs<ExtArgs>
-            result: $Utils.PayloadToResult<Prisma.$article_ai_sessionsPayload>
-          }
-          findFirst: {
-            args: Prisma.article_ai_sessionsFindFirstArgs<ExtArgs>
-            result: $Utils.PayloadToResult<Prisma.$article_ai_sessionsPayload> | null
-          }
-          findFirstOrThrow: {
-            args: Prisma.article_ai_sessionsFindFirstOrThrowArgs<ExtArgs>
-            result: $Utils.PayloadToResult<Prisma.$article_ai_sessionsPayload>
-          }
-          findMany: {
-            args: Prisma.article_ai_sessionsFindManyArgs<ExtArgs>
-            result: $Utils.PayloadToResult<Prisma.$article_ai_sessionsPayload>[]
-          }
-          create: {
-            args: Prisma.article_ai_sessionsCreateArgs<ExtArgs>
-            result: $Utils.PayloadToResult<Prisma.$article_ai_sessionsPayload>
-          }
-          createMany: {
-            args: Prisma.article_ai_sessionsCreateManyArgs<ExtArgs>
-            result: BatchPayload
-          }
-          createManyAndReturn: {
-            args: Prisma.article_ai_sessionsCreateManyAndReturnArgs<ExtArgs>
-            result: $Utils.PayloadToResult<Prisma.$article_ai_sessionsPayload>[]
-          }
-          delete: {
-            args: Prisma.article_ai_sessionsDeleteArgs<ExtArgs>
-            result: $Utils.PayloadToResult<Prisma.$article_ai_sessionsPayload>
-          }
-          update: {
-            args: Prisma.article_ai_sessionsUpdateArgs<ExtArgs>
-            result: $Utils.PayloadToResult<Prisma.$article_ai_sessionsPayload>
-          }
-          deleteMany: {
-            args: Prisma.article_ai_sessionsDeleteManyArgs<ExtArgs>
-            result: BatchPayload
-          }
-          updateMany: {
-            args: Prisma.article_ai_sessionsUpdateManyArgs<ExtArgs>
-            result: BatchPayload
-          }
-          upsert: {
-            args: Prisma.article_ai_sessionsUpsertArgs<ExtArgs>
-            result: $Utils.PayloadToResult<Prisma.$article_ai_sessionsPayload>
-          }
-          aggregate: {
-            args: Prisma.Article_ai_sessionsAggregateArgs<ExtArgs>
-            result: $Utils.Optional<AggregateArticle_ai_sessions>
-          }
-          groupBy: {
-            args: Prisma.article_ai_sessionsGroupByArgs<ExtArgs>
-            result: $Utils.Optional<Article_ai_sessionsGroupByOutputType>[]
-          }
-          count: {
-            args: Prisma.article_ai_sessionsCountArgs<ExtArgs>
-            result: $Utils.Optional<Article_ai_sessionsCountAggregateOutputType> | number
           }
         }
       }
@@ -3781,12 +3695,10 @@ export namespace Prisma {
 
   export type Credit_articlesCountOutputType = {
     user_article_stars: number
-    article_ai_sessions: number
   }
 
   export type Credit_articlesCountOutputTypeSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     user_article_stars?: boolean | Credit_articlesCountOutputTypeCountUser_article_starsArgs
-    article_ai_sessions?: boolean | Credit_articlesCountOutputTypeCountArticle_ai_sessionsArgs
   }
 
   // Custom InputTypes
@@ -3805,13 +3717,6 @@ export namespace Prisma {
    */
   export type Credit_articlesCountOutputTypeCountUser_article_starsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     where?: user_article_starsWhereInput
-  }
-
-  /**
-   * Credit_articlesCountOutputType without action
-   */
-  export type Credit_articlesCountOutputTypeCountArticle_ai_sessionsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    where?: article_ai_sessionsWhereInput
   }
 
 
@@ -4061,7 +3966,6 @@ export namespace Prisma {
     ai_conversations: number
     ai_entity_memory: number
     ai_session_memory: number
-    article_ai_sessions: number
     newsletter_subscriptions: number
     user_activity: number
     user_article_stars: number
@@ -4073,7 +3977,6 @@ export namespace Prisma {
     ai_conversations?: boolean | UsersCountOutputTypeCountAi_conversationsArgs
     ai_entity_memory?: boolean | UsersCountOutputTypeCountAi_entity_memoryArgs
     ai_session_memory?: boolean | UsersCountOutputTypeCountAi_session_memoryArgs
-    article_ai_sessions?: boolean | UsersCountOutputTypeCountArticle_ai_sessionsArgs
     newsletter_subscriptions?: boolean | UsersCountOutputTypeCountNewsletter_subscriptionsArgs
     user_activity?: boolean | UsersCountOutputTypeCountUser_activityArgs
     user_article_stars?: boolean | UsersCountOutputTypeCountUser_article_starsArgs
@@ -4123,13 +4026,6 @@ export namespace Prisma {
    */
   export type UsersCountOutputTypeCountAi_session_memoryArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     where?: ai_session_memoryWhereInput
-  }
-
-  /**
-   * UsersCountOutputType without action
-   */
-  export type UsersCountOutputTypeCountArticle_ai_sessionsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    where?: article_ai_sessionsWhereInput
   }
 
   /**
@@ -15927,7 +15823,6 @@ export namespace Prisma {
     created_at?: boolean
     updated_at?: boolean
     user_article_stars?: boolean | credit_articles$user_article_starsArgs<ExtArgs>
-    article_ai_sessions?: boolean | credit_articles$article_ai_sessionsArgs<ExtArgs>
     _count?: boolean | Credit_articlesCountOutputTypeDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["credit_articles"]>
 
@@ -15969,7 +15864,6 @@ export namespace Prisma {
 
   export type credit_articlesInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     user_article_stars?: boolean | credit_articles$user_article_starsArgs<ExtArgs>
-    article_ai_sessions?: boolean | credit_articles$article_ai_sessionsArgs<ExtArgs>
     _count?: boolean | Credit_articlesCountOutputTypeDefaultArgs<ExtArgs>
   }
   export type credit_articlesIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {}
@@ -15978,7 +15872,6 @@ export namespace Prisma {
     name: "credit_articles"
     objects: {
       user_article_stars: Prisma.$user_article_starsPayload<ExtArgs>[]
-      article_ai_sessions: Prisma.$article_ai_sessionsPayload<ExtArgs>[]
     }
     scalars: $Extensions.GetPayloadResult<{
       id: number
@@ -16361,7 +16254,6 @@ export namespace Prisma {
   export interface Prisma__credit_articlesClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> extends Prisma.PrismaPromise<T> {
     readonly [Symbol.toStringTag]: "PrismaPromise"
     user_article_stars<T extends credit_articles$user_article_starsArgs<ExtArgs> = {}>(args?: Subset<T, credit_articles$user_article_starsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$user_article_starsPayload<ExtArgs>, T, "findMany"> | Null>
-    article_ai_sessions<T extends credit_articles$article_ai_sessionsArgs<ExtArgs> = {}>(args?: Subset<T, credit_articles$article_ai_sessionsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$article_ai_sessionsPayload<ExtArgs>, T, "findMany"> | Null>
     /**
      * Attaches callbacks for the resolution and/or rejection of the Promise.
      * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -16740,26 +16632,6 @@ export namespace Prisma {
   }
 
   /**
-   * credit_articles.article_ai_sessions
-   */
-  export type credit_articles$article_ai_sessionsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    /**
-     * Select specific fields to fetch from the article_ai_sessions
-     */
-    select?: article_ai_sessionsSelect<ExtArgs> | null
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: article_ai_sessionsInclude<ExtArgs> | null
-    where?: article_ai_sessionsWhereInput
-    orderBy?: article_ai_sessionsOrderByWithRelationInput | article_ai_sessionsOrderByWithRelationInput[]
-    cursor?: article_ai_sessionsWhereUniqueInput
-    take?: number
-    skip?: number
-    distinct?: Article_ai_sessionsScalarFieldEnum | Article_ai_sessionsScalarFieldEnum[]
-  }
-
-  /**
    * credit_articles without action
    */
   export type credit_articlesDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
@@ -16771,1063 +16643,6 @@ export namespace Prisma {
      * Choose, which related nodes to fetch as well
      */
     include?: credit_articlesInclude<ExtArgs> | null
-  }
-
-
-  /**
-   * Model article_ai_sessions
-   */
-
-  export type AggregateArticle_ai_sessions = {
-    _count: Article_ai_sessionsCountAggregateOutputType | null
-    _avg: Article_ai_sessionsAvgAggregateOutputType | null
-    _sum: Article_ai_sessionsSumAggregateOutputType | null
-    _min: Article_ai_sessionsMinAggregateOutputType | null
-    _max: Article_ai_sessionsMaxAggregateOutputType | null
-  }
-
-  export type Article_ai_sessionsAvgAggregateOutputType = {
-    user_id: number | null
-    article_id: number | null
-    message_count: number | null
-    tokens_used: number | null
-    cost_usd: Decimal | null
-  }
-
-  export type Article_ai_sessionsSumAggregateOutputType = {
-    user_id: number | null
-    article_id: number | null
-    message_count: number | null
-    tokens_used: number | null
-    cost_usd: Decimal | null
-  }
-
-  export type Article_ai_sessionsMinAggregateOutputType = {
-    id: string | null
-    user_id: number | null
-    article_id: number | null
-    domain: string | null
-    message_count: number | null
-    tokens_used: number | null
-    cost_usd: Decimal | null
-    created_at: Date | null
-    updated_at: Date | null
-    expires_at: Date | null
-  }
-
-  export type Article_ai_sessionsMaxAggregateOutputType = {
-    id: string | null
-    user_id: number | null
-    article_id: number | null
-    domain: string | null
-    message_count: number | null
-    tokens_used: number | null
-    cost_usd: Decimal | null
-    created_at: Date | null
-    updated_at: Date | null
-    expires_at: Date | null
-  }
-
-  export type Article_ai_sessionsCountAggregateOutputType = {
-    id: number
-    user_id: number
-    article_id: number
-    domain: number
-    session_data: number
-    message_count: number
-    tokens_used: number
-    cost_usd: number
-    created_at: number
-    updated_at: number
-    expires_at: number
-    _all: number
-  }
-
-
-  export type Article_ai_sessionsAvgAggregateInputType = {
-    user_id?: true
-    article_id?: true
-    message_count?: true
-    tokens_used?: true
-    cost_usd?: true
-  }
-
-  export type Article_ai_sessionsSumAggregateInputType = {
-    user_id?: true
-    article_id?: true
-    message_count?: true
-    tokens_used?: true
-    cost_usd?: true
-  }
-
-  export type Article_ai_sessionsMinAggregateInputType = {
-    id?: true
-    user_id?: true
-    article_id?: true
-    domain?: true
-    message_count?: true
-    tokens_used?: true
-    cost_usd?: true
-    created_at?: true
-    updated_at?: true
-    expires_at?: true
-  }
-
-  export type Article_ai_sessionsMaxAggregateInputType = {
-    id?: true
-    user_id?: true
-    article_id?: true
-    domain?: true
-    message_count?: true
-    tokens_used?: true
-    cost_usd?: true
-    created_at?: true
-    updated_at?: true
-    expires_at?: true
-  }
-
-  export type Article_ai_sessionsCountAggregateInputType = {
-    id?: true
-    user_id?: true
-    article_id?: true
-    domain?: true
-    session_data?: true
-    message_count?: true
-    tokens_used?: true
-    cost_usd?: true
-    created_at?: true
-    updated_at?: true
-    expires_at?: true
-    _all?: true
-  }
-
-  export type Article_ai_sessionsAggregateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    /**
-     * Filter which article_ai_sessions to aggregate.
-     */
-    where?: article_ai_sessionsWhereInput
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
-     * 
-     * Determine the order of article_ai_sessions to fetch.
-     */
-    orderBy?: article_ai_sessionsOrderByWithRelationInput | article_ai_sessionsOrderByWithRelationInput[]
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
-     * 
-     * Sets the start position
-     */
-    cursor?: article_ai_sessionsWhereUniqueInput
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
-     * 
-     * Take `±n` article_ai_sessions from the position of the cursor.
-     */
-    take?: number
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
-     * 
-     * Skip the first `n` article_ai_sessions.
-     */
-    skip?: number
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
-     * 
-     * Count returned article_ai_sessions
-    **/
-    _count?: true | Article_ai_sessionsCountAggregateInputType
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
-     * 
-     * Select which fields to average
-    **/
-    _avg?: Article_ai_sessionsAvgAggregateInputType
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
-     * 
-     * Select which fields to sum
-    **/
-    _sum?: Article_ai_sessionsSumAggregateInputType
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
-     * 
-     * Select which fields to find the minimum value
-    **/
-    _min?: Article_ai_sessionsMinAggregateInputType
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
-     * 
-     * Select which fields to find the maximum value
-    **/
-    _max?: Article_ai_sessionsMaxAggregateInputType
-  }
-
-  export type GetArticle_ai_sessionsAggregateType<T extends Article_ai_sessionsAggregateArgs> = {
-        [P in keyof T & keyof AggregateArticle_ai_sessions]: P extends '_count' | 'count'
-      ? T[P] extends true
-        ? number
-        : GetScalarType<T[P], AggregateArticle_ai_sessions[P]>
-      : GetScalarType<T[P], AggregateArticle_ai_sessions[P]>
-  }
-
-
-
-
-  export type article_ai_sessionsGroupByArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    where?: article_ai_sessionsWhereInput
-    orderBy?: article_ai_sessionsOrderByWithAggregationInput | article_ai_sessionsOrderByWithAggregationInput[]
-    by: Article_ai_sessionsScalarFieldEnum[] | Article_ai_sessionsScalarFieldEnum
-    having?: article_ai_sessionsScalarWhereWithAggregatesInput
-    take?: number
-    skip?: number
-    _count?: Article_ai_sessionsCountAggregateInputType | true
-    _avg?: Article_ai_sessionsAvgAggregateInputType
-    _sum?: Article_ai_sessionsSumAggregateInputType
-    _min?: Article_ai_sessionsMinAggregateInputType
-    _max?: Article_ai_sessionsMaxAggregateInputType
-  }
-
-  export type Article_ai_sessionsGroupByOutputType = {
-    id: string
-    user_id: number
-    article_id: number
-    domain: string
-    session_data: JsonValue
-    message_count: number
-    tokens_used: number
-    cost_usd: Decimal | null
-    created_at: Date
-    updated_at: Date
-    expires_at: Date
-    _count: Article_ai_sessionsCountAggregateOutputType | null
-    _avg: Article_ai_sessionsAvgAggregateOutputType | null
-    _sum: Article_ai_sessionsSumAggregateOutputType | null
-    _min: Article_ai_sessionsMinAggregateOutputType | null
-    _max: Article_ai_sessionsMaxAggregateOutputType | null
-  }
-
-  type GetArticle_ai_sessionsGroupByPayload<T extends article_ai_sessionsGroupByArgs> = Prisma.PrismaPromise<
-    Array<
-      PickEnumerable<Article_ai_sessionsGroupByOutputType, T['by']> &
-        {
-          [P in ((keyof T) & (keyof Article_ai_sessionsGroupByOutputType))]: P extends '_count'
-            ? T[P] extends boolean
-              ? number
-              : GetScalarType<T[P], Article_ai_sessionsGroupByOutputType[P]>
-            : GetScalarType<T[P], Article_ai_sessionsGroupByOutputType[P]>
-        }
-      >
-    >
-
-
-  export type article_ai_sessionsSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
-    id?: boolean
-    user_id?: boolean
-    article_id?: boolean
-    domain?: boolean
-    session_data?: boolean
-    message_count?: boolean
-    tokens_used?: boolean
-    cost_usd?: boolean
-    created_at?: boolean
-    updated_at?: boolean
-    expires_at?: boolean
-    users?: boolean | usersDefaultArgs<ExtArgs>
-    credit_articles?: boolean | credit_articlesDefaultArgs<ExtArgs>
-  }, ExtArgs["result"]["article_ai_sessions"]>
-
-  export type article_ai_sessionsSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
-    id?: boolean
-    user_id?: boolean
-    article_id?: boolean
-    domain?: boolean
-    session_data?: boolean
-    message_count?: boolean
-    tokens_used?: boolean
-    cost_usd?: boolean
-    created_at?: boolean
-    updated_at?: boolean
-    expires_at?: boolean
-    users?: boolean | usersDefaultArgs<ExtArgs>
-    credit_articles?: boolean | credit_articlesDefaultArgs<ExtArgs>
-  }, ExtArgs["result"]["article_ai_sessions"]>
-
-  export type article_ai_sessionsSelectScalar = {
-    id?: boolean
-    user_id?: boolean
-    article_id?: boolean
-    domain?: boolean
-    session_data?: boolean
-    message_count?: boolean
-    tokens_used?: boolean
-    cost_usd?: boolean
-    created_at?: boolean
-    updated_at?: boolean
-    expires_at?: boolean
-  }
-
-  export type article_ai_sessionsInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    users?: boolean | usersDefaultArgs<ExtArgs>
-    credit_articles?: boolean | credit_articlesDefaultArgs<ExtArgs>
-  }
-  export type article_ai_sessionsIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    users?: boolean | usersDefaultArgs<ExtArgs>
-    credit_articles?: boolean | credit_articlesDefaultArgs<ExtArgs>
-  }
-
-  export type $article_ai_sessionsPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    name: "article_ai_sessions"
-    objects: {
-      users: Prisma.$usersPayload<ExtArgs>
-      credit_articles: Prisma.$credit_articlesPayload<ExtArgs>
-    }
-    scalars: $Extensions.GetPayloadResult<{
-      id: string
-      user_id: number
-      article_id: number
-      domain: string
-      session_data: Prisma.JsonValue
-      message_count: number
-      tokens_used: number
-      cost_usd: Prisma.Decimal | null
-      created_at: Date
-      updated_at: Date
-      expires_at: Date
-    }, ExtArgs["result"]["article_ai_sessions"]>
-    composites: {}
-  }
-
-  type article_ai_sessionsGetPayload<S extends boolean | null | undefined | article_ai_sessionsDefaultArgs> = $Result.GetResult<Prisma.$article_ai_sessionsPayload, S>
-
-  type article_ai_sessionsCountArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = 
-    Omit<article_ai_sessionsFindManyArgs, 'select' | 'include' | 'distinct'> & {
-      select?: Article_ai_sessionsCountAggregateInputType | true
-    }
-
-  export interface article_ai_sessionsDelegate<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> {
-    [K: symbol]: { types: Prisma.TypeMap<ExtArgs>['model']['article_ai_sessions'], meta: { name: 'article_ai_sessions' } }
-    /**
-     * Find zero or one Article_ai_sessions that matches the filter.
-     * @param {article_ai_sessionsFindUniqueArgs} args - Arguments to find a Article_ai_sessions
-     * @example
-     * // Get one Article_ai_sessions
-     * const article_ai_sessions = await prisma.article_ai_sessions.findUnique({
-     *   where: {
-     *     // ... provide filter here
-     *   }
-     * })
-     */
-    findUnique<T extends article_ai_sessionsFindUniqueArgs>(args: SelectSubset<T, article_ai_sessionsFindUniqueArgs<ExtArgs>>): Prisma__article_ai_sessionsClient<$Result.GetResult<Prisma.$article_ai_sessionsPayload<ExtArgs>, T, "findUnique"> | null, null, ExtArgs>
-
-    /**
-     * Find one Article_ai_sessions that matches the filter or throw an error with `error.code='P2025'` 
-     * if no matches were found.
-     * @param {article_ai_sessionsFindUniqueOrThrowArgs} args - Arguments to find a Article_ai_sessions
-     * @example
-     * // Get one Article_ai_sessions
-     * const article_ai_sessions = await prisma.article_ai_sessions.findUniqueOrThrow({
-     *   where: {
-     *     // ... provide filter here
-     *   }
-     * })
-     */
-    findUniqueOrThrow<T extends article_ai_sessionsFindUniqueOrThrowArgs>(args: SelectSubset<T, article_ai_sessionsFindUniqueOrThrowArgs<ExtArgs>>): Prisma__article_ai_sessionsClient<$Result.GetResult<Prisma.$article_ai_sessionsPayload<ExtArgs>, T, "findUniqueOrThrow">, never, ExtArgs>
-
-    /**
-     * Find the first Article_ai_sessions that matches the filter.
-     * Note, that providing `undefined` is treated as the value not being there.
-     * Read more here: https://pris.ly/d/null-undefined
-     * @param {article_ai_sessionsFindFirstArgs} args - Arguments to find a Article_ai_sessions
-     * @example
-     * // Get one Article_ai_sessions
-     * const article_ai_sessions = await prisma.article_ai_sessions.findFirst({
-     *   where: {
-     *     // ... provide filter here
-     *   }
-     * })
-     */
-    findFirst<T extends article_ai_sessionsFindFirstArgs>(args?: SelectSubset<T, article_ai_sessionsFindFirstArgs<ExtArgs>>): Prisma__article_ai_sessionsClient<$Result.GetResult<Prisma.$article_ai_sessionsPayload<ExtArgs>, T, "findFirst"> | null, null, ExtArgs>
-
-    /**
-     * Find the first Article_ai_sessions that matches the filter or
-     * throw `PrismaKnownClientError` with `P2025` code if no matches were found.
-     * Note, that providing `undefined` is treated as the value not being there.
-     * Read more here: https://pris.ly/d/null-undefined
-     * @param {article_ai_sessionsFindFirstOrThrowArgs} args - Arguments to find a Article_ai_sessions
-     * @example
-     * // Get one Article_ai_sessions
-     * const article_ai_sessions = await prisma.article_ai_sessions.findFirstOrThrow({
-     *   where: {
-     *     // ... provide filter here
-     *   }
-     * })
-     */
-    findFirstOrThrow<T extends article_ai_sessionsFindFirstOrThrowArgs>(args?: SelectSubset<T, article_ai_sessionsFindFirstOrThrowArgs<ExtArgs>>): Prisma__article_ai_sessionsClient<$Result.GetResult<Prisma.$article_ai_sessionsPayload<ExtArgs>, T, "findFirstOrThrow">, never, ExtArgs>
-
-    /**
-     * Find zero or more Article_ai_sessions that matches the filter.
-     * Note, that providing `undefined` is treated as the value not being there.
-     * Read more here: https://pris.ly/d/null-undefined
-     * @param {article_ai_sessionsFindManyArgs} args - Arguments to filter and select certain fields only.
-     * @example
-     * // Get all Article_ai_sessions
-     * const article_ai_sessions = await prisma.article_ai_sessions.findMany()
-     * 
-     * // Get first 10 Article_ai_sessions
-     * const article_ai_sessions = await prisma.article_ai_sessions.findMany({ take: 10 })
-     * 
-     * // Only select the `id`
-     * const article_ai_sessionsWithIdOnly = await prisma.article_ai_sessions.findMany({ select: { id: true } })
-     * 
-     */
-    findMany<T extends article_ai_sessionsFindManyArgs>(args?: SelectSubset<T, article_ai_sessionsFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$article_ai_sessionsPayload<ExtArgs>, T, "findMany">>
-
-    /**
-     * Create a Article_ai_sessions.
-     * @param {article_ai_sessionsCreateArgs} args - Arguments to create a Article_ai_sessions.
-     * @example
-     * // Create one Article_ai_sessions
-     * const Article_ai_sessions = await prisma.article_ai_sessions.create({
-     *   data: {
-     *     // ... data to create a Article_ai_sessions
-     *   }
-     * })
-     * 
-     */
-    create<T extends article_ai_sessionsCreateArgs>(args: SelectSubset<T, article_ai_sessionsCreateArgs<ExtArgs>>): Prisma__article_ai_sessionsClient<$Result.GetResult<Prisma.$article_ai_sessionsPayload<ExtArgs>, T, "create">, never, ExtArgs>
-
-    /**
-     * Create many Article_ai_sessions.
-     * @param {article_ai_sessionsCreateManyArgs} args - Arguments to create many Article_ai_sessions.
-     * @example
-     * // Create many Article_ai_sessions
-     * const article_ai_sessions = await prisma.article_ai_sessions.createMany({
-     *   data: [
-     *     // ... provide data here
-     *   ]
-     * })
-     *     
-     */
-    createMany<T extends article_ai_sessionsCreateManyArgs>(args?: SelectSubset<T, article_ai_sessionsCreateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
-
-    /**
-     * Create many Article_ai_sessions and returns the data saved in the database.
-     * @param {article_ai_sessionsCreateManyAndReturnArgs} args - Arguments to create many Article_ai_sessions.
-     * @example
-     * // Create many Article_ai_sessions
-     * const article_ai_sessions = await prisma.article_ai_sessions.createManyAndReturn({
-     *   data: [
-     *     // ... provide data here
-     *   ]
-     * })
-     * 
-     * // Create many Article_ai_sessions and only return the `id`
-     * const article_ai_sessionsWithIdOnly = await prisma.article_ai_sessions.createManyAndReturn({ 
-     *   select: { id: true },
-     *   data: [
-     *     // ... provide data here
-     *   ]
-     * })
-     * Note, that providing `undefined` is treated as the value not being there.
-     * Read more here: https://pris.ly/d/null-undefined
-     * 
-     */
-    createManyAndReturn<T extends article_ai_sessionsCreateManyAndReturnArgs>(args?: SelectSubset<T, article_ai_sessionsCreateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$article_ai_sessionsPayload<ExtArgs>, T, "createManyAndReturn">>
-
-    /**
-     * Delete a Article_ai_sessions.
-     * @param {article_ai_sessionsDeleteArgs} args - Arguments to delete one Article_ai_sessions.
-     * @example
-     * // Delete one Article_ai_sessions
-     * const Article_ai_sessions = await prisma.article_ai_sessions.delete({
-     *   where: {
-     *     // ... filter to delete one Article_ai_sessions
-     *   }
-     * })
-     * 
-     */
-    delete<T extends article_ai_sessionsDeleteArgs>(args: SelectSubset<T, article_ai_sessionsDeleteArgs<ExtArgs>>): Prisma__article_ai_sessionsClient<$Result.GetResult<Prisma.$article_ai_sessionsPayload<ExtArgs>, T, "delete">, never, ExtArgs>
-
-    /**
-     * Update one Article_ai_sessions.
-     * @param {article_ai_sessionsUpdateArgs} args - Arguments to update one Article_ai_sessions.
-     * @example
-     * // Update one Article_ai_sessions
-     * const article_ai_sessions = await prisma.article_ai_sessions.update({
-     *   where: {
-     *     // ... provide filter here
-     *   },
-     *   data: {
-     *     // ... provide data here
-     *   }
-     * })
-     * 
-     */
-    update<T extends article_ai_sessionsUpdateArgs>(args: SelectSubset<T, article_ai_sessionsUpdateArgs<ExtArgs>>): Prisma__article_ai_sessionsClient<$Result.GetResult<Prisma.$article_ai_sessionsPayload<ExtArgs>, T, "update">, never, ExtArgs>
-
-    /**
-     * Delete zero or more Article_ai_sessions.
-     * @param {article_ai_sessionsDeleteManyArgs} args - Arguments to filter Article_ai_sessions to delete.
-     * @example
-     * // Delete a few Article_ai_sessions
-     * const { count } = await prisma.article_ai_sessions.deleteMany({
-     *   where: {
-     *     // ... provide filter here
-     *   }
-     * })
-     * 
-     */
-    deleteMany<T extends article_ai_sessionsDeleteManyArgs>(args?: SelectSubset<T, article_ai_sessionsDeleteManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
-
-    /**
-     * Update zero or more Article_ai_sessions.
-     * Note, that providing `undefined` is treated as the value not being there.
-     * Read more here: https://pris.ly/d/null-undefined
-     * @param {article_ai_sessionsUpdateManyArgs} args - Arguments to update one or more rows.
-     * @example
-     * // Update many Article_ai_sessions
-     * const article_ai_sessions = await prisma.article_ai_sessions.updateMany({
-     *   where: {
-     *     // ... provide filter here
-     *   },
-     *   data: {
-     *     // ... provide data here
-     *   }
-     * })
-     * 
-     */
-    updateMany<T extends article_ai_sessionsUpdateManyArgs>(args: SelectSubset<T, article_ai_sessionsUpdateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
-
-    /**
-     * Create or update one Article_ai_sessions.
-     * @param {article_ai_sessionsUpsertArgs} args - Arguments to update or create a Article_ai_sessions.
-     * @example
-     * // Update or create a Article_ai_sessions
-     * const article_ai_sessions = await prisma.article_ai_sessions.upsert({
-     *   create: {
-     *     // ... data to create a Article_ai_sessions
-     *   },
-     *   update: {
-     *     // ... in case it already exists, update
-     *   },
-     *   where: {
-     *     // ... the filter for the Article_ai_sessions we want to update
-     *   }
-     * })
-     */
-    upsert<T extends article_ai_sessionsUpsertArgs>(args: SelectSubset<T, article_ai_sessionsUpsertArgs<ExtArgs>>): Prisma__article_ai_sessionsClient<$Result.GetResult<Prisma.$article_ai_sessionsPayload<ExtArgs>, T, "upsert">, never, ExtArgs>
-
-
-    /**
-     * Count the number of Article_ai_sessions.
-     * Note, that providing `undefined` is treated as the value not being there.
-     * Read more here: https://pris.ly/d/null-undefined
-     * @param {article_ai_sessionsCountArgs} args - Arguments to filter Article_ai_sessions to count.
-     * @example
-     * // Count the number of Article_ai_sessions
-     * const count = await prisma.article_ai_sessions.count({
-     *   where: {
-     *     // ... the filter for the Article_ai_sessions we want to count
-     *   }
-     * })
-    **/
-    count<T extends article_ai_sessionsCountArgs>(
-      args?: Subset<T, article_ai_sessionsCountArgs>,
-    ): Prisma.PrismaPromise<
-      T extends $Utils.Record<'select', any>
-        ? T['select'] extends true
-          ? number
-          : GetScalarType<T['select'], Article_ai_sessionsCountAggregateOutputType>
-        : number
-    >
-
-    /**
-     * Allows you to perform aggregations operations on a Article_ai_sessions.
-     * Note, that providing `undefined` is treated as the value not being there.
-     * Read more here: https://pris.ly/d/null-undefined
-     * @param {Article_ai_sessionsAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
-     * @example
-     * // Ordered by age ascending
-     * // Where email contains prisma.io
-     * // Limited to the 10 users
-     * const aggregations = await prisma.user.aggregate({
-     *   _avg: {
-     *     age: true,
-     *   },
-     *   where: {
-     *     email: {
-     *       contains: "prisma.io",
-     *     },
-     *   },
-     *   orderBy: {
-     *     age: "asc",
-     *   },
-     *   take: 10,
-     * })
-    **/
-    aggregate<T extends Article_ai_sessionsAggregateArgs>(args: Subset<T, Article_ai_sessionsAggregateArgs>): Prisma.PrismaPromise<GetArticle_ai_sessionsAggregateType<T>>
-
-    /**
-     * Group by Article_ai_sessions.
-     * Note, that providing `undefined` is treated as the value not being there.
-     * Read more here: https://pris.ly/d/null-undefined
-     * @param {article_ai_sessionsGroupByArgs} args - Group by arguments.
-     * @example
-     * // Group by city, order by createdAt, get count
-     * const result = await prisma.user.groupBy({
-     *   by: ['city', 'createdAt'],
-     *   orderBy: {
-     *     createdAt: true
-     *   },
-     *   _count: {
-     *     _all: true
-     *   },
-     * })
-     * 
-    **/
-    groupBy<
-      T extends article_ai_sessionsGroupByArgs,
-      HasSelectOrTake extends Or<
-        Extends<'skip', Keys<T>>,
-        Extends<'take', Keys<T>>
-      >,
-      OrderByArg extends True extends HasSelectOrTake
-        ? { orderBy: article_ai_sessionsGroupByArgs['orderBy'] }
-        : { orderBy?: article_ai_sessionsGroupByArgs['orderBy'] },
-      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
-      ByFields extends MaybeTupleToUnion<T['by']>,
-      ByValid extends Has<ByFields, OrderFields>,
-      HavingFields extends GetHavingFields<T['having']>,
-      HavingValid extends Has<ByFields, HavingFields>,
-      ByEmpty extends T['by'] extends never[] ? True : False,
-      InputErrors extends ByEmpty extends True
-      ? `Error: "by" must not be empty.`
-      : HavingValid extends False
-      ? {
-          [P in HavingFields]: P extends ByFields
-            ? never
-            : P extends string
-            ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
-            : [
-                Error,
-                'Field ',
-                P,
-                ` in "having" needs to be provided in "by"`,
-              ]
-        }[HavingFields]
-      : 'take' extends Keys<T>
-      ? 'orderBy' extends Keys<T>
-        ? ByValid extends True
-          ? {}
-          : {
-              [P in OrderFields]: P extends ByFields
-                ? never
-                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
-            }[OrderFields]
-        : 'Error: If you provide "take", you also need to provide "orderBy"'
-      : 'skip' extends Keys<T>
-      ? 'orderBy' extends Keys<T>
-        ? ByValid extends True
-          ? {}
-          : {
-              [P in OrderFields]: P extends ByFields
-                ? never
-                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
-            }[OrderFields]
-        : 'Error: If you provide "skip", you also need to provide "orderBy"'
-      : ByValid extends True
-      ? {}
-      : {
-          [P in OrderFields]: P extends ByFields
-            ? never
-            : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
-        }[OrderFields]
-    >(args: SubsetIntersection<T, article_ai_sessionsGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetArticle_ai_sessionsGroupByPayload<T> : Prisma.PrismaPromise<InputErrors>
-  /**
-   * Fields of the article_ai_sessions model
-   */
-  readonly fields: article_ai_sessionsFieldRefs;
-  }
-
-  /**
-   * The delegate class that acts as a "Promise-like" for article_ai_sessions.
-   * Why is this prefixed with `Prisma__`?
-   * Because we want to prevent naming conflicts as mentioned in
-   * https://github.com/prisma/prisma-client-js/issues/707
-   */
-  export interface Prisma__article_ai_sessionsClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> extends Prisma.PrismaPromise<T> {
-    readonly [Symbol.toStringTag]: "PrismaPromise"
-    users<T extends usersDefaultArgs<ExtArgs> = {}>(args?: Subset<T, usersDefaultArgs<ExtArgs>>): Prisma__usersClient<$Result.GetResult<Prisma.$usersPayload<ExtArgs>, T, "findUniqueOrThrow"> | Null, Null, ExtArgs>
-    credit_articles<T extends credit_articlesDefaultArgs<ExtArgs> = {}>(args?: Subset<T, credit_articlesDefaultArgs<ExtArgs>>): Prisma__credit_articlesClient<$Result.GetResult<Prisma.$credit_articlesPayload<ExtArgs>, T, "findUniqueOrThrow"> | Null, Null, ExtArgs>
-    /**
-     * Attaches callbacks for the resolution and/or rejection of the Promise.
-     * @param onfulfilled The callback to execute when the Promise is resolved.
-     * @param onrejected The callback to execute when the Promise is rejected.
-     * @returns A Promise for the completion of which ever callback is executed.
-     */
-    then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): $Utils.JsPromise<TResult1 | TResult2>
-    /**
-     * Attaches a callback for only the rejection of the Promise.
-     * @param onrejected The callback to execute when the Promise is rejected.
-     * @returns A Promise for the completion of the callback.
-     */
-    catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null): $Utils.JsPromise<T | TResult>
-    /**
-     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
-     * resolved value cannot be modified from the callback.
-     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
-     * @returns A Promise for the completion of the callback.
-     */
-    finally(onfinally?: (() => void) | undefined | null): $Utils.JsPromise<T>
-  }
-
-
-
-
-  /**
-   * Fields of the article_ai_sessions model
-   */ 
-  interface article_ai_sessionsFieldRefs {
-    readonly id: FieldRef<"article_ai_sessions", 'String'>
-    readonly user_id: FieldRef<"article_ai_sessions", 'Int'>
-    readonly article_id: FieldRef<"article_ai_sessions", 'Int'>
-    readonly domain: FieldRef<"article_ai_sessions", 'String'>
-    readonly session_data: FieldRef<"article_ai_sessions", 'Json'>
-    readonly message_count: FieldRef<"article_ai_sessions", 'Int'>
-    readonly tokens_used: FieldRef<"article_ai_sessions", 'Int'>
-    readonly cost_usd: FieldRef<"article_ai_sessions", 'Decimal'>
-    readonly created_at: FieldRef<"article_ai_sessions", 'DateTime'>
-    readonly updated_at: FieldRef<"article_ai_sessions", 'DateTime'>
-    readonly expires_at: FieldRef<"article_ai_sessions", 'DateTime'>
-  }
-    
-
-  // Custom InputTypes
-  /**
-   * article_ai_sessions findUnique
-   */
-  export type article_ai_sessionsFindUniqueArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    /**
-     * Select specific fields to fetch from the article_ai_sessions
-     */
-    select?: article_ai_sessionsSelect<ExtArgs> | null
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: article_ai_sessionsInclude<ExtArgs> | null
-    /**
-     * Filter, which article_ai_sessions to fetch.
-     */
-    where: article_ai_sessionsWhereUniqueInput
-  }
-
-  /**
-   * article_ai_sessions findUniqueOrThrow
-   */
-  export type article_ai_sessionsFindUniqueOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    /**
-     * Select specific fields to fetch from the article_ai_sessions
-     */
-    select?: article_ai_sessionsSelect<ExtArgs> | null
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: article_ai_sessionsInclude<ExtArgs> | null
-    /**
-     * Filter, which article_ai_sessions to fetch.
-     */
-    where: article_ai_sessionsWhereUniqueInput
-  }
-
-  /**
-   * article_ai_sessions findFirst
-   */
-  export type article_ai_sessionsFindFirstArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    /**
-     * Select specific fields to fetch from the article_ai_sessions
-     */
-    select?: article_ai_sessionsSelect<ExtArgs> | null
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: article_ai_sessionsInclude<ExtArgs> | null
-    /**
-     * Filter, which article_ai_sessions to fetch.
-     */
-    where?: article_ai_sessionsWhereInput
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
-     * 
-     * Determine the order of article_ai_sessions to fetch.
-     */
-    orderBy?: article_ai_sessionsOrderByWithRelationInput | article_ai_sessionsOrderByWithRelationInput[]
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
-     * 
-     * Sets the position for searching for article_ai_sessions.
-     */
-    cursor?: article_ai_sessionsWhereUniqueInput
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
-     * 
-     * Take `±n` article_ai_sessions from the position of the cursor.
-     */
-    take?: number
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
-     * 
-     * Skip the first `n` article_ai_sessions.
-     */
-    skip?: number
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
-     * 
-     * Filter by unique combinations of article_ai_sessions.
-     */
-    distinct?: Article_ai_sessionsScalarFieldEnum | Article_ai_sessionsScalarFieldEnum[]
-  }
-
-  /**
-   * article_ai_sessions findFirstOrThrow
-   */
-  export type article_ai_sessionsFindFirstOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    /**
-     * Select specific fields to fetch from the article_ai_sessions
-     */
-    select?: article_ai_sessionsSelect<ExtArgs> | null
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: article_ai_sessionsInclude<ExtArgs> | null
-    /**
-     * Filter, which article_ai_sessions to fetch.
-     */
-    where?: article_ai_sessionsWhereInput
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
-     * 
-     * Determine the order of article_ai_sessions to fetch.
-     */
-    orderBy?: article_ai_sessionsOrderByWithRelationInput | article_ai_sessionsOrderByWithRelationInput[]
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
-     * 
-     * Sets the position for searching for article_ai_sessions.
-     */
-    cursor?: article_ai_sessionsWhereUniqueInput
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
-     * 
-     * Take `±n` article_ai_sessions from the position of the cursor.
-     */
-    take?: number
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
-     * 
-     * Skip the first `n` article_ai_sessions.
-     */
-    skip?: number
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
-     * 
-     * Filter by unique combinations of article_ai_sessions.
-     */
-    distinct?: Article_ai_sessionsScalarFieldEnum | Article_ai_sessionsScalarFieldEnum[]
-  }
-
-  /**
-   * article_ai_sessions findMany
-   */
-  export type article_ai_sessionsFindManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    /**
-     * Select specific fields to fetch from the article_ai_sessions
-     */
-    select?: article_ai_sessionsSelect<ExtArgs> | null
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: article_ai_sessionsInclude<ExtArgs> | null
-    /**
-     * Filter, which article_ai_sessions to fetch.
-     */
-    where?: article_ai_sessionsWhereInput
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
-     * 
-     * Determine the order of article_ai_sessions to fetch.
-     */
-    orderBy?: article_ai_sessionsOrderByWithRelationInput | article_ai_sessionsOrderByWithRelationInput[]
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
-     * 
-     * Sets the position for listing article_ai_sessions.
-     */
-    cursor?: article_ai_sessionsWhereUniqueInput
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
-     * 
-     * Take `±n` article_ai_sessions from the position of the cursor.
-     */
-    take?: number
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
-     * 
-     * Skip the first `n` article_ai_sessions.
-     */
-    skip?: number
-    distinct?: Article_ai_sessionsScalarFieldEnum | Article_ai_sessionsScalarFieldEnum[]
-  }
-
-  /**
-   * article_ai_sessions create
-   */
-  export type article_ai_sessionsCreateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    /**
-     * Select specific fields to fetch from the article_ai_sessions
-     */
-    select?: article_ai_sessionsSelect<ExtArgs> | null
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: article_ai_sessionsInclude<ExtArgs> | null
-    /**
-     * The data needed to create a article_ai_sessions.
-     */
-    data: XOR<article_ai_sessionsCreateInput, article_ai_sessionsUncheckedCreateInput>
-  }
-
-  /**
-   * article_ai_sessions createMany
-   */
-  export type article_ai_sessionsCreateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    /**
-     * The data used to create many article_ai_sessions.
-     */
-    data: article_ai_sessionsCreateManyInput | article_ai_sessionsCreateManyInput[]
-    skipDuplicates?: boolean
-  }
-
-  /**
-   * article_ai_sessions createManyAndReturn
-   */
-  export type article_ai_sessionsCreateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    /**
-     * Select specific fields to fetch from the article_ai_sessions
-     */
-    select?: article_ai_sessionsSelectCreateManyAndReturn<ExtArgs> | null
-    /**
-     * The data used to create many article_ai_sessions.
-     */
-    data: article_ai_sessionsCreateManyInput | article_ai_sessionsCreateManyInput[]
-    skipDuplicates?: boolean
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: article_ai_sessionsIncludeCreateManyAndReturn<ExtArgs> | null
-  }
-
-  /**
-   * article_ai_sessions update
-   */
-  export type article_ai_sessionsUpdateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    /**
-     * Select specific fields to fetch from the article_ai_sessions
-     */
-    select?: article_ai_sessionsSelect<ExtArgs> | null
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: article_ai_sessionsInclude<ExtArgs> | null
-    /**
-     * The data needed to update a article_ai_sessions.
-     */
-    data: XOR<article_ai_sessionsUpdateInput, article_ai_sessionsUncheckedUpdateInput>
-    /**
-     * Choose, which article_ai_sessions to update.
-     */
-    where: article_ai_sessionsWhereUniqueInput
-  }
-
-  /**
-   * article_ai_sessions updateMany
-   */
-  export type article_ai_sessionsUpdateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    /**
-     * The data used to update article_ai_sessions.
-     */
-    data: XOR<article_ai_sessionsUpdateManyMutationInput, article_ai_sessionsUncheckedUpdateManyInput>
-    /**
-     * Filter which article_ai_sessions to update
-     */
-    where?: article_ai_sessionsWhereInput
-  }
-
-  /**
-   * article_ai_sessions upsert
-   */
-  export type article_ai_sessionsUpsertArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    /**
-     * Select specific fields to fetch from the article_ai_sessions
-     */
-    select?: article_ai_sessionsSelect<ExtArgs> | null
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: article_ai_sessionsInclude<ExtArgs> | null
-    /**
-     * The filter to search for the article_ai_sessions to update in case it exists.
-     */
-    where: article_ai_sessionsWhereUniqueInput
-    /**
-     * In case the article_ai_sessions found by the `where` argument doesn't exist, create a new article_ai_sessions with this data.
-     */
-    create: XOR<article_ai_sessionsCreateInput, article_ai_sessionsUncheckedCreateInput>
-    /**
-     * In case the article_ai_sessions was found with the provided `where` argument, update it with this data.
-     */
-    update: XOR<article_ai_sessionsUpdateInput, article_ai_sessionsUncheckedUpdateInput>
-  }
-
-  /**
-   * article_ai_sessions delete
-   */
-  export type article_ai_sessionsDeleteArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    /**
-     * Select specific fields to fetch from the article_ai_sessions
-     */
-    select?: article_ai_sessionsSelect<ExtArgs> | null
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: article_ai_sessionsInclude<ExtArgs> | null
-    /**
-     * Filter which article_ai_sessions to delete.
-     */
-    where: article_ai_sessionsWhereUniqueInput
-  }
-
-  /**
-   * article_ai_sessions deleteMany
-   */
-  export type article_ai_sessionsDeleteManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    /**
-     * Filter which article_ai_sessions to delete
-     */
-    where?: article_ai_sessionsWhereInput
-  }
-
-  /**
-   * article_ai_sessions without action
-   */
-  export type article_ai_sessionsDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    /**
-     * Select specific fields to fetch from the article_ai_sessions
-     */
-    select?: article_ai_sessionsSelect<ExtArgs> | null
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: article_ai_sessionsInclude<ExtArgs> | null
   }
 
 
@@ -37544,7 +36359,6 @@ export namespace Prisma {
     ai_conversations?: boolean | users$ai_conversationsArgs<ExtArgs>
     ai_entity_memory?: boolean | users$ai_entity_memoryArgs<ExtArgs>
     ai_session_memory?: boolean | users$ai_session_memoryArgs<ExtArgs>
-    article_ai_sessions?: boolean | users$article_ai_sessionsArgs<ExtArgs>
     newsletter_subscriptions?: boolean | users$newsletter_subscriptionsArgs<ExtArgs>
     user_activity?: boolean | users$user_activityArgs<ExtArgs>
     user_article_stars?: boolean | users$user_article_starsArgs<ExtArgs>
@@ -37581,7 +36395,6 @@ export namespace Prisma {
     ai_conversations?: boolean | users$ai_conversationsArgs<ExtArgs>
     ai_entity_memory?: boolean | users$ai_entity_memoryArgs<ExtArgs>
     ai_session_memory?: boolean | users$ai_session_memoryArgs<ExtArgs>
-    article_ai_sessions?: boolean | users$article_ai_sessionsArgs<ExtArgs>
     newsletter_subscriptions?: boolean | users$newsletter_subscriptionsArgs<ExtArgs>
     user_activity?: boolean | users$user_activityArgs<ExtArgs>
     user_article_stars?: boolean | users$user_article_starsArgs<ExtArgs>
@@ -37597,7 +36410,6 @@ export namespace Prisma {
       ai_conversations: Prisma.$ai_conversationsPayload<ExtArgs>[]
       ai_entity_memory: Prisma.$ai_entity_memoryPayload<ExtArgs>[]
       ai_session_memory: Prisma.$ai_session_memoryPayload<ExtArgs>[]
-      article_ai_sessions: Prisma.$article_ai_sessionsPayload<ExtArgs>[]
       newsletter_subscriptions: Prisma.$newsletter_subscriptionsPayload<ExtArgs>[]
       user_activity: Prisma.$user_activityPayload<ExtArgs>[]
       user_article_stars: Prisma.$user_article_starsPayload<ExtArgs>[]
@@ -37981,7 +36793,6 @@ export namespace Prisma {
     ai_conversations<T extends users$ai_conversationsArgs<ExtArgs> = {}>(args?: Subset<T, users$ai_conversationsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ai_conversationsPayload<ExtArgs>, T, "findMany"> | Null>
     ai_entity_memory<T extends users$ai_entity_memoryArgs<ExtArgs> = {}>(args?: Subset<T, users$ai_entity_memoryArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ai_entity_memoryPayload<ExtArgs>, T, "findMany"> | Null>
     ai_session_memory<T extends users$ai_session_memoryArgs<ExtArgs> = {}>(args?: Subset<T, users$ai_session_memoryArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ai_session_memoryPayload<ExtArgs>, T, "findMany"> | Null>
-    article_ai_sessions<T extends users$article_ai_sessionsArgs<ExtArgs> = {}>(args?: Subset<T, users$article_ai_sessionsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$article_ai_sessionsPayload<ExtArgs>, T, "findMany"> | Null>
     newsletter_subscriptions<T extends users$newsletter_subscriptionsArgs<ExtArgs> = {}>(args?: Subset<T, users$newsletter_subscriptionsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$newsletter_subscriptionsPayload<ExtArgs>, T, "findMany"> | Null>
     user_activity<T extends users$user_activityArgs<ExtArgs> = {}>(args?: Subset<T, users$user_activityArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$user_activityPayload<ExtArgs>, T, "findMany"> | Null>
     user_article_stars<T extends users$user_article_starsArgs<ExtArgs> = {}>(args?: Subset<T, users$user_article_starsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$user_article_starsPayload<ExtArgs>, T, "findMany"> | Null>
@@ -38434,26 +37245,6 @@ export namespace Prisma {
     take?: number
     skip?: number
     distinct?: Ai_session_memoryScalarFieldEnum | Ai_session_memoryScalarFieldEnum[]
-  }
-
-  /**
-   * users.article_ai_sessions
-   */
-  export type users$article_ai_sessionsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    /**
-     * Select specific fields to fetch from the article_ai_sessions
-     */
-    select?: article_ai_sessionsSelect<ExtArgs> | null
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: article_ai_sessionsInclude<ExtArgs> | null
-    where?: article_ai_sessionsWhereInput
-    orderBy?: article_ai_sessionsOrderByWithRelationInput | article_ai_sessionsOrderByWithRelationInput[]
-    cursor?: article_ai_sessionsWhereUniqueInput
-    take?: number
-    skip?: number
-    distinct?: Article_ai_sessionsScalarFieldEnum | Article_ai_sessionsScalarFieldEnum[]
   }
 
   /**
@@ -39755,23 +38546,6 @@ export namespace Prisma {
   };
 
   export type Credit_articlesScalarFieldEnum = (typeof Credit_articlesScalarFieldEnum)[keyof typeof Credit_articlesScalarFieldEnum]
-
-
-  export const Article_ai_sessionsScalarFieldEnum: {
-    id: 'id',
-    user_id: 'user_id',
-    article_id: 'article_id',
-    domain: 'domain',
-    session_data: 'session_data',
-    message_count: 'message_count',
-    tokens_used: 'tokens_used',
-    cost_usd: 'cost_usd',
-    created_at: 'created_at',
-    updated_at: 'updated_at',
-    expires_at: 'expires_at'
-  };
-
-  export type Article_ai_sessionsScalarFieldEnum = (typeof Article_ai_sessionsScalarFieldEnum)[keyof typeof Article_ai_sessionsScalarFieldEnum]
 
 
   export const Email_alertsScalarFieldEnum: {
@@ -41192,7 +39966,6 @@ export namespace Prisma {
     created_at?: DateTimeNullableFilter<"credit_articles"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"credit_articles"> | Date | string | null
     user_article_stars?: User_article_starsListRelationFilter
-    article_ai_sessions?: Article_ai_sessionsListRelationFilter
   }
 
   export type credit_articlesOrderByWithRelationInput = {
@@ -41212,7 +39985,6 @@ export namespace Prisma {
     created_at?: SortOrderInput | SortOrder
     updated_at?: SortOrderInput | SortOrder
     user_article_stars?: user_article_starsOrderByRelationAggregateInput
-    article_ai_sessions?: article_ai_sessionsOrderByRelationAggregateInput
   }
 
   export type credit_articlesWhereUniqueInput = Prisma.AtLeast<{
@@ -41236,7 +40008,6 @@ export namespace Prisma {
     created_at?: DateTimeNullableFilter<"credit_articles"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"credit_articles"> | Date | string | null
     user_article_stars?: User_article_starsListRelationFilter
-    article_ai_sessions?: Article_ai_sessionsListRelationFilter
   }, "id" | "link_region_sector_source">
 
   export type credit_articlesOrderByWithAggregationInput = {
@@ -41281,96 +40052,6 @@ export namespace Prisma {
     url?: StringNullableWithAggregatesFilter<"credit_articles"> | string | null
     created_at?: DateTimeNullableWithAggregatesFilter<"credit_articles"> | Date | string | null
     updated_at?: DateTimeNullableWithAggregatesFilter<"credit_articles"> | Date | string | null
-  }
-
-  export type article_ai_sessionsWhereInput = {
-    AND?: article_ai_sessionsWhereInput | article_ai_sessionsWhereInput[]
-    OR?: article_ai_sessionsWhereInput[]
-    NOT?: article_ai_sessionsWhereInput | article_ai_sessionsWhereInput[]
-    id?: UuidFilter<"article_ai_sessions"> | string
-    user_id?: IntFilter<"article_ai_sessions"> | number
-    article_id?: IntFilter<"article_ai_sessions"> | number
-    domain?: StringFilter<"article_ai_sessions"> | string
-    session_data?: JsonFilter<"article_ai_sessions">
-    message_count?: IntFilter<"article_ai_sessions"> | number
-    tokens_used?: IntFilter<"article_ai_sessions"> | number
-    cost_usd?: DecimalNullableFilter<"article_ai_sessions"> | Decimal | DecimalJsLike | number | string | null
-    created_at?: DateTimeFilter<"article_ai_sessions"> | Date | string
-    updated_at?: DateTimeFilter<"article_ai_sessions"> | Date | string
-    expires_at?: DateTimeFilter<"article_ai_sessions"> | Date | string
-    users?: XOR<UsersRelationFilter, usersWhereInput>
-    credit_articles?: XOR<Credit_articlesRelationFilter, credit_articlesWhereInput>
-  }
-
-  export type article_ai_sessionsOrderByWithRelationInput = {
-    id?: SortOrder
-    user_id?: SortOrder
-    article_id?: SortOrder
-    domain?: SortOrder
-    session_data?: SortOrder
-    message_count?: SortOrder
-    tokens_used?: SortOrder
-    cost_usd?: SortOrderInput | SortOrder
-    created_at?: SortOrder
-    updated_at?: SortOrder
-    expires_at?: SortOrder
-    users?: usersOrderByWithRelationInput
-    credit_articles?: credit_articlesOrderByWithRelationInput
-  }
-
-  export type article_ai_sessionsWhereUniqueInput = Prisma.AtLeast<{
-    id?: string
-    AND?: article_ai_sessionsWhereInput | article_ai_sessionsWhereInput[]
-    OR?: article_ai_sessionsWhereInput[]
-    NOT?: article_ai_sessionsWhereInput | article_ai_sessionsWhereInput[]
-    user_id?: IntFilter<"article_ai_sessions"> | number
-    article_id?: IntFilter<"article_ai_sessions"> | number
-    domain?: StringFilter<"article_ai_sessions"> | string
-    session_data?: JsonFilter<"article_ai_sessions">
-    message_count?: IntFilter<"article_ai_sessions"> | number
-    tokens_used?: IntFilter<"article_ai_sessions"> | number
-    cost_usd?: DecimalNullableFilter<"article_ai_sessions"> | Decimal | DecimalJsLike | number | string | null
-    created_at?: DateTimeFilter<"article_ai_sessions"> | Date | string
-    updated_at?: DateTimeFilter<"article_ai_sessions"> | Date | string
-    expires_at?: DateTimeFilter<"article_ai_sessions"> | Date | string
-    users?: XOR<UsersRelationFilter, usersWhereInput>
-    credit_articles?: XOR<Credit_articlesRelationFilter, credit_articlesWhereInput>
-  }, "id">
-
-  export type article_ai_sessionsOrderByWithAggregationInput = {
-    id?: SortOrder
-    user_id?: SortOrder
-    article_id?: SortOrder
-    domain?: SortOrder
-    session_data?: SortOrder
-    message_count?: SortOrder
-    tokens_used?: SortOrder
-    cost_usd?: SortOrderInput | SortOrder
-    created_at?: SortOrder
-    updated_at?: SortOrder
-    expires_at?: SortOrder
-    _count?: article_ai_sessionsCountOrderByAggregateInput
-    _avg?: article_ai_sessionsAvgOrderByAggregateInput
-    _max?: article_ai_sessionsMaxOrderByAggregateInput
-    _min?: article_ai_sessionsMinOrderByAggregateInput
-    _sum?: article_ai_sessionsSumOrderByAggregateInput
-  }
-
-  export type article_ai_sessionsScalarWhereWithAggregatesInput = {
-    AND?: article_ai_sessionsScalarWhereWithAggregatesInput | article_ai_sessionsScalarWhereWithAggregatesInput[]
-    OR?: article_ai_sessionsScalarWhereWithAggregatesInput[]
-    NOT?: article_ai_sessionsScalarWhereWithAggregatesInput | article_ai_sessionsScalarWhereWithAggregatesInput[]
-    id?: UuidWithAggregatesFilter<"article_ai_sessions"> | string
-    user_id?: IntWithAggregatesFilter<"article_ai_sessions"> | number
-    article_id?: IntWithAggregatesFilter<"article_ai_sessions"> | number
-    domain?: StringWithAggregatesFilter<"article_ai_sessions"> | string
-    session_data?: JsonWithAggregatesFilter<"article_ai_sessions">
-    message_count?: IntWithAggregatesFilter<"article_ai_sessions"> | number
-    tokens_used?: IntWithAggregatesFilter<"article_ai_sessions"> | number
-    cost_usd?: DecimalNullableWithAggregatesFilter<"article_ai_sessions"> | Decimal | DecimalJsLike | number | string | null
-    created_at?: DateTimeWithAggregatesFilter<"article_ai_sessions"> | Date | string
-    updated_at?: DateTimeWithAggregatesFilter<"article_ai_sessions"> | Date | string
-    expires_at?: DateTimeWithAggregatesFilter<"article_ai_sessions"> | Date | string
   }
 
   export type email_alertsWhereInput = {
@@ -42952,7 +41633,6 @@ export namespace Prisma {
     ai_conversations?: Ai_conversationsListRelationFilter
     ai_entity_memory?: Ai_entity_memoryListRelationFilter
     ai_session_memory?: Ai_session_memoryListRelationFilter
-    article_ai_sessions?: Article_ai_sessionsListRelationFilter
     newsletter_subscriptions?: Newsletter_subscriptionsListRelationFilter
     user_activity?: User_activityListRelationFilter
     user_article_stars?: User_article_starsListRelationFilter
@@ -42973,7 +41653,6 @@ export namespace Prisma {
     ai_conversations?: ai_conversationsOrderByRelationAggregateInput
     ai_entity_memory?: ai_entity_memoryOrderByRelationAggregateInput
     ai_session_memory?: ai_session_memoryOrderByRelationAggregateInput
-    article_ai_sessions?: article_ai_sessionsOrderByRelationAggregateInput
     newsletter_subscriptions?: newsletter_subscriptionsOrderByRelationAggregateInput
     user_activity?: user_activityOrderByRelationAggregateInput
     user_article_stars?: user_article_starsOrderByRelationAggregateInput
@@ -42997,7 +41676,6 @@ export namespace Prisma {
     ai_conversations?: Ai_conversationsListRelationFilter
     ai_entity_memory?: Ai_entity_memoryListRelationFilter
     ai_session_memory?: Ai_session_memoryListRelationFilter
-    article_ai_sessions?: Article_ai_sessionsListRelationFilter
     newsletter_subscriptions?: Newsletter_subscriptionsListRelationFilter
     user_activity?: User_activityListRelationFilter
     user_article_stars?: User_article_starsListRelationFilter
@@ -44071,7 +42749,6 @@ export namespace Prisma {
     created_at?: Date | string | null
     updated_at?: Date | string | null
     user_article_stars?: user_article_starsCreateNestedManyWithoutCredit_articlesInput
-    article_ai_sessions?: article_ai_sessionsCreateNestedManyWithoutCredit_articlesInput
   }
 
   export type credit_articlesUncheckedCreateInput = {
@@ -44091,7 +42768,6 @@ export namespace Prisma {
     created_at?: Date | string | null
     updated_at?: Date | string | null
     user_article_stars?: user_article_starsUncheckedCreateNestedManyWithoutCredit_articlesInput
-    article_ai_sessions?: article_ai_sessionsUncheckedCreateNestedManyWithoutCredit_articlesInput
   }
 
   export type credit_articlesUpdateInput = {
@@ -44110,7 +42786,6 @@ export namespace Prisma {
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     user_article_stars?: user_article_starsUpdateManyWithoutCredit_articlesNestedInput
-    article_ai_sessions?: article_ai_sessionsUpdateManyWithoutCredit_articlesNestedInput
   }
 
   export type credit_articlesUncheckedUpdateInput = {
@@ -44130,7 +42805,6 @@ export namespace Prisma {
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     user_article_stars?: user_article_starsUncheckedUpdateManyWithoutCredit_articlesNestedInput
-    article_ai_sessions?: article_ai_sessionsUncheckedUpdateManyWithoutCredit_articlesNestedInput
   }
 
   export type credit_articlesCreateManyInput = {
@@ -44184,102 +42858,6 @@ export namespace Prisma {
     url?: NullableStringFieldUpdateOperationsInput | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  }
-
-  export type article_ai_sessionsCreateInput = {
-    id?: string
-    domain?: string
-    session_data?: JsonNullValueInput | InputJsonValue
-    message_count?: number
-    tokens_used?: number
-    cost_usd?: Decimal | DecimalJsLike | number | string | null
-    created_at?: Date | string
-    updated_at?: Date | string
-    expires_at: Date | string
-    users: usersCreateNestedOneWithoutArticle_ai_sessionsInput
-    credit_articles: credit_articlesCreateNestedOneWithoutArticle_ai_sessionsInput
-  }
-
-  export type article_ai_sessionsUncheckedCreateInput = {
-    id?: string
-    user_id: number
-    article_id: number
-    domain?: string
-    session_data?: JsonNullValueInput | InputJsonValue
-    message_count?: number
-    tokens_used?: number
-    cost_usd?: Decimal | DecimalJsLike | number | string | null
-    created_at?: Date | string
-    updated_at?: Date | string
-    expires_at: Date | string
-  }
-
-  export type article_ai_sessionsUpdateInput = {
-    id?: StringFieldUpdateOperationsInput | string
-    domain?: StringFieldUpdateOperationsInput | string
-    session_data?: JsonNullValueInput | InputJsonValue
-    message_count?: IntFieldUpdateOperationsInput | number
-    tokens_used?: IntFieldUpdateOperationsInput | number
-    cost_usd?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
-    created_at?: DateTimeFieldUpdateOperationsInput | Date | string
-    updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
-    expires_at?: DateTimeFieldUpdateOperationsInput | Date | string
-    users?: usersUpdateOneRequiredWithoutArticle_ai_sessionsNestedInput
-    credit_articles?: credit_articlesUpdateOneRequiredWithoutArticle_ai_sessionsNestedInput
-  }
-
-  export type article_ai_sessionsUncheckedUpdateInput = {
-    id?: StringFieldUpdateOperationsInput | string
-    user_id?: IntFieldUpdateOperationsInput | number
-    article_id?: IntFieldUpdateOperationsInput | number
-    domain?: StringFieldUpdateOperationsInput | string
-    session_data?: JsonNullValueInput | InputJsonValue
-    message_count?: IntFieldUpdateOperationsInput | number
-    tokens_used?: IntFieldUpdateOperationsInput | number
-    cost_usd?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
-    created_at?: DateTimeFieldUpdateOperationsInput | Date | string
-    updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
-    expires_at?: DateTimeFieldUpdateOperationsInput | Date | string
-  }
-
-  export type article_ai_sessionsCreateManyInput = {
-    id?: string
-    user_id: number
-    article_id: number
-    domain?: string
-    session_data?: JsonNullValueInput | InputJsonValue
-    message_count?: number
-    tokens_used?: number
-    cost_usd?: Decimal | DecimalJsLike | number | string | null
-    created_at?: Date | string
-    updated_at?: Date | string
-    expires_at: Date | string
-  }
-
-  export type article_ai_sessionsUpdateManyMutationInput = {
-    id?: StringFieldUpdateOperationsInput | string
-    domain?: StringFieldUpdateOperationsInput | string
-    session_data?: JsonNullValueInput | InputJsonValue
-    message_count?: IntFieldUpdateOperationsInput | number
-    tokens_used?: IntFieldUpdateOperationsInput | number
-    cost_usd?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
-    created_at?: DateTimeFieldUpdateOperationsInput | Date | string
-    updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
-    expires_at?: DateTimeFieldUpdateOperationsInput | Date | string
-  }
-
-  export type article_ai_sessionsUncheckedUpdateManyInput = {
-    id?: StringFieldUpdateOperationsInput | string
-    user_id?: IntFieldUpdateOperationsInput | number
-    article_id?: IntFieldUpdateOperationsInput | number
-    domain?: StringFieldUpdateOperationsInput | string
-    session_data?: JsonNullValueInput | InputJsonValue
-    message_count?: IntFieldUpdateOperationsInput | number
-    tokens_used?: IntFieldUpdateOperationsInput | number
-    cost_usd?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
-    created_at?: DateTimeFieldUpdateOperationsInput | Date | string
-    updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
-    expires_at?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
   export type email_alertsCreateInput = {
@@ -45988,7 +44566,6 @@ export namespace Prisma {
     ai_conversations?: ai_conversationsCreateNestedManyWithoutUsersInput
     ai_entity_memory?: ai_entity_memoryCreateNestedManyWithoutUsersInput
     ai_session_memory?: ai_session_memoryCreateNestedManyWithoutUsersInput
-    article_ai_sessions?: article_ai_sessionsCreateNestedManyWithoutUsersInput
     newsletter_subscriptions?: newsletter_subscriptionsCreateNestedManyWithoutUsersInput
     user_activity?: user_activityCreateNestedManyWithoutUsersInput
     user_article_stars?: user_article_starsCreateNestedManyWithoutUsersInput
@@ -46009,7 +44586,6 @@ export namespace Prisma {
     ai_conversations?: ai_conversationsUncheckedCreateNestedManyWithoutUsersInput
     ai_entity_memory?: ai_entity_memoryUncheckedCreateNestedManyWithoutUsersInput
     ai_session_memory?: ai_session_memoryUncheckedCreateNestedManyWithoutUsersInput
-    article_ai_sessions?: article_ai_sessionsUncheckedCreateNestedManyWithoutUsersInput
     newsletter_subscriptions?: newsletter_subscriptionsUncheckedCreateNestedManyWithoutUsersInput
     user_activity?: user_activityUncheckedCreateNestedManyWithoutUsersInput
     user_article_stars?: user_article_starsUncheckedCreateNestedManyWithoutUsersInput
@@ -46029,7 +44605,6 @@ export namespace Prisma {
     ai_conversations?: ai_conversationsUpdateManyWithoutUsersNestedInput
     ai_entity_memory?: ai_entity_memoryUpdateManyWithoutUsersNestedInput
     ai_session_memory?: ai_session_memoryUpdateManyWithoutUsersNestedInput
-    article_ai_sessions?: article_ai_sessionsUpdateManyWithoutUsersNestedInput
     newsletter_subscriptions?: newsletter_subscriptionsUpdateManyWithoutUsersNestedInput
     user_activity?: user_activityUpdateManyWithoutUsersNestedInput
     user_article_stars?: user_article_starsUpdateManyWithoutUsersNestedInput
@@ -46050,7 +44625,6 @@ export namespace Prisma {
     ai_conversations?: ai_conversationsUncheckedUpdateManyWithoutUsersNestedInput
     ai_entity_memory?: ai_entity_memoryUncheckedUpdateManyWithoutUsersNestedInput
     ai_session_memory?: ai_session_memoryUncheckedUpdateManyWithoutUsersNestedInput
-    article_ai_sessions?: article_ai_sessionsUncheckedUpdateManyWithoutUsersNestedInput
     newsletter_subscriptions?: newsletter_subscriptionsUncheckedUpdateManyWithoutUsersNestedInput
     user_activity?: user_activityUncheckedUpdateManyWithoutUsersNestedInput
     user_article_stars?: user_article_starsUncheckedUpdateManyWithoutUsersNestedInput
@@ -47136,17 +45710,7 @@ export namespace Prisma {
     none?: user_article_starsWhereInput
   }
 
-  export type Article_ai_sessionsListRelationFilter = {
-    every?: article_ai_sessionsWhereInput
-    some?: article_ai_sessionsWhereInput
-    none?: article_ai_sessionsWhereInput
-  }
-
   export type user_article_starsOrderByRelationAggregateInput = {
-    _count?: SortOrder
-  }
-
-  export type article_ai_sessionsOrderByRelationAggregateInput = {
     _count?: SortOrder
   }
 
@@ -47225,99 +45789,6 @@ export namespace Prisma {
     _count?: NestedIntNullableFilter<$PrismaModel>
     _min?: NestedBoolNullableFilter<$PrismaModel>
     _max?: NestedBoolNullableFilter<$PrismaModel>
-  }
-
-  export type UuidFilter<$PrismaModel = never> = {
-    equals?: string | StringFieldRefInput<$PrismaModel>
-    in?: string[] | ListStringFieldRefInput<$PrismaModel>
-    notIn?: string[] | ListStringFieldRefInput<$PrismaModel>
-    lt?: string | StringFieldRefInput<$PrismaModel>
-    lte?: string | StringFieldRefInput<$PrismaModel>
-    gt?: string | StringFieldRefInput<$PrismaModel>
-    gte?: string | StringFieldRefInput<$PrismaModel>
-    mode?: QueryMode
-    not?: NestedUuidFilter<$PrismaModel> | string
-  }
-
-  export type UsersRelationFilter = {
-    is?: usersWhereInput
-    isNot?: usersWhereInput
-  }
-
-  export type Credit_articlesRelationFilter = {
-    is?: credit_articlesWhereInput
-    isNot?: credit_articlesWhereInput
-  }
-
-  export type article_ai_sessionsCountOrderByAggregateInput = {
-    id?: SortOrder
-    user_id?: SortOrder
-    article_id?: SortOrder
-    domain?: SortOrder
-    session_data?: SortOrder
-    message_count?: SortOrder
-    tokens_used?: SortOrder
-    cost_usd?: SortOrder
-    created_at?: SortOrder
-    updated_at?: SortOrder
-    expires_at?: SortOrder
-  }
-
-  export type article_ai_sessionsAvgOrderByAggregateInput = {
-    user_id?: SortOrder
-    article_id?: SortOrder
-    message_count?: SortOrder
-    tokens_used?: SortOrder
-    cost_usd?: SortOrder
-  }
-
-  export type article_ai_sessionsMaxOrderByAggregateInput = {
-    id?: SortOrder
-    user_id?: SortOrder
-    article_id?: SortOrder
-    domain?: SortOrder
-    message_count?: SortOrder
-    tokens_used?: SortOrder
-    cost_usd?: SortOrder
-    created_at?: SortOrder
-    updated_at?: SortOrder
-    expires_at?: SortOrder
-  }
-
-  export type article_ai_sessionsMinOrderByAggregateInput = {
-    id?: SortOrder
-    user_id?: SortOrder
-    article_id?: SortOrder
-    domain?: SortOrder
-    message_count?: SortOrder
-    tokens_used?: SortOrder
-    cost_usd?: SortOrder
-    created_at?: SortOrder
-    updated_at?: SortOrder
-    expires_at?: SortOrder
-  }
-
-  export type article_ai_sessionsSumOrderByAggregateInput = {
-    user_id?: SortOrder
-    article_id?: SortOrder
-    message_count?: SortOrder
-    tokens_used?: SortOrder
-    cost_usd?: SortOrder
-  }
-
-  export type UuidWithAggregatesFilter<$PrismaModel = never> = {
-    equals?: string | StringFieldRefInput<$PrismaModel>
-    in?: string[] | ListStringFieldRefInput<$PrismaModel>
-    notIn?: string[] | ListStringFieldRefInput<$PrismaModel>
-    lt?: string | StringFieldRefInput<$PrismaModel>
-    lte?: string | StringFieldRefInput<$PrismaModel>
-    gt?: string | StringFieldRefInput<$PrismaModel>
-    gte?: string | StringFieldRefInput<$PrismaModel>
-    mode?: QueryMode
-    not?: NestedUuidWithAggregatesFilter<$PrismaModel> | string
-    _count?: NestedIntFilter<$PrismaModel>
-    _min?: NestedStringFilter<$PrismaModel>
-    _max?: NestedStringFilter<$PrismaModel>
   }
 
   export type email_alertsCountOrderByAggregateInput = {
@@ -47776,6 +46247,11 @@ export namespace Prisma {
     every?: newsletter_preferencesWhereInput
     some?: newsletter_preferencesWhereInput
     none?: newsletter_preferencesWhereInput
+  }
+
+  export type UsersRelationFilter = {
+    is?: usersWhereInput
+    isNot?: usersWhereInput
   }
 
   export type newsletter_logsOrderByRelationAggregateInput = {
@@ -48274,6 +46750,11 @@ export namespace Prisma {
 
   export type user_alertsSumOrderByAggregateInput = {
     id?: SortOrder
+  }
+
+  export type Credit_articlesRelationFilter = {
+    is?: credit_articlesWhereInput
+    isNot?: credit_articlesWhereInput
   }
 
   export type user_article_starsCountOrderByAggregateInput = {
@@ -48927,25 +47408,11 @@ export namespace Prisma {
     connect?: user_article_starsWhereUniqueInput | user_article_starsWhereUniqueInput[]
   }
 
-  export type article_ai_sessionsCreateNestedManyWithoutCredit_articlesInput = {
-    create?: XOR<article_ai_sessionsCreateWithoutCredit_articlesInput, article_ai_sessionsUncheckedCreateWithoutCredit_articlesInput> | article_ai_sessionsCreateWithoutCredit_articlesInput[] | article_ai_sessionsUncheckedCreateWithoutCredit_articlesInput[]
-    connectOrCreate?: article_ai_sessionsCreateOrConnectWithoutCredit_articlesInput | article_ai_sessionsCreateOrConnectWithoutCredit_articlesInput[]
-    createMany?: article_ai_sessionsCreateManyCredit_articlesInputEnvelope
-    connect?: article_ai_sessionsWhereUniqueInput | article_ai_sessionsWhereUniqueInput[]
-  }
-
   export type user_article_starsUncheckedCreateNestedManyWithoutCredit_articlesInput = {
     create?: XOR<user_article_starsCreateWithoutCredit_articlesInput, user_article_starsUncheckedCreateWithoutCredit_articlesInput> | user_article_starsCreateWithoutCredit_articlesInput[] | user_article_starsUncheckedCreateWithoutCredit_articlesInput[]
     connectOrCreate?: user_article_starsCreateOrConnectWithoutCredit_articlesInput | user_article_starsCreateOrConnectWithoutCredit_articlesInput[]
     createMany?: user_article_starsCreateManyCredit_articlesInputEnvelope
     connect?: user_article_starsWhereUniqueInput | user_article_starsWhereUniqueInput[]
-  }
-
-  export type article_ai_sessionsUncheckedCreateNestedManyWithoutCredit_articlesInput = {
-    create?: XOR<article_ai_sessionsCreateWithoutCredit_articlesInput, article_ai_sessionsUncheckedCreateWithoutCredit_articlesInput> | article_ai_sessionsCreateWithoutCredit_articlesInput[] | article_ai_sessionsUncheckedCreateWithoutCredit_articlesInput[]
-    connectOrCreate?: article_ai_sessionsCreateOrConnectWithoutCredit_articlesInput | article_ai_sessionsCreateOrConnectWithoutCredit_articlesInput[]
-    createMany?: article_ai_sessionsCreateManyCredit_articlesInputEnvelope
-    connect?: article_ai_sessionsWhereUniqueInput | article_ai_sessionsWhereUniqueInput[]
   }
 
   export type NullableBoolFieldUpdateOperationsInput = {
@@ -48966,20 +47433,6 @@ export namespace Prisma {
     deleteMany?: user_article_starsScalarWhereInput | user_article_starsScalarWhereInput[]
   }
 
-  export type article_ai_sessionsUpdateManyWithoutCredit_articlesNestedInput = {
-    create?: XOR<article_ai_sessionsCreateWithoutCredit_articlesInput, article_ai_sessionsUncheckedCreateWithoutCredit_articlesInput> | article_ai_sessionsCreateWithoutCredit_articlesInput[] | article_ai_sessionsUncheckedCreateWithoutCredit_articlesInput[]
-    connectOrCreate?: article_ai_sessionsCreateOrConnectWithoutCredit_articlesInput | article_ai_sessionsCreateOrConnectWithoutCredit_articlesInput[]
-    upsert?: article_ai_sessionsUpsertWithWhereUniqueWithoutCredit_articlesInput | article_ai_sessionsUpsertWithWhereUniqueWithoutCredit_articlesInput[]
-    createMany?: article_ai_sessionsCreateManyCredit_articlesInputEnvelope
-    set?: article_ai_sessionsWhereUniqueInput | article_ai_sessionsWhereUniqueInput[]
-    disconnect?: article_ai_sessionsWhereUniqueInput | article_ai_sessionsWhereUniqueInput[]
-    delete?: article_ai_sessionsWhereUniqueInput | article_ai_sessionsWhereUniqueInput[]
-    connect?: article_ai_sessionsWhereUniqueInput | article_ai_sessionsWhereUniqueInput[]
-    update?: article_ai_sessionsUpdateWithWhereUniqueWithoutCredit_articlesInput | article_ai_sessionsUpdateWithWhereUniqueWithoutCredit_articlesInput[]
-    updateMany?: article_ai_sessionsUpdateManyWithWhereWithoutCredit_articlesInput | article_ai_sessionsUpdateManyWithWhereWithoutCredit_articlesInput[]
-    deleteMany?: article_ai_sessionsScalarWhereInput | article_ai_sessionsScalarWhereInput[]
-  }
-
   export type user_article_starsUncheckedUpdateManyWithoutCredit_articlesNestedInput = {
     create?: XOR<user_article_starsCreateWithoutCredit_articlesInput, user_article_starsUncheckedCreateWithoutCredit_articlesInput> | user_article_starsCreateWithoutCredit_articlesInput[] | user_article_starsUncheckedCreateWithoutCredit_articlesInput[]
     connectOrCreate?: user_article_starsCreateOrConnectWithoutCredit_articlesInput | user_article_starsCreateOrConnectWithoutCredit_articlesInput[]
@@ -48992,48 +47445,6 @@ export namespace Prisma {
     update?: user_article_starsUpdateWithWhereUniqueWithoutCredit_articlesInput | user_article_starsUpdateWithWhereUniqueWithoutCredit_articlesInput[]
     updateMany?: user_article_starsUpdateManyWithWhereWithoutCredit_articlesInput | user_article_starsUpdateManyWithWhereWithoutCredit_articlesInput[]
     deleteMany?: user_article_starsScalarWhereInput | user_article_starsScalarWhereInput[]
-  }
-
-  export type article_ai_sessionsUncheckedUpdateManyWithoutCredit_articlesNestedInput = {
-    create?: XOR<article_ai_sessionsCreateWithoutCredit_articlesInput, article_ai_sessionsUncheckedCreateWithoutCredit_articlesInput> | article_ai_sessionsCreateWithoutCredit_articlesInput[] | article_ai_sessionsUncheckedCreateWithoutCredit_articlesInput[]
-    connectOrCreate?: article_ai_sessionsCreateOrConnectWithoutCredit_articlesInput | article_ai_sessionsCreateOrConnectWithoutCredit_articlesInput[]
-    upsert?: article_ai_sessionsUpsertWithWhereUniqueWithoutCredit_articlesInput | article_ai_sessionsUpsertWithWhereUniqueWithoutCredit_articlesInput[]
-    createMany?: article_ai_sessionsCreateManyCredit_articlesInputEnvelope
-    set?: article_ai_sessionsWhereUniqueInput | article_ai_sessionsWhereUniqueInput[]
-    disconnect?: article_ai_sessionsWhereUniqueInput | article_ai_sessionsWhereUniqueInput[]
-    delete?: article_ai_sessionsWhereUniqueInput | article_ai_sessionsWhereUniqueInput[]
-    connect?: article_ai_sessionsWhereUniqueInput | article_ai_sessionsWhereUniqueInput[]
-    update?: article_ai_sessionsUpdateWithWhereUniqueWithoutCredit_articlesInput | article_ai_sessionsUpdateWithWhereUniqueWithoutCredit_articlesInput[]
-    updateMany?: article_ai_sessionsUpdateManyWithWhereWithoutCredit_articlesInput | article_ai_sessionsUpdateManyWithWhereWithoutCredit_articlesInput[]
-    deleteMany?: article_ai_sessionsScalarWhereInput | article_ai_sessionsScalarWhereInput[]
-  }
-
-  export type usersCreateNestedOneWithoutArticle_ai_sessionsInput = {
-    create?: XOR<usersCreateWithoutArticle_ai_sessionsInput, usersUncheckedCreateWithoutArticle_ai_sessionsInput>
-    connectOrCreate?: usersCreateOrConnectWithoutArticle_ai_sessionsInput
-    connect?: usersWhereUniqueInput
-  }
-
-  export type credit_articlesCreateNestedOneWithoutArticle_ai_sessionsInput = {
-    create?: XOR<credit_articlesCreateWithoutArticle_ai_sessionsInput, credit_articlesUncheckedCreateWithoutArticle_ai_sessionsInput>
-    connectOrCreate?: credit_articlesCreateOrConnectWithoutArticle_ai_sessionsInput
-    connect?: credit_articlesWhereUniqueInput
-  }
-
-  export type usersUpdateOneRequiredWithoutArticle_ai_sessionsNestedInput = {
-    create?: XOR<usersCreateWithoutArticle_ai_sessionsInput, usersUncheckedCreateWithoutArticle_ai_sessionsInput>
-    connectOrCreate?: usersCreateOrConnectWithoutArticle_ai_sessionsInput
-    upsert?: usersUpsertWithoutArticle_ai_sessionsInput
-    connect?: usersWhereUniqueInput
-    update?: XOR<XOR<usersUpdateToOneWithWhereWithoutArticle_ai_sessionsInput, usersUpdateWithoutArticle_ai_sessionsInput>, usersUncheckedUpdateWithoutArticle_ai_sessionsInput>
-  }
-
-  export type credit_articlesUpdateOneRequiredWithoutArticle_ai_sessionsNestedInput = {
-    create?: XOR<credit_articlesCreateWithoutArticle_ai_sessionsInput, credit_articlesUncheckedCreateWithoutArticle_ai_sessionsInput>
-    connectOrCreate?: credit_articlesCreateOrConnectWithoutArticle_ai_sessionsInput
-    upsert?: credit_articlesUpsertWithoutArticle_ai_sessionsInput
-    connect?: credit_articlesWhereUniqueInput
-    update?: XOR<XOR<credit_articlesUpdateToOneWithWhereWithoutArticle_ai_sessionsInput, credit_articlesUpdateWithoutArticle_ai_sessionsInput>, credit_articlesUncheckedUpdateWithoutArticle_ai_sessionsInput>
   }
 
   export type userCreateNestedOneWithoutEventInput = {
@@ -49864,13 +48275,6 @@ export namespace Prisma {
     connect?: ai_session_memoryWhereUniqueInput | ai_session_memoryWhereUniqueInput[]
   }
 
-  export type article_ai_sessionsCreateNestedManyWithoutUsersInput = {
-    create?: XOR<article_ai_sessionsCreateWithoutUsersInput, article_ai_sessionsUncheckedCreateWithoutUsersInput> | article_ai_sessionsCreateWithoutUsersInput[] | article_ai_sessionsUncheckedCreateWithoutUsersInput[]
-    connectOrCreate?: article_ai_sessionsCreateOrConnectWithoutUsersInput | article_ai_sessionsCreateOrConnectWithoutUsersInput[]
-    createMany?: article_ai_sessionsCreateManyUsersInputEnvelope
-    connect?: article_ai_sessionsWhereUniqueInput | article_ai_sessionsWhereUniqueInput[]
-  }
-
   export type newsletter_subscriptionsCreateNestedManyWithoutUsersInput = {
     create?: XOR<newsletter_subscriptionsCreateWithoutUsersInput, newsletter_subscriptionsUncheckedCreateWithoutUsersInput> | newsletter_subscriptionsCreateWithoutUsersInput[] | newsletter_subscriptionsUncheckedCreateWithoutUsersInput[]
     connectOrCreate?: newsletter_subscriptionsCreateOrConnectWithoutUsersInput | newsletter_subscriptionsCreateOrConnectWithoutUsersInput[]
@@ -49925,13 +48329,6 @@ export namespace Prisma {
     connectOrCreate?: ai_session_memoryCreateOrConnectWithoutUsersInput | ai_session_memoryCreateOrConnectWithoutUsersInput[]
     createMany?: ai_session_memoryCreateManyUsersInputEnvelope
     connect?: ai_session_memoryWhereUniqueInput | ai_session_memoryWhereUniqueInput[]
-  }
-
-  export type article_ai_sessionsUncheckedCreateNestedManyWithoutUsersInput = {
-    create?: XOR<article_ai_sessionsCreateWithoutUsersInput, article_ai_sessionsUncheckedCreateWithoutUsersInput> | article_ai_sessionsCreateWithoutUsersInput[] | article_ai_sessionsUncheckedCreateWithoutUsersInput[]
-    connectOrCreate?: article_ai_sessionsCreateOrConnectWithoutUsersInput | article_ai_sessionsCreateOrConnectWithoutUsersInput[]
-    createMany?: article_ai_sessionsCreateManyUsersInputEnvelope
-    connect?: article_ai_sessionsWhereUniqueInput | article_ai_sessionsWhereUniqueInput[]
   }
 
   export type newsletter_subscriptionsUncheckedCreateNestedManyWithoutUsersInput = {
@@ -50023,20 +48420,6 @@ export namespace Prisma {
     update?: ai_session_memoryUpdateWithWhereUniqueWithoutUsersInput | ai_session_memoryUpdateWithWhereUniqueWithoutUsersInput[]
     updateMany?: ai_session_memoryUpdateManyWithWhereWithoutUsersInput | ai_session_memoryUpdateManyWithWhereWithoutUsersInput[]
     deleteMany?: ai_session_memoryScalarWhereInput | ai_session_memoryScalarWhereInput[]
-  }
-
-  export type article_ai_sessionsUpdateManyWithoutUsersNestedInput = {
-    create?: XOR<article_ai_sessionsCreateWithoutUsersInput, article_ai_sessionsUncheckedCreateWithoutUsersInput> | article_ai_sessionsCreateWithoutUsersInput[] | article_ai_sessionsUncheckedCreateWithoutUsersInput[]
-    connectOrCreate?: article_ai_sessionsCreateOrConnectWithoutUsersInput | article_ai_sessionsCreateOrConnectWithoutUsersInput[]
-    upsert?: article_ai_sessionsUpsertWithWhereUniqueWithoutUsersInput | article_ai_sessionsUpsertWithWhereUniqueWithoutUsersInput[]
-    createMany?: article_ai_sessionsCreateManyUsersInputEnvelope
-    set?: article_ai_sessionsWhereUniqueInput | article_ai_sessionsWhereUniqueInput[]
-    disconnect?: article_ai_sessionsWhereUniqueInput | article_ai_sessionsWhereUniqueInput[]
-    delete?: article_ai_sessionsWhereUniqueInput | article_ai_sessionsWhereUniqueInput[]
-    connect?: article_ai_sessionsWhereUniqueInput | article_ai_sessionsWhereUniqueInput[]
-    update?: article_ai_sessionsUpdateWithWhereUniqueWithoutUsersInput | article_ai_sessionsUpdateWithWhereUniqueWithoutUsersInput[]
-    updateMany?: article_ai_sessionsUpdateManyWithWhereWithoutUsersInput | article_ai_sessionsUpdateManyWithWhereWithoutUsersInput[]
-    deleteMany?: article_ai_sessionsScalarWhereInput | article_ai_sessionsScalarWhereInput[]
   }
 
   export type newsletter_subscriptionsUpdateManyWithoutUsersNestedInput = {
@@ -50149,20 +48532,6 @@ export namespace Prisma {
     update?: ai_session_memoryUpdateWithWhereUniqueWithoutUsersInput | ai_session_memoryUpdateWithWhereUniqueWithoutUsersInput[]
     updateMany?: ai_session_memoryUpdateManyWithWhereWithoutUsersInput | ai_session_memoryUpdateManyWithWhereWithoutUsersInput[]
     deleteMany?: ai_session_memoryScalarWhereInput | ai_session_memoryScalarWhereInput[]
-  }
-
-  export type article_ai_sessionsUncheckedUpdateManyWithoutUsersNestedInput = {
-    create?: XOR<article_ai_sessionsCreateWithoutUsersInput, article_ai_sessionsUncheckedCreateWithoutUsersInput> | article_ai_sessionsCreateWithoutUsersInput[] | article_ai_sessionsUncheckedCreateWithoutUsersInput[]
-    connectOrCreate?: article_ai_sessionsCreateOrConnectWithoutUsersInput | article_ai_sessionsCreateOrConnectWithoutUsersInput[]
-    upsert?: article_ai_sessionsUpsertWithWhereUniqueWithoutUsersInput | article_ai_sessionsUpsertWithWhereUniqueWithoutUsersInput[]
-    createMany?: article_ai_sessionsCreateManyUsersInputEnvelope
-    set?: article_ai_sessionsWhereUniqueInput | article_ai_sessionsWhereUniqueInput[]
-    disconnect?: article_ai_sessionsWhereUniqueInput | article_ai_sessionsWhereUniqueInput[]
-    delete?: article_ai_sessionsWhereUniqueInput | article_ai_sessionsWhereUniqueInput[]
-    connect?: article_ai_sessionsWhereUniqueInput | article_ai_sessionsWhereUniqueInput[]
-    update?: article_ai_sessionsUpdateWithWhereUniqueWithoutUsersInput | article_ai_sessionsUpdateWithWhereUniqueWithoutUsersInput[]
-    updateMany?: article_ai_sessionsUpdateManyWithWhereWithoutUsersInput | article_ai_sessionsUpdateManyWithWhereWithoutUsersInput[]
-    deleteMany?: article_ai_sessionsScalarWhereInput | article_ai_sessionsScalarWhereInput[]
   }
 
   export type newsletter_subscriptionsUncheckedUpdateManyWithoutUsersNestedInput = {
@@ -50522,31 +48891,6 @@ export namespace Prisma {
     _max?: NestedBoolNullableFilter<$PrismaModel>
   }
 
-  export type NestedUuidFilter<$PrismaModel = never> = {
-    equals?: string | StringFieldRefInput<$PrismaModel>
-    in?: string[] | ListStringFieldRefInput<$PrismaModel>
-    notIn?: string[] | ListStringFieldRefInput<$PrismaModel>
-    lt?: string | StringFieldRefInput<$PrismaModel>
-    lte?: string | StringFieldRefInput<$PrismaModel>
-    gt?: string | StringFieldRefInput<$PrismaModel>
-    gte?: string | StringFieldRefInput<$PrismaModel>
-    not?: NestedUuidFilter<$PrismaModel> | string
-  }
-
-  export type NestedUuidWithAggregatesFilter<$PrismaModel = never> = {
-    equals?: string | StringFieldRefInput<$PrismaModel>
-    in?: string[] | ListStringFieldRefInput<$PrismaModel>
-    notIn?: string[] | ListStringFieldRefInput<$PrismaModel>
-    lt?: string | StringFieldRefInput<$PrismaModel>
-    lte?: string | StringFieldRefInput<$PrismaModel>
-    gt?: string | StringFieldRefInput<$PrismaModel>
-    gte?: string | StringFieldRefInput<$PrismaModel>
-    not?: NestedUuidWithAggregatesFilter<$PrismaModel> | string
-    _count?: NestedIntFilter<$PrismaModel>
-    _min?: NestedStringFilter<$PrismaModel>
-    _max?: NestedStringFilter<$PrismaModel>
-  }
-
   export type NestedEnumpermissiontypeFilter<$PrismaModel = never> = {
     equals?: $Enums.permissiontype | EnumpermissiontypeFieldRefInput<$PrismaModel>
     in?: $Enums.permissiontype[] | ListEnumpermissiontypeFieldRefInput<$PrismaModel>
@@ -50594,7 +48938,6 @@ export namespace Prisma {
     ai_conversations?: ai_conversationsCreateNestedManyWithoutUsersInput
     ai_entity_memory?: ai_entity_memoryCreateNestedManyWithoutUsersInput
     ai_session_memory?: ai_session_memoryCreateNestedManyWithoutUsersInput
-    article_ai_sessions?: article_ai_sessionsCreateNestedManyWithoutUsersInput
     newsletter_subscriptions?: newsletter_subscriptionsCreateNestedManyWithoutUsersInput
     user_activity?: user_activityCreateNestedManyWithoutUsersInput
     user_article_stars?: user_article_starsCreateNestedManyWithoutUsersInput
@@ -50614,7 +48957,6 @@ export namespace Prisma {
     ai_conversations?: ai_conversationsUncheckedCreateNestedManyWithoutUsersInput
     ai_entity_memory?: ai_entity_memoryUncheckedCreateNestedManyWithoutUsersInput
     ai_session_memory?: ai_session_memoryUncheckedCreateNestedManyWithoutUsersInput
-    article_ai_sessions?: article_ai_sessionsUncheckedCreateNestedManyWithoutUsersInput
     newsletter_subscriptions?: newsletter_subscriptionsUncheckedCreateNestedManyWithoutUsersInput
     user_activity?: user_activityUncheckedCreateNestedManyWithoutUsersInput
     user_article_stars?: user_article_starsUncheckedCreateNestedManyWithoutUsersInput
@@ -50649,7 +48991,6 @@ export namespace Prisma {
     ai_conversations?: ai_conversationsUpdateManyWithoutUsersNestedInput
     ai_entity_memory?: ai_entity_memoryUpdateManyWithoutUsersNestedInput
     ai_session_memory?: ai_session_memoryUpdateManyWithoutUsersNestedInput
-    article_ai_sessions?: article_ai_sessionsUpdateManyWithoutUsersNestedInput
     newsletter_subscriptions?: newsletter_subscriptionsUpdateManyWithoutUsersNestedInput
     user_activity?: user_activityUpdateManyWithoutUsersNestedInput
     user_article_stars?: user_article_starsUpdateManyWithoutUsersNestedInput
@@ -50669,7 +49010,6 @@ export namespace Prisma {
     ai_conversations?: ai_conversationsUncheckedUpdateManyWithoutUsersNestedInput
     ai_entity_memory?: ai_entity_memoryUncheckedUpdateManyWithoutUsersNestedInput
     ai_session_memory?: ai_session_memoryUncheckedUpdateManyWithoutUsersNestedInput
-    article_ai_sessions?: article_ai_sessionsUncheckedUpdateManyWithoutUsersNestedInput
     newsletter_subscriptions?: newsletter_subscriptionsUncheckedUpdateManyWithoutUsersNestedInput
     user_activity?: user_activityUncheckedUpdateManyWithoutUsersNestedInput
     user_article_stars?: user_article_starsUncheckedUpdateManyWithoutUsersNestedInput
@@ -50846,7 +49186,6 @@ export namespace Prisma {
     ai_conversations?: ai_conversationsCreateNestedManyWithoutUsersInput
     ai_entity_memory?: ai_entity_memoryCreateNestedManyWithoutUsersInput
     ai_session_memory?: ai_session_memoryCreateNestedManyWithoutUsersInput
-    article_ai_sessions?: article_ai_sessionsCreateNestedManyWithoutUsersInput
     newsletter_subscriptions?: newsletter_subscriptionsCreateNestedManyWithoutUsersInput
     user_activity?: user_activityCreateNestedManyWithoutUsersInput
     user_article_stars?: user_article_starsCreateNestedManyWithoutUsersInput
@@ -50866,7 +49205,6 @@ export namespace Prisma {
     ai_conversations?: ai_conversationsUncheckedCreateNestedManyWithoutUsersInput
     ai_entity_memory?: ai_entity_memoryUncheckedCreateNestedManyWithoutUsersInput
     ai_session_memory?: ai_session_memoryUncheckedCreateNestedManyWithoutUsersInput
-    article_ai_sessions?: article_ai_sessionsUncheckedCreateNestedManyWithoutUsersInput
     newsletter_subscriptions?: newsletter_subscriptionsUncheckedCreateNestedManyWithoutUsersInput
     user_activity?: user_activityUncheckedCreateNestedManyWithoutUsersInput
     user_article_stars?: user_article_starsUncheckedCreateNestedManyWithoutUsersInput
@@ -50901,7 +49239,6 @@ export namespace Prisma {
     ai_conversations?: ai_conversationsUpdateManyWithoutUsersNestedInput
     ai_entity_memory?: ai_entity_memoryUpdateManyWithoutUsersNestedInput
     ai_session_memory?: ai_session_memoryUpdateManyWithoutUsersNestedInput
-    article_ai_sessions?: article_ai_sessionsUpdateManyWithoutUsersNestedInput
     newsletter_subscriptions?: newsletter_subscriptionsUpdateManyWithoutUsersNestedInput
     user_activity?: user_activityUpdateManyWithoutUsersNestedInput
     user_article_stars?: user_article_starsUpdateManyWithoutUsersNestedInput
@@ -50921,7 +49258,6 @@ export namespace Prisma {
     ai_conversations?: ai_conversationsUncheckedUpdateManyWithoutUsersNestedInput
     ai_entity_memory?: ai_entity_memoryUncheckedUpdateManyWithoutUsersNestedInput
     ai_session_memory?: ai_session_memoryUncheckedUpdateManyWithoutUsersNestedInput
-    article_ai_sessions?: article_ai_sessionsUncheckedUpdateManyWithoutUsersNestedInput
     newsletter_subscriptions?: newsletter_subscriptionsUncheckedUpdateManyWithoutUsersNestedInput
     user_activity?: user_activityUncheckedUpdateManyWithoutUsersNestedInput
     user_article_stars?: user_article_starsUncheckedUpdateManyWithoutUsersNestedInput
@@ -50940,7 +49276,6 @@ export namespace Prisma {
     ai_assistant_config?: ai_assistant_configCreateNestedManyWithoutUsersInput
     ai_entity_memory?: ai_entity_memoryCreateNestedManyWithoutUsersInput
     ai_session_memory?: ai_session_memoryCreateNestedManyWithoutUsersInput
-    article_ai_sessions?: article_ai_sessionsCreateNestedManyWithoutUsersInput
     newsletter_subscriptions?: newsletter_subscriptionsCreateNestedManyWithoutUsersInput
     user_activity?: user_activityCreateNestedManyWithoutUsersInput
     user_article_stars?: user_article_starsCreateNestedManyWithoutUsersInput
@@ -50960,7 +49295,6 @@ export namespace Prisma {
     ai_assistant_config?: ai_assistant_configUncheckedCreateNestedManyWithoutUsersInput
     ai_entity_memory?: ai_entity_memoryUncheckedCreateNestedManyWithoutUsersInput
     ai_session_memory?: ai_session_memoryUncheckedCreateNestedManyWithoutUsersInput
-    article_ai_sessions?: article_ai_sessionsUncheckedCreateNestedManyWithoutUsersInput
     newsletter_subscriptions?: newsletter_subscriptionsUncheckedCreateNestedManyWithoutUsersInput
     user_activity?: user_activityUncheckedCreateNestedManyWithoutUsersInput
     user_article_stars?: user_article_starsUncheckedCreateNestedManyWithoutUsersInput
@@ -50995,7 +49329,6 @@ export namespace Prisma {
     ai_assistant_config?: ai_assistant_configUpdateManyWithoutUsersNestedInput
     ai_entity_memory?: ai_entity_memoryUpdateManyWithoutUsersNestedInput
     ai_session_memory?: ai_session_memoryUpdateManyWithoutUsersNestedInput
-    article_ai_sessions?: article_ai_sessionsUpdateManyWithoutUsersNestedInput
     newsletter_subscriptions?: newsletter_subscriptionsUpdateManyWithoutUsersNestedInput
     user_activity?: user_activityUpdateManyWithoutUsersNestedInput
     user_article_stars?: user_article_starsUpdateManyWithoutUsersNestedInput
@@ -51015,7 +49348,6 @@ export namespace Prisma {
     ai_assistant_config?: ai_assistant_configUncheckedUpdateManyWithoutUsersNestedInput
     ai_entity_memory?: ai_entity_memoryUncheckedUpdateManyWithoutUsersNestedInput
     ai_session_memory?: ai_session_memoryUncheckedUpdateManyWithoutUsersNestedInput
-    article_ai_sessions?: article_ai_sessionsUncheckedUpdateManyWithoutUsersNestedInput
     newsletter_subscriptions?: newsletter_subscriptionsUncheckedUpdateManyWithoutUsersNestedInput
     user_activity?: user_activityUncheckedUpdateManyWithoutUsersNestedInput
     user_article_stars?: user_article_starsUncheckedUpdateManyWithoutUsersNestedInput
@@ -51034,7 +49366,6 @@ export namespace Prisma {
     ai_assistant_config?: ai_assistant_configCreateNestedManyWithoutUsersInput
     ai_conversations?: ai_conversationsCreateNestedManyWithoutUsersInput
     ai_session_memory?: ai_session_memoryCreateNestedManyWithoutUsersInput
-    article_ai_sessions?: article_ai_sessionsCreateNestedManyWithoutUsersInput
     newsletter_subscriptions?: newsletter_subscriptionsCreateNestedManyWithoutUsersInput
     user_activity?: user_activityCreateNestedManyWithoutUsersInput
     user_article_stars?: user_article_starsCreateNestedManyWithoutUsersInput
@@ -51054,7 +49385,6 @@ export namespace Prisma {
     ai_assistant_config?: ai_assistant_configUncheckedCreateNestedManyWithoutUsersInput
     ai_conversations?: ai_conversationsUncheckedCreateNestedManyWithoutUsersInput
     ai_session_memory?: ai_session_memoryUncheckedCreateNestedManyWithoutUsersInput
-    article_ai_sessions?: article_ai_sessionsUncheckedCreateNestedManyWithoutUsersInput
     newsletter_subscriptions?: newsletter_subscriptionsUncheckedCreateNestedManyWithoutUsersInput
     user_activity?: user_activityUncheckedCreateNestedManyWithoutUsersInput
     user_article_stars?: user_article_starsUncheckedCreateNestedManyWithoutUsersInput
@@ -51089,7 +49419,6 @@ export namespace Prisma {
     ai_assistant_config?: ai_assistant_configUpdateManyWithoutUsersNestedInput
     ai_conversations?: ai_conversationsUpdateManyWithoutUsersNestedInput
     ai_session_memory?: ai_session_memoryUpdateManyWithoutUsersNestedInput
-    article_ai_sessions?: article_ai_sessionsUpdateManyWithoutUsersNestedInput
     newsletter_subscriptions?: newsletter_subscriptionsUpdateManyWithoutUsersNestedInput
     user_activity?: user_activityUpdateManyWithoutUsersNestedInput
     user_article_stars?: user_article_starsUpdateManyWithoutUsersNestedInput
@@ -51109,7 +49438,6 @@ export namespace Prisma {
     ai_assistant_config?: ai_assistant_configUncheckedUpdateManyWithoutUsersNestedInput
     ai_conversations?: ai_conversationsUncheckedUpdateManyWithoutUsersNestedInput
     ai_session_memory?: ai_session_memoryUncheckedUpdateManyWithoutUsersNestedInput
-    article_ai_sessions?: article_ai_sessionsUncheckedUpdateManyWithoutUsersNestedInput
     newsletter_subscriptions?: newsletter_subscriptionsUncheckedUpdateManyWithoutUsersNestedInput
     user_activity?: user_activityUncheckedUpdateManyWithoutUsersNestedInput
     user_article_stars?: user_article_starsUncheckedUpdateManyWithoutUsersNestedInput
@@ -51128,7 +49456,6 @@ export namespace Prisma {
     ai_assistant_config?: ai_assistant_configCreateNestedManyWithoutUsersInput
     ai_conversations?: ai_conversationsCreateNestedManyWithoutUsersInput
     ai_entity_memory?: ai_entity_memoryCreateNestedManyWithoutUsersInput
-    article_ai_sessions?: article_ai_sessionsCreateNestedManyWithoutUsersInput
     newsletter_subscriptions?: newsletter_subscriptionsCreateNestedManyWithoutUsersInput
     user_activity?: user_activityCreateNestedManyWithoutUsersInput
     user_article_stars?: user_article_starsCreateNestedManyWithoutUsersInput
@@ -51148,7 +49475,6 @@ export namespace Prisma {
     ai_assistant_config?: ai_assistant_configUncheckedCreateNestedManyWithoutUsersInput
     ai_conversations?: ai_conversationsUncheckedCreateNestedManyWithoutUsersInput
     ai_entity_memory?: ai_entity_memoryUncheckedCreateNestedManyWithoutUsersInput
-    article_ai_sessions?: article_ai_sessionsUncheckedCreateNestedManyWithoutUsersInput
     newsletter_subscriptions?: newsletter_subscriptionsUncheckedCreateNestedManyWithoutUsersInput
     user_activity?: user_activityUncheckedCreateNestedManyWithoutUsersInput
     user_article_stars?: user_article_starsUncheckedCreateNestedManyWithoutUsersInput
@@ -51183,7 +49509,6 @@ export namespace Prisma {
     ai_assistant_config?: ai_assistant_configUpdateManyWithoutUsersNestedInput
     ai_conversations?: ai_conversationsUpdateManyWithoutUsersNestedInput
     ai_entity_memory?: ai_entity_memoryUpdateManyWithoutUsersNestedInput
-    article_ai_sessions?: article_ai_sessionsUpdateManyWithoutUsersNestedInput
     newsletter_subscriptions?: newsletter_subscriptionsUpdateManyWithoutUsersNestedInput
     user_activity?: user_activityUpdateManyWithoutUsersNestedInput
     user_article_stars?: user_article_starsUpdateManyWithoutUsersNestedInput
@@ -51203,7 +49528,6 @@ export namespace Prisma {
     ai_assistant_config?: ai_assistant_configUncheckedUpdateManyWithoutUsersNestedInput
     ai_conversations?: ai_conversationsUncheckedUpdateManyWithoutUsersNestedInput
     ai_entity_memory?: ai_entity_memoryUncheckedUpdateManyWithoutUsersNestedInput
-    article_ai_sessions?: article_ai_sessionsUncheckedUpdateManyWithoutUsersNestedInput
     newsletter_subscriptions?: newsletter_subscriptionsUncheckedUpdateManyWithoutUsersNestedInput
     user_activity?: user_activityUncheckedUpdateManyWithoutUsersNestedInput
     user_article_stars?: user_article_starsUncheckedUpdateManyWithoutUsersNestedInput
@@ -52334,42 +50658,6 @@ export namespace Prisma {
     skipDuplicates?: boolean
   }
 
-  export type article_ai_sessionsCreateWithoutCredit_articlesInput = {
-    id?: string
-    domain?: string
-    session_data?: JsonNullValueInput | InputJsonValue
-    message_count?: number
-    tokens_used?: number
-    cost_usd?: Decimal | DecimalJsLike | number | string | null
-    created_at?: Date | string
-    updated_at?: Date | string
-    expires_at: Date | string
-    users: usersCreateNestedOneWithoutArticle_ai_sessionsInput
-  }
-
-  export type article_ai_sessionsUncheckedCreateWithoutCredit_articlesInput = {
-    id?: string
-    user_id: number
-    domain?: string
-    session_data?: JsonNullValueInput | InputJsonValue
-    message_count?: number
-    tokens_used?: number
-    cost_usd?: Decimal | DecimalJsLike | number | string | null
-    created_at?: Date | string
-    updated_at?: Date | string
-    expires_at: Date | string
-  }
-
-  export type article_ai_sessionsCreateOrConnectWithoutCredit_articlesInput = {
-    where: article_ai_sessionsWhereUniqueInput
-    create: XOR<article_ai_sessionsCreateWithoutCredit_articlesInput, article_ai_sessionsUncheckedCreateWithoutCredit_articlesInput>
-  }
-
-  export type article_ai_sessionsCreateManyCredit_articlesInputEnvelope = {
-    data: article_ai_sessionsCreateManyCredit_articlesInput | article_ai_sessionsCreateManyCredit_articlesInput[]
-    skipDuplicates?: boolean
-  }
-
   export type user_article_starsUpsertWithWhereUniqueWithoutCredit_articlesInput = {
     where: user_article_starsWhereUniqueInput
     update: XOR<user_article_starsUpdateWithoutCredit_articlesInput, user_article_starsUncheckedUpdateWithoutCredit_articlesInput>
@@ -52394,223 +50682,6 @@ export namespace Prisma {
     user_id?: IntFilter<"user_article_stars"> | number
     article_id?: IntFilter<"user_article_stars"> | number
     starred_at?: DateTimeFilter<"user_article_stars"> | Date | string
-  }
-
-  export type article_ai_sessionsUpsertWithWhereUniqueWithoutCredit_articlesInput = {
-    where: article_ai_sessionsWhereUniqueInput
-    update: XOR<article_ai_sessionsUpdateWithoutCredit_articlesInput, article_ai_sessionsUncheckedUpdateWithoutCredit_articlesInput>
-    create: XOR<article_ai_sessionsCreateWithoutCredit_articlesInput, article_ai_sessionsUncheckedCreateWithoutCredit_articlesInput>
-  }
-
-  export type article_ai_sessionsUpdateWithWhereUniqueWithoutCredit_articlesInput = {
-    where: article_ai_sessionsWhereUniqueInput
-    data: XOR<article_ai_sessionsUpdateWithoutCredit_articlesInput, article_ai_sessionsUncheckedUpdateWithoutCredit_articlesInput>
-  }
-
-  export type article_ai_sessionsUpdateManyWithWhereWithoutCredit_articlesInput = {
-    where: article_ai_sessionsScalarWhereInput
-    data: XOR<article_ai_sessionsUpdateManyMutationInput, article_ai_sessionsUncheckedUpdateManyWithoutCredit_articlesInput>
-  }
-
-  export type article_ai_sessionsScalarWhereInput = {
-    AND?: article_ai_sessionsScalarWhereInput | article_ai_sessionsScalarWhereInput[]
-    OR?: article_ai_sessionsScalarWhereInput[]
-    NOT?: article_ai_sessionsScalarWhereInput | article_ai_sessionsScalarWhereInput[]
-    id?: UuidFilter<"article_ai_sessions"> | string
-    user_id?: IntFilter<"article_ai_sessions"> | number
-    article_id?: IntFilter<"article_ai_sessions"> | number
-    domain?: StringFilter<"article_ai_sessions"> | string
-    session_data?: JsonFilter<"article_ai_sessions">
-    message_count?: IntFilter<"article_ai_sessions"> | number
-    tokens_used?: IntFilter<"article_ai_sessions"> | number
-    cost_usd?: DecimalNullableFilter<"article_ai_sessions"> | Decimal | DecimalJsLike | number | string | null
-    created_at?: DateTimeFilter<"article_ai_sessions"> | Date | string
-    updated_at?: DateTimeFilter<"article_ai_sessions"> | Date | string
-    expires_at?: DateTimeFilter<"article_ai_sessions"> | Date | string
-  }
-
-  export type usersCreateWithoutArticle_ai_sessionsInput = {
-    first_name: string
-    last_name: string
-    email: string
-    password_hash: string
-    role: string
-    is_active: boolean
-    created_at?: Date | string | null
-    updated_at?: Date | string | null
-    activity_logs?: activity_logsCreateNestedManyWithoutUsersInput
-    ai_assistant_config?: ai_assistant_configCreateNestedManyWithoutUsersInput
-    ai_conversations?: ai_conversationsCreateNestedManyWithoutUsersInput
-    ai_entity_memory?: ai_entity_memoryCreateNestedManyWithoutUsersInput
-    ai_session_memory?: ai_session_memoryCreateNestedManyWithoutUsersInput
-    newsletter_subscriptions?: newsletter_subscriptionsCreateNestedManyWithoutUsersInput
-    user_activity?: user_activityCreateNestedManyWithoutUsersInput
-    user_article_stars?: user_article_starsCreateNestedManyWithoutUsersInput
-  }
-
-  export type usersUncheckedCreateWithoutArticle_ai_sessionsInput = {
-    id?: number
-    first_name: string
-    last_name: string
-    email: string
-    password_hash: string
-    role: string
-    is_active: boolean
-    created_at?: Date | string | null
-    updated_at?: Date | string | null
-    activity_logs?: activity_logsUncheckedCreateNestedManyWithoutUsersInput
-    ai_assistant_config?: ai_assistant_configUncheckedCreateNestedManyWithoutUsersInput
-    ai_conversations?: ai_conversationsUncheckedCreateNestedManyWithoutUsersInput
-    ai_entity_memory?: ai_entity_memoryUncheckedCreateNestedManyWithoutUsersInput
-    ai_session_memory?: ai_session_memoryUncheckedCreateNestedManyWithoutUsersInput
-    newsletter_subscriptions?: newsletter_subscriptionsUncheckedCreateNestedManyWithoutUsersInput
-    user_activity?: user_activityUncheckedCreateNestedManyWithoutUsersInput
-    user_article_stars?: user_article_starsUncheckedCreateNestedManyWithoutUsersInput
-  }
-
-  export type usersCreateOrConnectWithoutArticle_ai_sessionsInput = {
-    where: usersWhereUniqueInput
-    create: XOR<usersCreateWithoutArticle_ai_sessionsInput, usersUncheckedCreateWithoutArticle_ai_sessionsInput>
-  }
-
-  export type credit_articlesCreateWithoutArticle_ai_sessionsInput = {
-    title?: string | null
-    date?: Date | string | null
-    content?: string | null
-    link?: string | null
-    source?: string | null
-    matched_keywords?: string | null
-    region?: string | null
-    sector?: string | null
-    starred?: boolean | null
-    starred_at?: Date | string | null
-    summary?: string | null
-    url?: string | null
-    created_at?: Date | string | null
-    updated_at?: Date | string | null
-    user_article_stars?: user_article_starsCreateNestedManyWithoutCredit_articlesInput
-  }
-
-  export type credit_articlesUncheckedCreateWithoutArticle_ai_sessionsInput = {
-    id?: number
-    title?: string | null
-    date?: Date | string | null
-    content?: string | null
-    link?: string | null
-    source?: string | null
-    matched_keywords?: string | null
-    region?: string | null
-    sector?: string | null
-    starred?: boolean | null
-    starred_at?: Date | string | null
-    summary?: string | null
-    url?: string | null
-    created_at?: Date | string | null
-    updated_at?: Date | string | null
-    user_article_stars?: user_article_starsUncheckedCreateNestedManyWithoutCredit_articlesInput
-  }
-
-  export type credit_articlesCreateOrConnectWithoutArticle_ai_sessionsInput = {
-    where: credit_articlesWhereUniqueInput
-    create: XOR<credit_articlesCreateWithoutArticle_ai_sessionsInput, credit_articlesUncheckedCreateWithoutArticle_ai_sessionsInput>
-  }
-
-  export type usersUpsertWithoutArticle_ai_sessionsInput = {
-    update: XOR<usersUpdateWithoutArticle_ai_sessionsInput, usersUncheckedUpdateWithoutArticle_ai_sessionsInput>
-    create: XOR<usersCreateWithoutArticle_ai_sessionsInput, usersUncheckedCreateWithoutArticle_ai_sessionsInput>
-    where?: usersWhereInput
-  }
-
-  export type usersUpdateToOneWithWhereWithoutArticle_ai_sessionsInput = {
-    where?: usersWhereInput
-    data: XOR<usersUpdateWithoutArticle_ai_sessionsInput, usersUncheckedUpdateWithoutArticle_ai_sessionsInput>
-  }
-
-  export type usersUpdateWithoutArticle_ai_sessionsInput = {
-    first_name?: StringFieldUpdateOperationsInput | string
-    last_name?: StringFieldUpdateOperationsInput | string
-    email?: StringFieldUpdateOperationsInput | string
-    password_hash?: StringFieldUpdateOperationsInput | string
-    role?: StringFieldUpdateOperationsInput | string
-    is_active?: BoolFieldUpdateOperationsInput | boolean
-    created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-    updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-    activity_logs?: activity_logsUpdateManyWithoutUsersNestedInput
-    ai_assistant_config?: ai_assistant_configUpdateManyWithoutUsersNestedInput
-    ai_conversations?: ai_conversationsUpdateManyWithoutUsersNestedInput
-    ai_entity_memory?: ai_entity_memoryUpdateManyWithoutUsersNestedInput
-    ai_session_memory?: ai_session_memoryUpdateManyWithoutUsersNestedInput
-    newsletter_subscriptions?: newsletter_subscriptionsUpdateManyWithoutUsersNestedInput
-    user_activity?: user_activityUpdateManyWithoutUsersNestedInput
-    user_article_stars?: user_article_starsUpdateManyWithoutUsersNestedInput
-  }
-
-  export type usersUncheckedUpdateWithoutArticle_ai_sessionsInput = {
-    id?: IntFieldUpdateOperationsInput | number
-    first_name?: StringFieldUpdateOperationsInput | string
-    last_name?: StringFieldUpdateOperationsInput | string
-    email?: StringFieldUpdateOperationsInput | string
-    password_hash?: StringFieldUpdateOperationsInput | string
-    role?: StringFieldUpdateOperationsInput | string
-    is_active?: BoolFieldUpdateOperationsInput | boolean
-    created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-    updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-    activity_logs?: activity_logsUncheckedUpdateManyWithoutUsersNestedInput
-    ai_assistant_config?: ai_assistant_configUncheckedUpdateManyWithoutUsersNestedInput
-    ai_conversations?: ai_conversationsUncheckedUpdateManyWithoutUsersNestedInput
-    ai_entity_memory?: ai_entity_memoryUncheckedUpdateManyWithoutUsersNestedInput
-    ai_session_memory?: ai_session_memoryUncheckedUpdateManyWithoutUsersNestedInput
-    newsletter_subscriptions?: newsletter_subscriptionsUncheckedUpdateManyWithoutUsersNestedInput
-    user_activity?: user_activityUncheckedUpdateManyWithoutUsersNestedInput
-    user_article_stars?: user_article_starsUncheckedUpdateManyWithoutUsersNestedInput
-  }
-
-  export type credit_articlesUpsertWithoutArticle_ai_sessionsInput = {
-    update: XOR<credit_articlesUpdateWithoutArticle_ai_sessionsInput, credit_articlesUncheckedUpdateWithoutArticle_ai_sessionsInput>
-    create: XOR<credit_articlesCreateWithoutArticle_ai_sessionsInput, credit_articlesUncheckedCreateWithoutArticle_ai_sessionsInput>
-    where?: credit_articlesWhereInput
-  }
-
-  export type credit_articlesUpdateToOneWithWhereWithoutArticle_ai_sessionsInput = {
-    where?: credit_articlesWhereInput
-    data: XOR<credit_articlesUpdateWithoutArticle_ai_sessionsInput, credit_articlesUncheckedUpdateWithoutArticle_ai_sessionsInput>
-  }
-
-  export type credit_articlesUpdateWithoutArticle_ai_sessionsInput = {
-    title?: NullableStringFieldUpdateOperationsInput | string | null
-    date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-    content?: NullableStringFieldUpdateOperationsInput | string | null
-    link?: NullableStringFieldUpdateOperationsInput | string | null
-    source?: NullableStringFieldUpdateOperationsInput | string | null
-    matched_keywords?: NullableStringFieldUpdateOperationsInput | string | null
-    region?: NullableStringFieldUpdateOperationsInput | string | null
-    sector?: NullableStringFieldUpdateOperationsInput | string | null
-    starred?: NullableBoolFieldUpdateOperationsInput | boolean | null
-    starred_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-    summary?: NullableStringFieldUpdateOperationsInput | string | null
-    url?: NullableStringFieldUpdateOperationsInput | string | null
-    created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-    updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-    user_article_stars?: user_article_starsUpdateManyWithoutCredit_articlesNestedInput
-  }
-
-  export type credit_articlesUncheckedUpdateWithoutArticle_ai_sessionsInput = {
-    id?: IntFieldUpdateOperationsInput | number
-    title?: NullableStringFieldUpdateOperationsInput | string | null
-    date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-    content?: NullableStringFieldUpdateOperationsInput | string | null
-    link?: NullableStringFieldUpdateOperationsInput | string | null
-    source?: NullableStringFieldUpdateOperationsInput | string | null
-    matched_keywords?: NullableStringFieldUpdateOperationsInput | string | null
-    region?: NullableStringFieldUpdateOperationsInput | string | null
-    sector?: NullableStringFieldUpdateOperationsInput | string | null
-    starred?: NullableBoolFieldUpdateOperationsInput | boolean | null
-    starred_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-    summary?: NullableStringFieldUpdateOperationsInput | string | null
-    url?: NullableStringFieldUpdateOperationsInput | string | null
-    created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-    updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-    user_article_stars?: user_article_starsUncheckedUpdateManyWithoutCredit_articlesNestedInput
   }
 
   export type userCreateWithoutEventInput = {
@@ -53380,7 +51451,6 @@ export namespace Prisma {
     ai_conversations?: ai_conversationsCreateNestedManyWithoutUsersInput
     ai_entity_memory?: ai_entity_memoryCreateNestedManyWithoutUsersInput
     ai_session_memory?: ai_session_memoryCreateNestedManyWithoutUsersInput
-    article_ai_sessions?: article_ai_sessionsCreateNestedManyWithoutUsersInput
     user_activity?: user_activityCreateNestedManyWithoutUsersInput
     user_article_stars?: user_article_starsCreateNestedManyWithoutUsersInput
   }
@@ -53400,7 +51470,6 @@ export namespace Prisma {
     ai_conversations?: ai_conversationsUncheckedCreateNestedManyWithoutUsersInput
     ai_entity_memory?: ai_entity_memoryUncheckedCreateNestedManyWithoutUsersInput
     ai_session_memory?: ai_session_memoryUncheckedCreateNestedManyWithoutUsersInput
-    article_ai_sessions?: article_ai_sessionsUncheckedCreateNestedManyWithoutUsersInput
     user_activity?: user_activityUncheckedCreateNestedManyWithoutUsersInput
     user_article_stars?: user_article_starsUncheckedCreateNestedManyWithoutUsersInput
   }
@@ -53503,7 +51572,6 @@ export namespace Prisma {
     ai_conversations?: ai_conversationsUpdateManyWithoutUsersNestedInput
     ai_entity_memory?: ai_entity_memoryUpdateManyWithoutUsersNestedInput
     ai_session_memory?: ai_session_memoryUpdateManyWithoutUsersNestedInput
-    article_ai_sessions?: article_ai_sessionsUpdateManyWithoutUsersNestedInput
     user_activity?: user_activityUpdateManyWithoutUsersNestedInput
     user_article_stars?: user_article_starsUpdateManyWithoutUsersNestedInput
   }
@@ -53523,7 +51591,6 @@ export namespace Prisma {
     ai_conversations?: ai_conversationsUncheckedUpdateManyWithoutUsersNestedInput
     ai_entity_memory?: ai_entity_memoryUncheckedUpdateManyWithoutUsersNestedInput
     ai_session_memory?: ai_session_memoryUncheckedUpdateManyWithoutUsersNestedInput
-    article_ai_sessions?: article_ai_sessionsUncheckedUpdateManyWithoutUsersNestedInput
     user_activity?: user_activityUncheckedUpdateManyWithoutUsersNestedInput
     user_article_stars?: user_article_starsUncheckedUpdateManyWithoutUsersNestedInput
   }
@@ -54415,7 +52482,6 @@ export namespace Prisma {
     ai_conversations?: ai_conversationsCreateNestedManyWithoutUsersInput
     ai_entity_memory?: ai_entity_memoryCreateNestedManyWithoutUsersInput
     ai_session_memory?: ai_session_memoryCreateNestedManyWithoutUsersInput
-    article_ai_sessions?: article_ai_sessionsCreateNestedManyWithoutUsersInput
     newsletter_subscriptions?: newsletter_subscriptionsCreateNestedManyWithoutUsersInput
     user_article_stars?: user_article_starsCreateNestedManyWithoutUsersInput
   }
@@ -54435,7 +52501,6 @@ export namespace Prisma {
     ai_conversations?: ai_conversationsUncheckedCreateNestedManyWithoutUsersInput
     ai_entity_memory?: ai_entity_memoryUncheckedCreateNestedManyWithoutUsersInput
     ai_session_memory?: ai_session_memoryUncheckedCreateNestedManyWithoutUsersInput
-    article_ai_sessions?: article_ai_sessionsUncheckedCreateNestedManyWithoutUsersInput
     newsletter_subscriptions?: newsletter_subscriptionsUncheckedCreateNestedManyWithoutUsersInput
     user_article_stars?: user_article_starsUncheckedCreateNestedManyWithoutUsersInput
   }
@@ -54470,7 +52535,6 @@ export namespace Prisma {
     ai_conversations?: ai_conversationsUpdateManyWithoutUsersNestedInput
     ai_entity_memory?: ai_entity_memoryUpdateManyWithoutUsersNestedInput
     ai_session_memory?: ai_session_memoryUpdateManyWithoutUsersNestedInput
-    article_ai_sessions?: article_ai_sessionsUpdateManyWithoutUsersNestedInput
     newsletter_subscriptions?: newsletter_subscriptionsUpdateManyWithoutUsersNestedInput
     user_article_stars?: user_article_starsUpdateManyWithoutUsersNestedInput
   }
@@ -54490,7 +52554,6 @@ export namespace Prisma {
     ai_conversations?: ai_conversationsUncheckedUpdateManyWithoutUsersNestedInput
     ai_entity_memory?: ai_entity_memoryUncheckedUpdateManyWithoutUsersNestedInput
     ai_session_memory?: ai_session_memoryUncheckedUpdateManyWithoutUsersNestedInput
-    article_ai_sessions?: article_ai_sessionsUncheckedUpdateManyWithoutUsersNestedInput
     newsletter_subscriptions?: newsletter_subscriptionsUncheckedUpdateManyWithoutUsersNestedInput
     user_article_stars?: user_article_starsUncheckedUpdateManyWithoutUsersNestedInput
   }
@@ -54510,7 +52573,6 @@ export namespace Prisma {
     url?: string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
-    article_ai_sessions?: article_ai_sessionsCreateNestedManyWithoutCredit_articlesInput
   }
 
   export type credit_articlesUncheckedCreateWithoutUser_article_starsInput = {
@@ -54529,7 +52591,6 @@ export namespace Prisma {
     url?: string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
-    article_ai_sessions?: article_ai_sessionsUncheckedCreateNestedManyWithoutCredit_articlesInput
   }
 
   export type credit_articlesCreateOrConnectWithoutUser_article_starsInput = {
@@ -54551,7 +52612,6 @@ export namespace Prisma {
     ai_conversations?: ai_conversationsCreateNestedManyWithoutUsersInput
     ai_entity_memory?: ai_entity_memoryCreateNestedManyWithoutUsersInput
     ai_session_memory?: ai_session_memoryCreateNestedManyWithoutUsersInput
-    article_ai_sessions?: article_ai_sessionsCreateNestedManyWithoutUsersInput
     newsletter_subscriptions?: newsletter_subscriptionsCreateNestedManyWithoutUsersInput
     user_activity?: user_activityCreateNestedManyWithoutUsersInput
   }
@@ -54571,7 +52631,6 @@ export namespace Prisma {
     ai_conversations?: ai_conversationsUncheckedCreateNestedManyWithoutUsersInput
     ai_entity_memory?: ai_entity_memoryUncheckedCreateNestedManyWithoutUsersInput
     ai_session_memory?: ai_session_memoryUncheckedCreateNestedManyWithoutUsersInput
-    article_ai_sessions?: article_ai_sessionsUncheckedCreateNestedManyWithoutUsersInput
     newsletter_subscriptions?: newsletter_subscriptionsUncheckedCreateNestedManyWithoutUsersInput
     user_activity?: user_activityUncheckedCreateNestedManyWithoutUsersInput
   }
@@ -54607,7 +52666,6 @@ export namespace Prisma {
     url?: NullableStringFieldUpdateOperationsInput | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-    article_ai_sessions?: article_ai_sessionsUpdateManyWithoutCredit_articlesNestedInput
   }
 
   export type credit_articlesUncheckedUpdateWithoutUser_article_starsInput = {
@@ -54626,7 +52684,6 @@ export namespace Prisma {
     url?: NullableStringFieldUpdateOperationsInput | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-    article_ai_sessions?: article_ai_sessionsUncheckedUpdateManyWithoutCredit_articlesNestedInput
   }
 
   export type usersUpsertWithoutUser_article_starsInput = {
@@ -54654,7 +52711,6 @@ export namespace Prisma {
     ai_conversations?: ai_conversationsUpdateManyWithoutUsersNestedInput
     ai_entity_memory?: ai_entity_memoryUpdateManyWithoutUsersNestedInput
     ai_session_memory?: ai_session_memoryUpdateManyWithoutUsersNestedInput
-    article_ai_sessions?: article_ai_sessionsUpdateManyWithoutUsersNestedInput
     newsletter_subscriptions?: newsletter_subscriptionsUpdateManyWithoutUsersNestedInput
     user_activity?: user_activityUpdateManyWithoutUsersNestedInput
   }
@@ -54674,7 +52730,6 @@ export namespace Prisma {
     ai_conversations?: ai_conversationsUncheckedUpdateManyWithoutUsersNestedInput
     ai_entity_memory?: ai_entity_memoryUncheckedUpdateManyWithoutUsersNestedInput
     ai_session_memory?: ai_session_memoryUncheckedUpdateManyWithoutUsersNestedInput
-    article_ai_sessions?: article_ai_sessionsUncheckedUpdateManyWithoutUsersNestedInput
     newsletter_subscriptions?: newsletter_subscriptionsUncheckedUpdateManyWithoutUsersNestedInput
     user_activity?: user_activityUncheckedUpdateManyWithoutUsersNestedInput
   }
@@ -55026,42 +53081,6 @@ export namespace Prisma {
     skipDuplicates?: boolean
   }
 
-  export type article_ai_sessionsCreateWithoutUsersInput = {
-    id?: string
-    domain?: string
-    session_data?: JsonNullValueInput | InputJsonValue
-    message_count?: number
-    tokens_used?: number
-    cost_usd?: Decimal | DecimalJsLike | number | string | null
-    created_at?: Date | string
-    updated_at?: Date | string
-    expires_at: Date | string
-    credit_articles: credit_articlesCreateNestedOneWithoutArticle_ai_sessionsInput
-  }
-
-  export type article_ai_sessionsUncheckedCreateWithoutUsersInput = {
-    id?: string
-    article_id: number
-    domain?: string
-    session_data?: JsonNullValueInput | InputJsonValue
-    message_count?: number
-    tokens_used?: number
-    cost_usd?: Decimal | DecimalJsLike | number | string | null
-    created_at?: Date | string
-    updated_at?: Date | string
-    expires_at: Date | string
-  }
-
-  export type article_ai_sessionsCreateOrConnectWithoutUsersInput = {
-    where: article_ai_sessionsWhereUniqueInput
-    create: XOR<article_ai_sessionsCreateWithoutUsersInput, article_ai_sessionsUncheckedCreateWithoutUsersInput>
-  }
-
-  export type article_ai_sessionsCreateManyUsersInputEnvelope = {
-    data: article_ai_sessionsCreateManyUsersInput | article_ai_sessionsCreateManyUsersInput[]
-    skipDuplicates?: boolean
-  }
-
   export type newsletter_subscriptionsCreateWithoutUsersInput = {
     subscription_type: string
     is_active?: boolean | null
@@ -55294,22 +53313,6 @@ export namespace Prisma {
     metadata?: JsonNullableFilter<"ai_session_memory">
     created_at?: DateTimeNullableFilter<"ai_session_memory"> | Date | string | null
     expires_at?: DateTimeNullableFilter<"ai_session_memory"> | Date | string | null
-  }
-
-  export type article_ai_sessionsUpsertWithWhereUniqueWithoutUsersInput = {
-    where: article_ai_sessionsWhereUniqueInput
-    update: XOR<article_ai_sessionsUpdateWithoutUsersInput, article_ai_sessionsUncheckedUpdateWithoutUsersInput>
-    create: XOR<article_ai_sessionsCreateWithoutUsersInput, article_ai_sessionsUncheckedCreateWithoutUsersInput>
-  }
-
-  export type article_ai_sessionsUpdateWithWhereUniqueWithoutUsersInput = {
-    where: article_ai_sessionsWhereUniqueInput
-    data: XOR<article_ai_sessionsUpdateWithoutUsersInput, article_ai_sessionsUncheckedUpdateWithoutUsersInput>
-  }
-
-  export type article_ai_sessionsUpdateManyWithWhereWithoutUsersInput = {
-    where: article_ai_sessionsScalarWhereInput
-    data: XOR<article_ai_sessionsUpdateManyMutationInput, article_ai_sessionsUncheckedUpdateManyWithoutUsersInput>
   }
 
   export type newsletter_subscriptionsUpsertWithWhereUniqueWithoutUsersInput = {
@@ -55639,19 +53642,6 @@ export namespace Prisma {
     starred_at?: Date | string
   }
 
-  export type article_ai_sessionsCreateManyCredit_articlesInput = {
-    id?: string
-    user_id: number
-    domain?: string
-    session_data?: JsonNullValueInput | InputJsonValue
-    message_count?: number
-    tokens_used?: number
-    cost_usd?: Decimal | DecimalJsLike | number | string | null
-    created_at?: Date | string
-    updated_at?: Date | string
-    expires_at: Date | string
-  }
-
   export type user_article_starsUpdateWithoutCredit_articlesInput = {
     starred_at?: DateTimeFieldUpdateOperationsInput | Date | string
     users?: usersUpdateOneRequiredWithoutUser_article_starsNestedInput
@@ -55667,45 +53657,6 @@ export namespace Prisma {
     id?: IntFieldUpdateOperationsInput | number
     user_id?: IntFieldUpdateOperationsInput | number
     starred_at?: DateTimeFieldUpdateOperationsInput | Date | string
-  }
-
-  export type article_ai_sessionsUpdateWithoutCredit_articlesInput = {
-    id?: StringFieldUpdateOperationsInput | string
-    domain?: StringFieldUpdateOperationsInput | string
-    session_data?: JsonNullValueInput | InputJsonValue
-    message_count?: IntFieldUpdateOperationsInput | number
-    tokens_used?: IntFieldUpdateOperationsInput | number
-    cost_usd?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
-    created_at?: DateTimeFieldUpdateOperationsInput | Date | string
-    updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
-    expires_at?: DateTimeFieldUpdateOperationsInput | Date | string
-    users?: usersUpdateOneRequiredWithoutArticle_ai_sessionsNestedInput
-  }
-
-  export type article_ai_sessionsUncheckedUpdateWithoutCredit_articlesInput = {
-    id?: StringFieldUpdateOperationsInput | string
-    user_id?: IntFieldUpdateOperationsInput | number
-    domain?: StringFieldUpdateOperationsInput | string
-    session_data?: JsonNullValueInput | InputJsonValue
-    message_count?: IntFieldUpdateOperationsInput | number
-    tokens_used?: IntFieldUpdateOperationsInput | number
-    cost_usd?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
-    created_at?: DateTimeFieldUpdateOperationsInput | Date | string
-    updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
-    expires_at?: DateTimeFieldUpdateOperationsInput | Date | string
-  }
-
-  export type article_ai_sessionsUncheckedUpdateManyWithoutCredit_articlesInput = {
-    id?: StringFieldUpdateOperationsInput | string
-    user_id?: IntFieldUpdateOperationsInput | number
-    domain?: StringFieldUpdateOperationsInput | string
-    session_data?: JsonNullValueInput | InputJsonValue
-    message_count?: IntFieldUpdateOperationsInput | number
-    tokens_used?: IntFieldUpdateOperationsInput | number
-    cost_usd?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
-    created_at?: DateTimeFieldUpdateOperationsInput | Date | string
-    updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
-    expires_at?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
   export type eventregistrationCreateManyEventInput = {
@@ -56526,19 +54477,6 @@ export namespace Prisma {
     expires_at?: Date | string | null
   }
 
-  export type article_ai_sessionsCreateManyUsersInput = {
-    id?: string
-    article_id: number
-    domain?: string
-    session_data?: JsonNullValueInput | InputJsonValue
-    message_count?: number
-    tokens_used?: number
-    cost_usd?: Decimal | DecimalJsLike | number | string | null
-    created_at?: Date | string
-    updated_at?: Date | string
-    expires_at: Date | string
-  }
-
   export type newsletter_subscriptionsCreateManyUsersInput = {
     id?: number
     subscription_type: string
@@ -56708,45 +54646,6 @@ export namespace Prisma {
     expires_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
-  export type article_ai_sessionsUpdateWithoutUsersInput = {
-    id?: StringFieldUpdateOperationsInput | string
-    domain?: StringFieldUpdateOperationsInput | string
-    session_data?: JsonNullValueInput | InputJsonValue
-    message_count?: IntFieldUpdateOperationsInput | number
-    tokens_used?: IntFieldUpdateOperationsInput | number
-    cost_usd?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
-    created_at?: DateTimeFieldUpdateOperationsInput | Date | string
-    updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
-    expires_at?: DateTimeFieldUpdateOperationsInput | Date | string
-    credit_articles?: credit_articlesUpdateOneRequiredWithoutArticle_ai_sessionsNestedInput
-  }
-
-  export type article_ai_sessionsUncheckedUpdateWithoutUsersInput = {
-    id?: StringFieldUpdateOperationsInput | string
-    article_id?: IntFieldUpdateOperationsInput | number
-    domain?: StringFieldUpdateOperationsInput | string
-    session_data?: JsonNullValueInput | InputJsonValue
-    message_count?: IntFieldUpdateOperationsInput | number
-    tokens_used?: IntFieldUpdateOperationsInput | number
-    cost_usd?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
-    created_at?: DateTimeFieldUpdateOperationsInput | Date | string
-    updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
-    expires_at?: DateTimeFieldUpdateOperationsInput | Date | string
-  }
-
-  export type article_ai_sessionsUncheckedUpdateManyWithoutUsersInput = {
-    id?: StringFieldUpdateOperationsInput | string
-    article_id?: IntFieldUpdateOperationsInput | number
-    domain?: StringFieldUpdateOperationsInput | string
-    session_data?: JsonNullValueInput | InputJsonValue
-    message_count?: IntFieldUpdateOperationsInput | number
-    tokens_used?: IntFieldUpdateOperationsInput | number
-    cost_usd?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
-    created_at?: DateTimeFieldUpdateOperationsInput | Date | string
-    updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
-    expires_at?: DateTimeFieldUpdateOperationsInput | Date | string
-  }
-
   export type newsletter_subscriptionsUpdateWithoutUsersInput = {
     subscription_type?: StringFieldUpdateOperationsInput | string
     is_active?: NullableBoolFieldUpdateOperationsInput | boolean | null
@@ -56914,10 +54813,6 @@ export namespace Prisma {
      * @deprecated Use credit_articlesDefaultArgs instead
      */
     export type credit_articlesArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = credit_articlesDefaultArgs<ExtArgs>
-    /**
-     * @deprecated Use article_ai_sessionsDefaultArgs instead
-     */
-    export type article_ai_sessionsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = article_ai_sessionsDefaultArgs<ExtArgs>
     /**
      * @deprecated Use email_alertsDefaultArgs instead
      */

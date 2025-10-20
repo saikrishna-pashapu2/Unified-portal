@@ -279,20 +279,6 @@ exports.Prisma.Credit_articlesScalarFieldEnum = {
   updated_at: 'updated_at'
 };
 
-exports.Prisma.Article_ai_sessionsScalarFieldEnum = {
-  id: 'id',
-  user_id: 'user_id',
-  article_id: 'article_id',
-  domain: 'domain',
-  session_data: 'session_data',
-  message_count: 'message_count',
-  tokens_used: 'tokens_used',
-  cost_usd: 'cost_usd',
-  created_at: 'created_at',
-  updated_at: 'updated_at',
-  expires_at: 'expires_at'
-};
-
 exports.Prisma.Email_alertsScalarFieldEnum = {
   id: 'id',
   email: 'email',
@@ -633,7 +619,6 @@ exports.Prisma.ModelName = {
   articlestar: 'articlestar',
   articleview: 'articleview',
   credit_articles: 'credit_articles',
-  article_ai_sessions: 'article_ai_sessions',
   email_alerts: 'email_alerts',
   event: 'event',
   eventregistration: 'eventregistration',

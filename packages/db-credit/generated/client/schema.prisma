@@ -208,23 +208,22 @@ model articleview {
 }
 
 model credit_articles {
-  id                  Int                   @id @default(autoincrement())
-  title               String?
-  date                DateTime?             @db.Date
-  content             String?
-  link                String?
-  source              String?
-  matched_keywords    String?
-  region              String?
-  sector              String?
-  starred             Boolean?              @default(false)
-  starred_at          DateTime?             @db.Timestamp(6)
-  summary             String?
-  url                 String?               @db.VarChar
-  created_at          DateTime?             @db.Timestamp(6)
-  updated_at          DateTime?             @db.Timestamp(6)
-  user_article_stars  user_article_stars[]
-  article_ai_sessions article_ai_sessions[]
+  id                 Int                  @id @default(autoincrement())
+  title              String?
+  date               DateTime?            @db.Date
+  content            String?
+  link               String?
+  source             String?
+  matched_keywords   String?
+  region             String?
+  sector             String?
+  starred            Boolean?             @default(false)
+  starred_at         DateTime?            @db.Timestamp(6)
+  summary            String?
+  url                String?              @db.VarChar
+  created_at         DateTime?            @db.Timestamp(6)
+  updated_at         DateTime?            @db.Timestamp(6)
+  user_article_stars user_article_stars[]
 
   @@unique([link, region, sector, source], map: "unique_article_combination")
   @@index([date(sort: Desc)], map: "idx_articles_date_desc")
@@ -236,27 +235,6 @@ model credit_articles {
   @@index([region], map: "idx_credit_articles_region")
   @@index([sector], map: "idx_credit_articles_sector")
   @@index([source], map: "idx_credit_articles_source")
-}
-
-model article_ai_sessions {
-  id            String   @id @default(uuid()) @db.Uuid
-  user_id       Int
-  article_id    Int
-  domain        String   @default("credit") @db.VarChar(10)
-  session_data  Json     @default("{\"messages\": [], \"summary\": null, \"suggestedQuestions\": []}")
-  message_count Int      @default(0)
-  tokens_used   Int      @default(0)
-  cost_usd      Decimal? @default(0) @db.Decimal(10, 4)
-  created_at    DateTime @default(now()) @db.Timestamp(6)
-  updated_at    DateTime @default(now()) @db.Timestamp(6)
-  expires_at    DateTime @db.Timestamp(6)
-
-  users           users           @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  credit_articles credit_articles @relation(fields: [article_id], references: [id], onDelete: Cascade)
-
-  @@index([user_id, article_id], map: "idx_article_ai_sessions_user_article")
-  @@index([expires_at], map: "idx_article_ai_sessions_expires_at")
-  @@index([user_id, created_at(sort: Desc)], map: "idx_article_ai_sessions_user_created")
 }
 
 model email_alerts {
@@ -599,7 +577,6 @@ model users {
   ai_conversations         ai_conversations[]
   ai_entity_memory         ai_entity_memory[]
   ai_session_memory        ai_session_memory[]
-  article_ai_sessions      article_ai_sessions[]
   newsletter_subscriptions newsletter_subscriptions[]
   user_activity            user_activity[]
   user_article_stars       user_article_stars[]

@@ -80,42 +80,13 @@ export async function GET(req: NextRequest) {
       }),
 
       // AI Assistant stats (last 30 days)
-      esgPrisma.article_ai_sessions.aggregate({
-        where: {
-          created_at: {
-            gte: thirtyDaysAgo,
-          },
-        },
-        _count: true,
-        _sum: {
-          tokens_used: true,
-          cost_usd: true,
-        },
-      }).then(async (data) => {
-        const uniqueUsers = await esgPrisma.article_ai_sessions.findMany({
-          where: {
-            created_at: {
-              gte: thirtyDaysAgo,
-            },
-          },
-          select: { user_id: true },
-          distinct: ['user_id'],
-        });
-
-        const activeSessions = await esgPrisma.article_ai_sessions.count({
-          where: {
-            created_at: {
-              gte: new Date(now.getTime() - 60 * 60 * 1000), // Last hour
-            },
-          },
-        });
-
-        return {
-          totalSessions: data._count || 0,
-          activeSessions,
-          uniqueUsers: uniqueUsers.length,
-          totalCost: Number(data._sum?.cost_usd || 0),
-        };
+      // Note: article_ai_sessions table doesn't exist in schema yet
+      // Returning default values until tables are added to Prisma schema
+      Promise.resolve({
+        totalSessions: 0,
+        activeSessions: 0,
+        uniqueUsers: 0,
+        totalCost: 0,
       }),
     ]);
 
