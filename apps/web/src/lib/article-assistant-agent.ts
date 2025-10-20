@@ -292,10 +292,16 @@ Remember: Use web_search proactively to provide comprehensive, well-sourced answ
 
       // STEP 2: If there are tool calls, execute them
       if (hasToolCalls && initialResponse.tool_calls) {
-        yield "🔍 Searching the web...\n\n";
+        // Check if any of the tools is chart generation
+        const hasChartTool = initialResponse.tool_calls.some(tc => tc.name === 'generate_chart');
+        
+        if (!hasChartTool) {
+          yield "🔍 Searching the web...\n\n";
+        }
         
         // Execute all tools
         const toolResults: Array<{ id: string; content: string }> = [];
+        const chartMarkers: string[] = []; // Store chart markers to yield separately
         
         for (const toolCall of initialResponse.tool_calls) {
           const tool = tools.find(t => t.name === toolCall.name);
@@ -304,17 +310,26 @@ Remember: Use web_search proactively to provide comprehensive, well-sourced answ
               console.log(`[Agent] Executing ${toolCall.name} with args:`, JSON.stringify(toolCall.args).substring(0, 100));
               const toolResult = await tool.func(toolCall.args as any);
               
-              // For web search, add instructions about chart generation if it's a visualization request
-              let enhancedToolResult = toolCall.name === 'generate_chart' 
-                ? toolResult 
-                : `${toolResult}\n\nIMPORTANT: Integrate these sources into your response using markdown hyperlinks. Format links as [Title](URL). Cite sources naturally within your answer.`;
-              
-              // If this is web search and we have numerical data, remind about chart generation
-              if (toolCall.name === 'web_search' && toolResult.match(/\d{4}.*?\$?\d{1,3}[,\d]*\.?\d*/)) {
-                enhancedToolResult += `\n\nNOTE: You have numerical data. If user asked to visualize/show/chart/graph this data, you MUST now call the generate_chart tool with this data formatted as [{name: "year", value: number}, ...].`;
+              // If it's a chart, extract and store the marker separately
+              if (toolCall.name === 'generate_chart' && toolResult.includes('<CHART>')) {
+                chartMarkers.push(toolResult);
+                console.log("[Agent] Chart marker extracted, will yield before LLM response");
+                // Tell LLM the chart was generated successfully
+                toolResults.push({ 
+                  id: toolCall.id, 
+                  content: "Chart generated successfully. The visualization has been included in the response." 
+                });
+              } else {
+                // For web search, add instructions about chart generation if it's a visualization request
+                let enhancedToolResult = `${toolResult}\n\nIMPORTANT: Integrate these sources into your response using markdown hyperlinks. Format links as [Title](URL). Cite sources naturally within your answer.`;
+                
+                // If this is web search and we have numerical data, remind about chart generation
+                if (toolCall.name === 'web_search' && toolResult.match(/\d{4}.*?\$?\d{1,3}[,\d]*\.?\d*/)) {
+                  enhancedToolResult += `\n\nNOTE: You have numerical data. If user asked to visualize/show/chart/graph this data, you MUST now call the generate_chart tool with this data formatted as [{name: "year", value: number}, ...].`;
+                }
+                
+                toolResults.push({ id: toolCall.id, content: enhancedToolResult });
               }
-              
-              toolResults.push({ id: toolCall.id, content: enhancedToolResult });
             } catch (error) {
               console.error("[Agent] Tool execution failed:", error);
               toolResults.push({ id: toolCall.id, content: "Search failed. Please try rephrasing your question." });
@@ -356,6 +371,7 @@ Remember: Use web_search proactively to provide comprehensive, well-sourced answ
           
           // Execute the additional tools (e.g., generate_chart)
           const additionalToolResults: Array<{ id: string; content: string }> = [];
+          const chartMarkers: string[] = []; // Store chart markers to yield separately
           
           for (const toolCall of secondResponse.tool_calls) {
             const tool = tools.find(t => t.name === toolCall.name);
@@ -363,10 +379,19 @@ Remember: Use web_search proactively to provide comprehensive, well-sourced answ
               try {
                 console.log(`[Agent] Executing ${toolCall.name} with args:`, JSON.stringify(toolCall.args).substring(0, 200));
                 const toolResult = await tool.func(toolCall.args as any);
-                const enhancedToolResult = toolCall.name === 'generate_chart' 
-                  ? toolResult 
-                  : `${toolResult}\n\nIMPORTANT: Integrate these sources into your response using markdown hyperlinks.`;
-                additionalToolResults.push({ id: toolCall.id, content: enhancedToolResult });
+                
+                // If it's a chart, extract and store the marker separately
+                if (toolCall.name === 'generate_chart' && toolResult.includes('<CHART>')) {
+                  chartMarkers.push(toolResult);
+                  // Tell LLM the chart was generated successfully
+                  additionalToolResults.push({ 
+                    id: toolCall.id, 
+                    content: "Chart generated successfully. The visualization has been included in the response." 
+                  });
+                } else {
+                  const enhancedToolResult = `${toolResult}\n\nIMPORTANT: Integrate these sources into your response using markdown hyperlinks.`;
+                  additionalToolResults.push({ id: toolCall.id, content: enhancedToolResult });
+                }
               } catch (error) {
                 console.error("[Agent] Tool execution failed:", error);
                 additionalToolResults.push({ id: toolCall.id, content: "Tool execution failed." });
@@ -399,6 +424,14 @@ Remember: Use web_search proactively to provide comprehensive, well-sourced answ
           
           // Stream final response with ALL tool results
           console.log("[Agent] Streaming final response with all tools...");
+          
+          // First, yield any chart markers
+          for (const chartMarker of chartMarkers) {
+            console.log("[Agent] Yielding chart marker:", chartMarker.substring(0, 100));
+            yield chartMarker;
+          }
+          
+          // Then stream the LLM's text response
           const finalStream = await llm.stream(finalMessages);
           
           for await (const chunk of finalStream) {
@@ -412,6 +445,14 @@ Remember: Use web_search proactively to provide comprehensive, well-sourced answ
         } else {
           // No additional tools needed, stream the response
           console.log("[Agent] Streaming final response...");
+          
+          // First, yield any chart markers from the first tool execution
+          for (const chartMarker of chartMarkers) {
+            console.log("[Agent] Yielding chart marker:", chartMarker.substring(0, 100));
+            yield chartMarker;
+          }
+          
+          // Then stream the LLM's text response
           const finalStream = await llm.stream(messagesWithToolResults);
           
           for await (const chunk of finalStream) {
