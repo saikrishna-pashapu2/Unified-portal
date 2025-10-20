@@ -422,7 +422,7 @@ pm2 logs portal-v1.0.0 --lines 50 --nostream
 
 ### Restart Application
 ```bash
-pm2 restart portal-v1.0.0
+pm2 restart portal-v1.0.4
 ```
 
 ### Stop Application

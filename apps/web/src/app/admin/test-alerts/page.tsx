@@ -176,7 +176,7 @@ export default function TestAlertsPage() {
 
             {digestResult.results.articles.length > 0 && (
               <div className="mt-3 pt-3 border-t border-gray-200">
-                <h4 className="font-semibold text-gray-900 mb-2 text-sm">Today's Liked Articles:</h4>
+                <h4 className="font-semibold text-gray-900 mb-2 text-sm">Today&apos;s Liked Articles:</h4>
                 <div className="space-y-2">
                   {digestResult.results.articles.map((article: any, i: number) => (
                     <div key={i} className="p-2 bg-gray-50 rounded border border-gray-200 text-sm">
