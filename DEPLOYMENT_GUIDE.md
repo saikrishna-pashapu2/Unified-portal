@@ -308,7 +308,7 @@ git push origin main
 cd /var/www
 sudo git clone https://github.com/bullhunter6/Unified-portal.git portal-v1.0.1
 sudo chown -R ubuntu:ubuntu portal-v1.0.1
-cd portal-v1.0.1
+cd portal-v1.0.4
 ```
 
 #### 3. Copy Environment File
@@ -344,7 +344,7 @@ mkdir -p logs
 cat > ecosystem.config.js << 'EOF'
 module.exports = {
   apps: [{
-    name: 'portal-v1.0.1',
+    name: 'portal-v1.0.4',
     cwd: '/var/www/current/apps/web',
     script: 'node_modules/next/dist/bin/next',
     args: 'start -p 3000',
