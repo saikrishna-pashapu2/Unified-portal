@@ -52,7 +52,8 @@ export function createArticleAssistantAgent(config: {
       schema: z.object({
         query: z.string().describe("The search query to find relevant information"),
       }),
-      func: async ({ query }) => {
+      func: async (input: { query: string }) => {
+        const { query } = input;
         try {
           // Use Tavily API for web search
           const tavilyApiKey = process.env.TAVILY_API_KEY || "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";
@@ -354,7 +355,8 @@ export async function streamArticleChat(
       schema: z.object({
         query: z.string().describe("The search query to find relevant supporting information, sources, or context"),
       }),
-      func: async ({ query }) => {
+      func: async (input: { query: string }) => {
+        const { query } = input;
         try {
           const tavilyApiKey = process.env.TAVILY_API_KEY || "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";
           
@@ -557,7 +559,7 @@ Remember: Use web_search proactively to provide comprehensive, well-sourced answ
           if (tool && toolCall.id) {
             try {
               console.log(`[Agent] Executing ${toolCall.name} with args:`, JSON.stringify(toolCall.args).substring(0, 100));
-              const toolResult = await tool.func(toolCall.args);
+              const toolResult = await tool.func(toolCall.args as any);
               
               // For web search, add instructions about chart generation if it's a visualization request
               let enhancedToolResult = toolCall.name === 'generate_chart' 
@@ -617,7 +619,7 @@ Remember: Use web_search proactively to provide comprehensive, well-sourced answ
             if (tool && toolCall.id) {
               try {
                 console.log(`[Agent] Executing ${toolCall.name} with args:`, JSON.stringify(toolCall.args).substring(0, 200));
-                const toolResult = await tool.func(toolCall.args);
+                const toolResult = await tool.func(toolCall.args as any);
                 const enhancedToolResult = toolCall.name === 'generate_chart' 
                   ? toolResult 
                   : `${toolResult}\n\nIMPORTANT: Integrate these sources into your response using markdown hyperlinks.`;
