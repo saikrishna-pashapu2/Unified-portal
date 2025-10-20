@@ -189,21 +189,56 @@ export default function AlertSettingsNew({ domain }: { domain: "esg" | "credit" 
     
     // Weekly and Daily digests don't have filters - they send all team-liked content
     if (type === "weekly_digest" || type === "daily_digest") {
+      const digestHour = editingAlert.digest_hour || 9;
+      const formatHour = (hour: number) => {
+        const period = hour >= 12 ? 'PM' : 'AM';
+        const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+        return `${displayHour}:00 ${period}`;
+      };
+
       return (
-        <div className="p-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-          <div className="flex items-start gap-3">
-            <div className="text-2xl">ℹ️</div>
-            <div>
-              <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-1">
-                {type === "weekly_digest" ? "Weekly" : "Daily"} Digest
-              </h4>
-              <p className="text-sm text-blue-800 dark:text-blue-200">
-                {type === "weekly_digest" 
-                  ? "Sends all articles, events, and publications liked by your team members every Monday at 9 AM. No filtering needed - you'll get everything your team found interesting!"
-                  : "Sends all articles, events, and publications liked by your team members daily at 9 AM. No filtering needed - you'll get everything your team found interesting!"
-                }
-              </p>
+        <div className="space-y-4">
+          <div className="p-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+            <div className="flex items-start gap-3">
+              <div className="text-2xl">ℹ️</div>
+              <div>
+                <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-1">
+                  {type === "weekly_digest" ? "Weekly" : "Daily"} Digest
+                </h4>
+                <p className="text-sm text-blue-800 dark:text-blue-200">
+                  {type === "weekly_digest" 
+                    ? "Sends all articles, events, and publications liked by your team members every Monday. No filtering needed - you'll get everything your team found interesting!"
+                    : "Sends all articles, events, and publications liked by your team members daily (last 24 hours). No filtering needed - you'll get everything your team found interesting!"
+                  }
+                </p>
+              </div>
             </div>
+          </div>
+
+          {/* Time Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              ⏰ Delivery Time
+            </label>
+            <select
+              value={digestHour}
+              onChange={(e) => {
+                setEditingAlert({
+                  ...editingAlert,
+                  digest_hour: parseInt(e.target.value),
+                });
+              }}
+              className="w-full md:w-64 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              {Array.from({ length: 24 }, (_, i) => i).map(hour => (
+                <option key={hour} value={hour}>
+                  {formatHour(hour)}
+                </option>
+              ))}
+            </select>
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              Choose what time you want to receive your digest email (timezone: {editingAlert.timezone || 'Asia/Dubai'})
+            </p>
           </div>
         </div>
       );
@@ -393,6 +428,19 @@ export default function AlertSettingsNew({ domain }: { domain: "esg" | "credit" 
               <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                 {ALERT_TYPES.find(t => t.value === alert.alert_type)?.label}
                 {(alert.domains || []).length === 2 && " • Both Domains"}
+                {(alert.alert_type === 'daily_digest' || alert.alert_type === 'weekly_digest') && alert.digest_hour !== undefined && (
+                  <>
+                    {" • "}
+                    <span className="text-gray-700 dark:text-gray-300">
+                      ⏰ {(() => {
+                        const hour = alert.digest_hour;
+                        const period = hour >= 12 ? 'PM' : 'AM';
+                        const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+                        return `${displayHour}:00 ${period}`;
+                      })()}
+                    </span>
+                  </>
+                )}
               </p>
             </div>
             <div className="flex items-center gap-2">

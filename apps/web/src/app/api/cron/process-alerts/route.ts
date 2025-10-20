@@ -359,6 +359,7 @@ async function sendWeeklyDigest(alert: any) {
       userName,
       alertName: alert.alert_name,
       content: likedContent,
+      count: likedContent.length, // FIX: Add count
       period: "past week",
     },
   });
@@ -386,6 +387,7 @@ async function sendDailyDigest(alert: any) {
       userName,
       alertName: alert.alert_name,
       content: likedContent,
+      count: likedContent.length, // FIX: Add count
       period: "past day",
     },
   });
@@ -415,6 +417,22 @@ async function sendImmediateAlert(alert: any, newContent: any[]) {
 async function getTeamLikedContent(team: string, domains: string[], since: Date) {
   const content: any[] = [];
 
+  // First, get all user IDs in the team from ESG database (all users are stored there)
+  let teamUserIds: number[] = [];
+  try {
+    const teamUsers = await esgPrisma.$queryRaw<{ id: number }[]>`
+      SELECT id FROM users WHERE team = ${team}
+    `;
+    teamUserIds = teamUsers.map(u => u.id);
+  } catch (error) {
+    console.error('Error getting team users:', error);
+    return content;
+  }
+
+  if (teamUserIds.length === 0) {
+    return content;
+  }
+
   for (const domain of domains) {
     // Get liked articles from correct database
     const prisma = domain === "esg" ? esgPrisma : creditPrisma;
@@ -422,15 +440,16 @@ async function getTeamLikedContent(team: string, domains: string[], since: Date)
     const dateColumn = domain === "esg" ? "published" : "date"; // Different column names!
     
     try {
+      // Query articles liked by any user in the team
+      // Note: likes table exists in both databases, but users table only in ESG
       const articles = await prisma.$queryRawUnsafe<any[]>(`
-        SELECT DISTINCT a.id, a.title, a.summary, a.source, a.${dateColumn} as published_date, a.link
+        SELECT DISTINCT a.id, a.title, a.summary, a.source, a.${dateColumn} as published_date, a.link, l.created_at as liked_at
         FROM ${tableName} a
-        JOIN likes l ON l.item_id = a.id AND l.item_type = 'article'
-        JOIN users u ON l.user_id = u.id
-        WHERE u.team = $1 AND l.created_at > $2
+        JOIN likes l ON l.content_id = a.id AND l.content_type = 'article'
+        WHERE l.user_id = ANY($1) AND l.created_at > $2
         ORDER BY l.created_at DESC
         LIMIT 50
-      `, team, since);
+      `, teamUserIds, since);
       content.push(...articles.map(a => ({ ...a, type: "article", domain })));
     } catch (error) {
       console.error(`Error fetching liked articles from ${tableName}:`, error);
@@ -439,15 +458,14 @@ async function getTeamLikedContent(team: string, domains: string[], since: Date)
 
   // Get liked events
   try {
-    const events = await esgPrisma.$queryRaw<any[]>`
-      SELECT DISTINCT e.id, e.title, e.description as summary, e.source, e.event_date, e.link
+    const events = await esgPrisma.$queryRawUnsafe<any[]>(`
+      SELECT DISTINCT e.id, e.title, e.description as summary, e.source, e.event_date, e.link, l.created_at as liked_at
       FROM events e
-      JOIN likes l ON l.item_id = e.id AND l.item_type = 'event'
-      JOIN users u ON l.user_id = u.id
-      WHERE u.team = ${team} AND l.created_at > ${since}
+      JOIN likes l ON l.content_id = e.id AND l.content_type = 'event'
+      WHERE l.user_id = ANY($1) AND l.created_at > $2
       ORDER BY l.created_at DESC
       LIMIT 50
-    `;
+    `, teamUserIds, since);
     content.push(...events.map(e => ({ ...e, type: "event" })));
   } catch (error) {
     console.error("Error fetching liked events:", error);
@@ -455,15 +473,14 @@ async function getTeamLikedContent(team: string, domains: string[], since: Date)
 
   // Get liked publications
   try {
-    const publications = await esgPrisma.$queryRaw<any[]>`
-      SELECT DISTINCT p.id, p.title, p.summary, p.source, p.published_date, p.link
+    const publications = await esgPrisma.$queryRawUnsafe<any[]>(`
+      SELECT DISTINCT p.id, p.title, p.summary, p.source, p.published_date, p.link, l.created_at as liked_at
       FROM publications p
-      JOIN likes l ON l.item_id = p.id AND l.item_type = 'publication'
-      JOIN users u ON l.user_id = u.id
-      WHERE u.team = ${team} AND l.created_at > ${since}
+      JOIN likes l ON l.content_id = p.id AND l.content_type = 'publication'
+      WHERE l.user_id = ANY($1) AND l.created_at > $2
       ORDER BY l.created_at DESC
       LIMIT 50
-    `;
+    `, teamUserIds, since);
     content.push(...publications.map(p => ({ ...p, type: "publication" })));
   } catch (error) {
     console.error("Error fetching liked publications:", error);

@@ -46,6 +46,11 @@ export default function TestAlertsPage() {
   const [result, setResult] = useState<TestResult | null>(null);
   const [error, setError] = useState("");
 
+  // Daily Digest Test State
+  const [digestLoading, setDigestLoading] = useState(false);
+  const [digestResult, setDigestResult] = useState<any>(null);
+  const [digestError, setDigestError] = useState("");
+
   const handleTest = async () => {
     setLoading(true);
     setError("");
@@ -82,18 +87,138 @@ export default function TestAlertsPage() {
     }
   };
 
+  const handleTestDailyDigest = async () => {
+    setDigestLoading(true);
+    setDigestError("");
+    setDigestResult(null);
+
+    try {
+      const res = await fetch("/api/admin/test-daily-digest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setDigestResult(data);
+      } else {
+        setDigestError(data.error || "Failed to test daily digest");
+      }
+    } catch (err: any) {
+      setDigestError(err.message || "Failed to test daily digest");
+    } finally {
+      setDigestLoading(false);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Test Alerts System</h1>
         <p className="mt-2 text-gray-600">
-          Test immediate alerts to see what content would be sent to users
+          Test immediate alerts and daily digests
         </p>
       </div>
 
-      {/* Test Form */}
+      {/* Daily Digest Test Form */}
+      <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg shadow-sm border border-green-200 p-6 mb-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-2">📆 Test Daily Digest</h2>
+        <p className="text-sm text-gray-600 mb-4">
+          Test the daily digest email for YOUR team. This will send all articles liked by your team TODAY.
+        </p>
+        
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleTestDailyDigest}
+            disabled={digestLoading}
+            className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {digestLoading ? "Sending..." : "Send Test Email"}
+          </button>
+          <span className="text-sm text-gray-500">
+            Will send to your email address
+          </span>
+        </div>
+
+        {/* Daily Digest Error */}
+        {digestError && (
+          <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-3">
+            <p className="text-red-800 text-sm font-medium">Error</p>
+            <p className="text-red-600 text-sm mt-1">{digestError}</p>
+          </div>
+        )}
+
+        {/* Daily Digest Results */}
+        {digestResult && (
+          <div className="mt-4 bg-white border border-green-200 rounded-lg p-4">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h3 className="font-semibold text-gray-900">✅ Test Email Queued!</h3>
+                <p className="text-sm text-gray-600 mt-1">{digestResult.message}</p>
+              </div>
+              <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                {digestResult.results.likedArticles} articles
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mb-3 text-sm">
+              <div>
+                <span className="text-gray-600">User:</span>
+                <p className="font-medium">{digestResult.results.userName} ({digestResult.results.userEmail})</p>
+              </div>
+              <div>
+                <span className="text-gray-600">Team:</span>
+                <p className="font-medium">{digestResult.results.team}</p>
+              </div>
+            </div>
+
+            {digestResult.results.articles.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-gray-200">
+                <h4 className="font-semibold text-gray-900 mb-2 text-sm">Today's Liked Articles:</h4>
+                <div className="space-y-2">
+                  {digestResult.results.articles.map((article: any, i: number) => (
+                    <div key={i} className="p-2 bg-gray-50 rounded border border-gray-200 text-sm">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={`px-2 py-0.5 text-xs font-medium rounded ${
+                              article.domain === 'esg' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                            }`}>
+                              {article.domain.toUpperCase()}
+                            </span>
+                            <span className="text-xs text-gray-500">{article.source}</span>
+                          </div>
+                          <p className="font-medium text-gray-900">{article.title}</p>
+                        </div>
+                        <a
+                          href={article.link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded shrink-0"
+                        >
+                          View
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {digestResult.results.likedArticles === 0 && (
+              <p className="text-sm text-gray-500 italic mt-3 pt-3 border-t border-gray-200">
+                No articles were liked by this team today.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Immediate Alerts Test Form */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Test Parameters</h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">⚡ Test Immediate Alerts</h2>
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <div>

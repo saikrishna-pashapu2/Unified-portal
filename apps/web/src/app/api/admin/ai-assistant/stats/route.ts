@@ -233,12 +233,14 @@ export async function GET(req: NextRequest) {
           sessions: bigint;
           messages: bigint;
           tokens: bigint;
+          cost: number;
         }>>`
           SELECT 
             ac.user_id,
             COUNT(DISTINCT ac.id)::bigint as sessions,
             COUNT(am.id)::bigint as messages,
-            COALESCE(SUM(ac.total_tokens_used), 0)::bigint as tokens
+            COALESCE(SUM(ac.total_tokens_used), 0)::bigint as tokens,
+            COALESCE(SUM(ac.total_cost_usd), 0) as cost
           FROM article_conversations ac
           LEFT JOIN article_messages am ON am.conversation_id = ac.id
           WHERE ac.created_at >= ${startDate}
@@ -253,12 +255,14 @@ export async function GET(req: NextRequest) {
           sessions: bigint;
           messages: bigint;
           tokens: bigint;
+          cost: number;
         }>>`
           SELECT 
             ac.user_id,
             COUNT(DISTINCT ac.id)::bigint as sessions,
             COUNT(am.id)::bigint as messages,
-            COALESCE(SUM(ac.total_tokens_used), 0)::bigint as tokens
+            COALESCE(SUM(ac.total_tokens_used), 0)::bigint as tokens,
+            COALESCE(SUM(ac.total_cost_usd), 0) as cost
           FROM article_conversations ac
           LEFT JOIN article_messages am ON am.conversation_id = ac.id
           WHERE ac.created_at >= ${startDate}
@@ -282,6 +286,7 @@ export async function GET(req: NextRequest) {
           sessions: Number(user.sessions),
           messages: Number(user.messages),
           tokens: Number(user.tokens),
+          cost: Number(user.cost || 0),
         };
       })
     );

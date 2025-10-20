@@ -412,7 +412,7 @@ pm2 status
 
 ### View Logs (Live)
 ```bash
-pm2 logs portal-v1.0.0
+pm2 logs portal-v1.0.4
 ```
 
 ### View Last 50 Lines
