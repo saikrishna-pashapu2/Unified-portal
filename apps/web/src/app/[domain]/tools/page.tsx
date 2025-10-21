@@ -1,7 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import { Search, FileSpreadsheet, TrendingUp, Users, Shield, Leaf, ArrowRight, BarChart3, Database, Zap } from "lucide-react";
+import { Search, FileSpreadsheet, TrendingUp, Users, Shield, Leaf, ArrowRight, BarChart3, Database, Zap, Brain } from "lucide-react";
+import Link from "next/link";
 import EsgSearch from "./search";
 import EsgExcel from "./excel";
 
@@ -17,17 +18,8 @@ export default function ToolsPage({ params }: { params: { domain: "esg" | "credi
     }
   }, [searchParams]);
 
-  // Only show ESG tools for ESG domain
-  if (params.domain !== "esg") {
-    return (
-      <main className="mx-auto max-w-6xl px-4 py-8">
-        <div className="text-center py-12">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Tools Not Available</h1>
-          <p className="text-gray-600">ESG Score Tool is only available in the ESG domain.</p>
-        </div>
-      </main>
-    );
-  }
+  // Only show ESG tools for ESG domain for the specific ESG tools
+  const showESGTools = params.domain === "esg";
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-green-50">
@@ -38,56 +30,60 @@ export default function ToolsPage({ params }: { params: { domain: "esg" | "credi
             <BarChart3 className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            ESG Score Tool
+            {params.domain === "esg" ? "ESG Tools" : "Credit Tools"}
           </h1>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
-            Access comprehensive ESG data from multiple providers including S&P, ISS, and LSEG. 
-            Get instant insights into environmental, social, and governance performance.
+            {params.domain === "esg" 
+              ? "Access comprehensive ESG data from multiple providers including S&P, ISS, and LSEG. Get instant insights into environmental, social, and governance performance."
+              : "Powerful tools for credit analysis, risk assessment, and intelligent insights powered by AI."
+            }
           </p>
         </div>
 
-        {/* Navigation Tabs */}
-        <div className="flex justify-center mb-12">
-          <div className="inline-flex items-center bg-white rounded-xl p-1 shadow-lg border">
-            <button
-              onClick={() => setTab("main")}
-              className={`flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
-                tab === "main"
-                  ? "bg-gradient-to-r from-green-500 to-blue-600 text-white shadow-md"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-              }`}
-            >
-              <TrendingUp className="w-4 h-4" />
-              Overview
-            </button>
-            <button
-              onClick={() => setTab("search")}
-              className={`flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
-                tab === "search"
-                  ? "bg-gradient-to-r from-green-500 to-blue-600 text-white shadow-md"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-              }`}
-            >
-              <Search className="w-4 h-4" />
-              ESG Search
-            </button>
-            <button
-              onClick={() => setTab("excel")}
-              className={`flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
-                tab === "excel"
-                  ? "bg-gradient-to-r from-green-500 to-blue-600 text-white shadow-md"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-              }`}
-            >
-              <FileSpreadsheet className="w-4 h-4" />
-              Excel Updater
-            </button>
+        {/* Navigation Tabs - Only show for ESG */}
+        {showESGTools && (
+          <div className="flex justify-center mb-12">
+            <div className="inline-flex items-center bg-white rounded-xl p-1 shadow-lg border">
+              <button
+                onClick={() => setTab("main")}
+                className={`flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
+                  tab === "main"
+                    ? "bg-gradient-to-r from-green-500 to-blue-600 text-white shadow-md"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                }`}
+              >
+                <TrendingUp className="w-4 h-4" />
+                Overview
+              </button>
+              <button
+                onClick={() => setTab("search")}
+                className={`flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
+                  tab === "search"
+                    ? "bg-gradient-to-r from-green-500 to-blue-600 text-white shadow-md"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                }`}
+              >
+                <Search className="w-4 h-4" />
+                ESG Search
+              </button>
+              <button
+                onClick={() => setTab("excel")}
+                className={`flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
+                  tab === "excel"
+                    ? "bg-gradient-to-r from-green-500 to-blue-600 text-white shadow-md"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                }`}
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                Excel Updater
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Content */}
         <div className="space-y-8">
-          {tab === "main" && (
+          {tab === "main" && showESGTools && (
             <div className="space-y-12">
               {/* Key Features */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">

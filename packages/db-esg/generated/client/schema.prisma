@@ -91,6 +91,7 @@ model pdf_translation_jobs {
   pages            Json      @default("[]")
   translated_pages Json      @default("[]")
   output_path      String?
+  output_pdf       Bytes?
   created_at       DateTime  @default(now())
   updated_at       DateTime  @updatedAt
   completed_at     DateTime?

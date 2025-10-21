@@ -7239,6 +7239,7 @@ export namespace Prisma {
     total_pages: number | null
     current_page: number | null
     output_path: string | null
+    output_pdf: Buffer | null
     created_at: Date | null
     updated_at: Date | null
     completed_at: Date | null
@@ -7257,6 +7258,7 @@ export namespace Prisma {
     total_pages: number | null
     current_page: number | null
     output_path: string | null
+    output_pdf: Buffer | null
     created_at: Date | null
     updated_at: Date | null
     completed_at: Date | null
@@ -7277,6 +7279,7 @@ export namespace Prisma {
     pages: number
     translated_pages: number
     output_path: number
+    output_pdf: number
     created_at: number
     updated_at: number
     completed_at: number
@@ -7311,6 +7314,7 @@ export namespace Prisma {
     total_pages?: true
     current_page?: true
     output_path?: true
+    output_pdf?: true
     created_at?: true
     updated_at?: true
     completed_at?: true
@@ -7329,6 +7333,7 @@ export namespace Prisma {
     total_pages?: true
     current_page?: true
     output_path?: true
+    output_pdf?: true
     created_at?: true
     updated_at?: true
     completed_at?: true
@@ -7349,6 +7354,7 @@ export namespace Prisma {
     pages?: true
     translated_pages?: true
     output_path?: true
+    output_pdf?: true
     created_at?: true
     updated_at?: true
     completed_at?: true
@@ -7456,6 +7462,7 @@ export namespace Prisma {
     pages: JsonValue
     translated_pages: JsonValue
     output_path: string | null
+    output_pdf: Buffer | null
     created_at: Date
     updated_at: Date
     completed_at: Date | null
@@ -7495,6 +7502,7 @@ export namespace Prisma {
     pages?: boolean
     translated_pages?: boolean
     output_path?: boolean
+    output_pdf?: boolean
     created_at?: boolean
     updated_at?: boolean
     completed_at?: boolean
@@ -7516,6 +7524,7 @@ export namespace Prisma {
     pages?: boolean
     translated_pages?: boolean
     output_path?: boolean
+    output_pdf?: boolean
     created_at?: boolean
     updated_at?: boolean
     completed_at?: boolean
@@ -7537,6 +7546,7 @@ export namespace Prisma {
     pages?: boolean
     translated_pages?: boolean
     output_path?: boolean
+    output_pdf?: boolean
     created_at?: boolean
     updated_at?: boolean
     completed_at?: boolean
@@ -7569,6 +7579,7 @@ export namespace Prisma {
       pages: Prisma.JsonValue
       translated_pages: Prisma.JsonValue
       output_path: string | null
+      output_pdf: Buffer | null
       created_at: Date
       updated_at: Date
       completed_at: Date | null
@@ -7980,6 +7991,7 @@ export namespace Prisma {
     readonly pages: FieldRef<"pdf_translation_jobs", 'Json'>
     readonly translated_pages: FieldRef<"pdf_translation_jobs", 'Json'>
     readonly output_path: FieldRef<"pdf_translation_jobs", 'String'>
+    readonly output_pdf: FieldRef<"pdf_translation_jobs", 'Bytes'>
     readonly created_at: FieldRef<"pdf_translation_jobs", 'DateTime'>
     readonly updated_at: FieldRef<"pdf_translation_jobs", 'DateTime'>
     readonly completed_at: FieldRef<"pdf_translation_jobs", 'DateTime'>
@@ -19480,6 +19492,7 @@ export namespace Prisma {
     pages: 'pages',
     translated_pages: 'translated_pages',
     output_path: 'output_path',
+    output_pdf: 'output_pdf',
     created_at: 'created_at',
     updated_at: 'updated_at',
     completed_at: 'completed_at'
@@ -19788,6 +19801,20 @@ export namespace Prisma {
    * Reference to a field of type 'Json'
    */
   export type JsonFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Json'>
+    
+
+
+  /**
+   * Reference to a field of type 'Bytes'
+   */
+  export type BytesFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Bytes'>
+    
+
+
+  /**
+   * Reference to a field of type 'Bytes[]'
+   */
+  export type ListBytesFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Bytes[]'>
     
 
 
@@ -20209,6 +20236,7 @@ export namespace Prisma {
     pages?: JsonFilter<"pdf_translation_jobs">
     translated_pages?: JsonFilter<"pdf_translation_jobs">
     output_path?: StringNullableFilter<"pdf_translation_jobs"> | string | null
+    output_pdf?: BytesNullableFilter<"pdf_translation_jobs"> | Buffer | null
     created_at?: DateTimeFilter<"pdf_translation_jobs"> | Date | string
     updated_at?: DateTimeFilter<"pdf_translation_jobs"> | Date | string
     completed_at?: DateTimeNullableFilter<"pdf_translation_jobs"> | Date | string | null
@@ -20230,6 +20258,7 @@ export namespace Prisma {
     pages?: SortOrder
     translated_pages?: SortOrder
     output_path?: SortOrderInput | SortOrder
+    output_pdf?: SortOrderInput | SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
     completed_at?: SortOrderInput | SortOrder
@@ -20254,6 +20283,7 @@ export namespace Prisma {
     pages?: JsonFilter<"pdf_translation_jobs">
     translated_pages?: JsonFilter<"pdf_translation_jobs">
     output_path?: StringNullableFilter<"pdf_translation_jobs"> | string | null
+    output_pdf?: BytesNullableFilter<"pdf_translation_jobs"> | Buffer | null
     created_at?: DateTimeFilter<"pdf_translation_jobs"> | Date | string
     updated_at?: DateTimeFilter<"pdf_translation_jobs"> | Date | string
     completed_at?: DateTimeNullableFilter<"pdf_translation_jobs"> | Date | string | null
@@ -20275,6 +20305,7 @@ export namespace Prisma {
     pages?: SortOrder
     translated_pages?: SortOrder
     output_path?: SortOrderInput | SortOrder
+    output_pdf?: SortOrderInput | SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
     completed_at?: SortOrderInput | SortOrder
@@ -20303,6 +20334,7 @@ export namespace Prisma {
     pages?: JsonWithAggregatesFilter<"pdf_translation_jobs">
     translated_pages?: JsonWithAggregatesFilter<"pdf_translation_jobs">
     output_path?: StringNullableWithAggregatesFilter<"pdf_translation_jobs"> | string | null
+    output_pdf?: BytesNullableWithAggregatesFilter<"pdf_translation_jobs"> | Buffer | null
     created_at?: DateTimeWithAggregatesFilter<"pdf_translation_jobs"> | Date | string
     updated_at?: DateTimeWithAggregatesFilter<"pdf_translation_jobs"> | Date | string
     completed_at?: DateTimeNullableWithAggregatesFilter<"pdf_translation_jobs"> | Date | string | null
@@ -21781,6 +21813,7 @@ export namespace Prisma {
     pages?: JsonNullValueInput | InputJsonValue
     translated_pages?: JsonNullValueInput | InputJsonValue
     output_path?: string | null
+    output_pdf?: Buffer | null
     created_at?: Date | string
     updated_at?: Date | string
     completed_at?: Date | string | null
@@ -21802,6 +21835,7 @@ export namespace Prisma {
     pages?: JsonNullValueInput | InputJsonValue
     translated_pages?: JsonNullValueInput | InputJsonValue
     output_path?: string | null
+    output_pdf?: Buffer | null
     created_at?: Date | string
     updated_at?: Date | string
     completed_at?: Date | string | null
@@ -21821,6 +21855,7 @@ export namespace Prisma {
     pages?: JsonNullValueInput | InputJsonValue
     translated_pages?: JsonNullValueInput | InputJsonValue
     output_path?: NullableStringFieldUpdateOperationsInput | string | null
+    output_pdf?: NullableBytesFieldUpdateOperationsInput | Buffer | null
     created_at?: DateTimeFieldUpdateOperationsInput | Date | string
     updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
     completed_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -21842,6 +21877,7 @@ export namespace Prisma {
     pages?: JsonNullValueInput | InputJsonValue
     translated_pages?: JsonNullValueInput | InputJsonValue
     output_path?: NullableStringFieldUpdateOperationsInput | string | null
+    output_pdf?: NullableBytesFieldUpdateOperationsInput | Buffer | null
     created_at?: DateTimeFieldUpdateOperationsInput | Date | string
     updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
     completed_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -21862,6 +21898,7 @@ export namespace Prisma {
     pages?: JsonNullValueInput | InputJsonValue
     translated_pages?: JsonNullValueInput | InputJsonValue
     output_path?: string | null
+    output_pdf?: Buffer | null
     created_at?: Date | string
     updated_at?: Date | string
     completed_at?: Date | string | null
@@ -21881,6 +21918,7 @@ export namespace Prisma {
     pages?: JsonNullValueInput | InputJsonValue
     translated_pages?: JsonNullValueInput | InputJsonValue
     output_path?: NullableStringFieldUpdateOperationsInput | string | null
+    output_pdf?: NullableBytesFieldUpdateOperationsInput | Buffer | null
     created_at?: DateTimeFieldUpdateOperationsInput | Date | string
     updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
     completed_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -21901,6 +21939,7 @@ export namespace Prisma {
     pages?: JsonNullValueInput | InputJsonValue
     translated_pages?: JsonNullValueInput | InputJsonValue
     output_path?: NullableStringFieldUpdateOperationsInput | string | null
+    output_pdf?: NullableBytesFieldUpdateOperationsInput | Buffer | null
     created_at?: DateTimeFieldUpdateOperationsInput | Date | string
     updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
     completed_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -23533,6 +23572,13 @@ export namespace Prisma {
     not?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
   }
 
+  export type BytesNullableFilter<$PrismaModel = never> = {
+    equals?: Buffer | BytesFieldRefInput<$PrismaModel> | null
+    in?: Buffer[] | ListBytesFieldRefInput<$PrismaModel> | null
+    notIn?: Buffer[] | ListBytesFieldRefInput<$PrismaModel> | null
+    not?: NestedBytesNullableFilter<$PrismaModel> | Buffer | null
+  }
+
   export type DateTimeFilter<$PrismaModel = never> = {
     equals?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
@@ -23559,6 +23605,7 @@ export namespace Prisma {
     pages?: SortOrder
     translated_pages?: SortOrder
     output_path?: SortOrder
+    output_pdf?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
     completed_at?: SortOrder
@@ -23584,6 +23631,7 @@ export namespace Prisma {
     total_pages?: SortOrder
     current_page?: SortOrder
     output_path?: SortOrder
+    output_pdf?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
     completed_at?: SortOrder
@@ -23602,6 +23650,7 @@ export namespace Prisma {
     total_pages?: SortOrder
     current_page?: SortOrder
     output_path?: SortOrder
+    output_pdf?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
     completed_at?: SortOrder
@@ -23652,6 +23701,16 @@ export namespace Prisma {
     _count?: NestedIntFilter<$PrismaModel>
     _min?: NestedJsonFilter<$PrismaModel>
     _max?: NestedJsonFilter<$PrismaModel>
+  }
+
+  export type BytesNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: Buffer | BytesFieldRefInput<$PrismaModel> | null
+    in?: Buffer[] | ListBytesFieldRefInput<$PrismaModel> | null
+    notIn?: Buffer[] | ListBytesFieldRefInput<$PrismaModel> | null
+    not?: NestedBytesNullableWithAggregatesFilter<$PrismaModel> | Buffer | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedBytesNullableFilter<$PrismaModel>
+    _max?: NestedBytesNullableFilter<$PrismaModel>
   }
 
   export type DateTimeWithAggregatesFilter<$PrismaModel = never> = {
@@ -24608,6 +24667,10 @@ export namespace Prisma {
     connect?: usersWhereUniqueInput
   }
 
+  export type NullableBytesFieldUpdateOperationsInput = {
+    set?: Buffer | null
+  }
+
   export type DateTimeFieldUpdateOperationsInput = {
     set?: Date | string
   }
@@ -25467,6 +25530,13 @@ export namespace Prisma {
     not?: NestedUuidFilter<$PrismaModel> | string
   }
 
+  export type NestedBytesNullableFilter<$PrismaModel = never> = {
+    equals?: Buffer | BytesFieldRefInput<$PrismaModel> | null
+    in?: Buffer[] | ListBytesFieldRefInput<$PrismaModel> | null
+    notIn?: Buffer[] | ListBytesFieldRefInput<$PrismaModel> | null
+    not?: NestedBytesNullableFilter<$PrismaModel> | Buffer | null
+  }
+
   export type NestedDateTimeFilter<$PrismaModel = never> = {
     equals?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
@@ -25512,6 +25582,16 @@ export namespace Prisma {
     gt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
     gte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
     not?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
+  }
+
+  export type NestedBytesNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: Buffer | BytesFieldRefInput<$PrismaModel> | null
+    in?: Buffer[] | ListBytesFieldRefInput<$PrismaModel> | null
+    notIn?: Buffer[] | ListBytesFieldRefInput<$PrismaModel> | null
+    not?: NestedBytesNullableWithAggregatesFilter<$PrismaModel> | Buffer | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedBytesNullableFilter<$PrismaModel>
+    _max?: NestedBytesNullableFilter<$PrismaModel>
   }
 
   export type NestedDateTimeWithAggregatesFilter<$PrismaModel = never> = {
@@ -26692,6 +26772,7 @@ export namespace Prisma {
     pages?: JsonNullValueInput | InputJsonValue
     translated_pages?: JsonNullValueInput | InputJsonValue
     output_path?: string | null
+    output_pdf?: Buffer | null
     created_at?: Date | string
     updated_at?: Date | string
     completed_at?: Date | string | null
@@ -26711,6 +26792,7 @@ export namespace Prisma {
     pages?: JsonNullValueInput | InputJsonValue
     translated_pages?: JsonNullValueInput | InputJsonValue
     output_path?: string | null
+    output_pdf?: Buffer | null
     created_at?: Date | string
     updated_at?: Date | string
     completed_at?: Date | string | null
@@ -27060,6 +27142,7 @@ export namespace Prisma {
     pages?: JsonFilter<"pdf_translation_jobs">
     translated_pages?: JsonFilter<"pdf_translation_jobs">
     output_path?: StringNullableFilter<"pdf_translation_jobs"> | string | null
+    output_pdf?: BytesNullableFilter<"pdf_translation_jobs"> | Buffer | null
     created_at?: DateTimeFilter<"pdf_translation_jobs"> | Date | string
     updated_at?: DateTimeFilter<"pdf_translation_jobs"> | Date | string
     completed_at?: DateTimeNullableFilter<"pdf_translation_jobs"> | Date | string | null
@@ -27861,6 +27944,7 @@ export namespace Prisma {
     pages?: JsonNullValueInput | InputJsonValue
     translated_pages?: JsonNullValueInput | InputJsonValue
     output_path?: string | null
+    output_pdf?: Buffer | null
     created_at?: Date | string
     updated_at?: Date | string
     completed_at?: Date | string | null
@@ -28190,6 +28274,7 @@ export namespace Prisma {
     pages?: JsonNullValueInput | InputJsonValue
     translated_pages?: JsonNullValueInput | InputJsonValue
     output_path?: NullableStringFieldUpdateOperationsInput | string | null
+    output_pdf?: NullableBytesFieldUpdateOperationsInput | Buffer | null
     created_at?: DateTimeFieldUpdateOperationsInput | Date | string
     updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
     completed_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -28209,6 +28294,7 @@ export namespace Prisma {
     pages?: JsonNullValueInput | InputJsonValue
     translated_pages?: JsonNullValueInput | InputJsonValue
     output_path?: NullableStringFieldUpdateOperationsInput | string | null
+    output_pdf?: NullableBytesFieldUpdateOperationsInput | Buffer | null
     created_at?: DateTimeFieldUpdateOperationsInput | Date | string
     updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
     completed_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -28228,6 +28314,7 @@ export namespace Prisma {
     pages?: JsonNullValueInput | InputJsonValue
     translated_pages?: JsonNullValueInput | InputJsonValue
     output_path?: NullableStringFieldUpdateOperationsInput | string | null
+    output_pdf?: NullableBytesFieldUpdateOperationsInput | Buffer | null
     created_at?: DateTimeFieldUpdateOperationsInput | Date | string
     updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
     completed_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null

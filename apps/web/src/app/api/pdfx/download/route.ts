@@ -25,12 +25,29 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
     
-    if (!row.output_path) {
+    if (!row.output_pdf && !row.output_path) {
       return NextResponse.json({ error: 'No output file yet' }, { status: 409 });
     }
 
-    const filePath = row.output_path;
-    const buf = await fs.readFile(filePath);
+    let buf: Buffer;
+    
+    // Try to get PDF from database first, fallback to file system
+    if (row.output_pdf) {
+      buf = Buffer.from(row.output_pdf);
+      console.log(`Serving PDF from database for job ${jobId}, size: ${buf.length} bytes`);
+    } else if (row.output_path) {
+      // Fallback to file system (for old translations)
+      try {
+        buf = await fs.readFile(row.output_path);
+        console.log(`Serving PDF from file system for job ${jobId}, size: ${buf.length} bytes`);
+      } catch (fileError) {
+        console.error(`Failed to read PDF from file system: ${row.output_path}`, fileError);
+        return NextResponse.json({ error: 'File not found on disk' }, { status: 404 });
+      }
+    } else {
+      return NextResponse.json({ error: 'No output file available' }, { status: 404 });
+    }
+
     const filename = `translated_${row.filename.replace(/\.[^.]+$/, '')}.pdf`;
 
     return new NextResponse(buf as any, {

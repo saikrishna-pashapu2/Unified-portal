@@ -155,6 +155,10 @@ export async function startPdfJob(
       await buildTranslatedPdf(pages, outPath);
       console.log(`[PDF Job ${jobId}] PDF built successfully: ${outPath}`);
 
+      // Read the PDF file and store it in database
+      const pdfBuffer = await fs.readFile(outPath);
+      console.log(`[PDF Job ${jobId}] PDF file size: ${pdfBuffer.length} bytes`);
+
       JobStore.update(jobId, {
         status: 'completed',
         message: `Done. ${pages.length} pages processed.`,
@@ -169,7 +173,9 @@ export async function startPdfJob(
           message: `Done. ${pages.length} pages processed.`,
           progress: 100,
           output_path: outPath,
+          output_pdf: pdfBuffer,
           translated_pages: pages,
+          completed_at: new Date(),
         },
       });
     } catch (err: any) {

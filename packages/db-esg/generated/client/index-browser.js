@@ -197,6 +197,7 @@ exports.Prisma.Pdf_translation_jobsScalarFieldEnum = {
   pages: 'pages',
   translated_pages: 'translated_pages',
   output_path: 'output_path',
+  output_pdf: 'output_pdf',
   created_at: 'created_at',
   updated_at: 'updated_at',
   completed_at: 'completed_at'
