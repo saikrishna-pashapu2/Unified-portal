@@ -14,8 +14,30 @@ import cron from 'node-cron';
 const CRON_SECRET = process.env.CRON_SECRET || 'your-secret-key-change-this';
 const APP_URL = process.env.NEXTAUTH_URL || 'http://localhost:3000';
 
-// Flag to ensure we only start once
-let isStarted = false;
+// Use globalThis to persist state across module reloads in development
+// This ensures the scheduler state is maintained even when Next.js hot-reloads modules
+declare global {
+  var alertSchedulerState: {
+    isStarted: boolean;
+    alertProcessingTask: any;
+    emailQueueTask: any;
+  } | undefined;
+}
+
+// Initialize or retrieve persistent state
+if (!globalThis.alertSchedulerState) {
+  globalThis.alertSchedulerState = {
+    isStarted: false,
+    alertProcessingTask: null,
+    emailQueueTask: null,
+  };
+}
+
+// Convenience accessors
+const getState = () => globalThis.alertSchedulerState!;
+const setState = (updates: Partial<typeof globalThis.alertSchedulerState>) => {
+  Object.assign(globalThis.alertSchedulerState!, updates);
+};
 
 async function callEndpoint(path: string, name: string) {
   try {
@@ -49,47 +71,91 @@ async function callEndpoint(path: string, name: string) {
 }
 
 export function startAlertScheduler() {
+  // Check if tasks are already running
+  const state = getState();
+  const hasRunningTasks = state.alertProcessingTask !== null || state.emailQueueTask !== null;
+  
   // Prevent multiple starts
-  if (isStarted) {
+  if (state.isStarted || hasRunningTasks) {
     console.log('⚠️  Alert scheduler already started, skipping...');
-    return;
+    return { success: false, message: 'Scheduler already running' };
   }
 
   console.log('🚀 Starting Alert Scheduler...');
   
   // Alert Processing - Every 5 minutes
   // Cron: "*/5 * * * *" = Every 5 minutes
-  cron.schedule('*/5 * * * *', async () => {
+  const alertTask = cron.schedule('*/5 * * * *', async () => {
     await callEndpoint('/api/cron/process-alerts', 'Alert Processing');
   }, {
-    timezone: "Asia/Dubai" // Adjust to your timezone
+    timezone: "Asia/Dubai", // Adjust to your timezone
   });
   
+  setState({ alertProcessingTask: alertTask });
   console.log('✅ Alert Processing scheduled: Every 5 minutes');
 
   // Email Queue Processing - Every 5 minutes
   // Cron: "*/5 * * * *" = Every 5 minutes
-  cron.schedule('*/5 * * * *', async () => {
+  const emailTask = cron.schedule('*/5 * * * *', async () => {
     await callEndpoint('/api/cron/process-queue', 'Email Queue Processing');
   }, {
-    timezone: "Asia/Dubai" // Adjust to your timezone
+    timezone: "Asia/Dubai", // Adjust to your timezone
   });
   
+  setState({ emailQueueTask: emailTask });
   console.log('✅ Email Queue Processing scheduled: Every 5 minutes');
 
-  isStarted = true;
+  setState({ isStarted: true });
   console.log('🎉 Alert Scheduler started successfully!');
   console.log(`📍 Timezone: Asia/Dubai`);
   console.log(`🔒 Using CRON_SECRET: ${CRON_SECRET.substring(0, 10)}...`);
+  
+  return { success: true, message: 'Scheduler started successfully' };
 }
 
 export function stopAlertScheduler() {
-  if (isStarted) {
-    // node-cron doesn't provide a direct way to stop all tasks
-    // but we can set the flag to prevent restart
-    isStarted = false;
-    console.log('🛑 Alert Scheduler stopped');
+  // Check if any tasks are actually running
+  const state = getState();
+  const hasRunningTasks = state.alertProcessingTask !== null || state.emailQueueTask !== null;
+  
+  if (!state.isStarted && !hasRunningTasks) {
+    console.log('⚠️  Alert scheduler not running');
+    return { success: false, message: 'Scheduler not running' };
   }
+
+  console.log('🛑 Stopping Alert Scheduler...');
+  
+  // Stop the cron tasks
+  if (state.alertProcessingTask) {
+    state.alertProcessingTask.stop();
+    setState({ alertProcessingTask: null });
+    console.log('✅ Alert Processing task stopped');
+  }
+  
+  if (state.emailQueueTask) {
+    state.emailQueueTask.stop();
+    setState({ emailQueueTask: null });
+    console.log('✅ Email Queue Processing task stopped');
+  }
+  
+  setState({ isStarted: false });
+  console.log('🛑 Alert Scheduler stopped successfully');
+  
+  return { success: true, message: 'Scheduler stopped successfully' };
+}
+
+export function getSchedulerStatus() {
+  // Check actual task status, not just the flag
+  const state = getState();
+  const hasRunningTasks = state.alertProcessingTask !== null || state.emailQueueTask !== null;
+  
+  return {
+    isRunning: state.isStarted || hasRunningTasks, // Running if flag is set OR tasks exist
+    tasks: {
+      alertProcessing: state.alertProcessingTask !== null,
+      emailQueue: state.emailQueueTask !== null,
+    },
+  };
 }
 
 // Auto-start in production

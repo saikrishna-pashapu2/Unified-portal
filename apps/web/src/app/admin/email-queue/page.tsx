@@ -47,6 +47,16 @@ export default function EmailQueueManagementPage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   
+  // Scheduler status
+  const [schedulerStatus, setSchedulerStatus] = useState<{
+    isRunning: boolean;
+    tasks: {
+      alertProcessing: boolean;
+      emailQueue: boolean;
+    };
+  } | null>(null);
+  const [schedulerLoading, setSchedulerLoading] = useState(false);
+  
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [alertTypeFilter, setAlertTypeFilter] = useState<string>("all");
@@ -77,6 +87,7 @@ export default function EmailQueueManagementPage() {
   useEffect(() => {
     fetchEmails();
     fetchStats();
+    fetchSchedulerStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, statusFilter, alertTypeFilter, domainFilter]);
 
@@ -117,6 +128,76 @@ export default function EmailQueueManagementPage() {
       }
     } catch (error) {
       console.error("Error fetching stats:", error);
+    }
+  };
+
+  const fetchSchedulerStatus = async () => {
+    try {
+      const response = await fetch("/api/admin/scheduler/status");
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setSchedulerStatus(data.status);
+      }
+    } catch (error) {
+      console.error("Error fetching scheduler status:", error);
+    }
+  };
+
+  const handleStartScheduler = async () => {
+    setSchedulerLoading(true);
+    try {
+      const response = await fetch("/api/admin/scheduler/start", {
+        method: "POST",
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        alert(`✅ ${data.message}`);
+        // Refresh status after a short delay to show updated state
+        setTimeout(() => {
+          fetchSchedulerStatus();
+        }, 500);
+      } else {
+        alert(`❌ ${data.message || data.error}`);
+        // Still refresh to show accurate state
+        fetchSchedulerStatus();
+      }
+    } catch (error) {
+      console.error("Error starting scheduler:", error);
+      alert("❌ Failed to start scheduler - check console for details");
+    } finally {
+      setSchedulerLoading(false);
+    }
+  };
+
+  const handleStopScheduler = async () => {
+    if (!confirm("⚠️ Are you sure you want to stop the email scheduler?\n\nEmails will not be processed automatically until you start it again.")) {
+      return;
+    }
+
+    setSchedulerLoading(true);
+    try {
+      const response = await fetch("/api/admin/scheduler/stop", {
+        method: "POST",
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        alert(`✅ ${data.message}`);
+        // Refresh status after a short delay to show updated state
+        setTimeout(() => {
+          fetchSchedulerStatus();
+        }, 500);
+      } else {
+        alert(`❌ ${data.message || data.error}`);
+        // Still refresh to show accurate state
+        fetchSchedulerStatus();
+      }
+    } catch (error) {
+      console.error("Error stopping scheduler:", error);
+      alert("❌ Failed to stop scheduler - check console for details");
+    } finally {
+      setSchedulerLoading(false);
     }
   };
 
@@ -263,6 +344,91 @@ export default function EmailQueueManagementPage() {
         >
           📧 Send Manual Email
         </button>
+      </div>
+
+      {/* Scheduler Control Panel */}
+      <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-6 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+              <span className="text-2xl">⚙️</span>
+              Email Cron Scheduler
+            </h2>
+            <p className="text-sm text-gray-600 mt-1">
+              Control the automated email processing jobs
+            </p>
+            {schedulerStatus && (
+              <div className="mt-3 space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                    schedulerStatus.isRunning 
+                      ? 'bg-green-100 text-green-800' 
+                      : 'bg-red-100 text-red-800'
+                  }`}>
+                    {schedulerStatus.isRunning ? '● Running' : '○ Stopped'}
+                  </span>
+                </div>
+                <div className="text-xs text-gray-500 space-y-0.5">
+                  <div>Alert Processing: {schedulerStatus.tasks.alertProcessing ? '✅ Active' : '❌ Inactive'}</div>
+                  <div>Email Queue: {schedulerStatus.tasks.emailQueue ? '✅ Active' : '❌ Inactive'}</div>
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={handleStartScheduler}
+              disabled={schedulerLoading || schedulerStatus?.isRunning}
+              className={`px-6 py-3 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+                schedulerStatus?.isRunning
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  : 'bg-green-600 text-white hover:bg-green-700'
+              }`}
+            >
+              {schedulerLoading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <span>Processing...</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-xl">▶️</span>
+                  <span>Start Scheduler</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={handleStopScheduler}
+              disabled={schedulerLoading || !schedulerStatus?.isRunning}
+              className={`px-6 py-3 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+                !schedulerStatus?.isRunning
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  : 'bg-red-600 text-white hover:bg-red-700'
+              }`}
+            >
+              {schedulerLoading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <span>Processing...</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-xl">⏹️</span>
+                  <span>Stop Scheduler</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={fetchSchedulerStatus}
+              disabled={schedulerLoading}
+              className="px-4 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium transition-colors flex items-center gap-2"
+              title="Refresh scheduler status"
+            >
+              <span className="text-xl">🔄</span>
+              <span>Refresh</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Stats Cards */}
