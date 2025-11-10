@@ -2,22 +2,42 @@ import { type NextAuthOptions } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { findUserByEmail } from "@/lib/auth-db";
 import bcrypt from "bcryptjs";
+import { checkLoginRateLimit, resetLoginAttempts, formatLockoutTime } from "@/lib/rate-limit";
 
 export const authOptions: NextAuthOptions = {
   pages: { signIn: "/signin" },           // use your custom page
-  session: { strategy: "jwt" },
+  session: { 
+    strategy: "jwt",
+    maxAge: 7 * 24 * 60 * 60, // 7 days (604800 seconds) - better than default 30 days
+  },
   providers: [
     Credentials({
       name: "Credentials",
       credentials: { email: {}, password: {} },
       async authorize(creds) {
         if (!creds?.email || !creds?.password) return null;
+        
+        // Check rate limit before attempting login
+        const rateLimitCheck = checkLoginRateLimit(String(creds.email));
+        
+        if (!rateLimitCheck.allowed) {
+          const timeRemaining = rateLimitCheck.resetTime 
+            ? formatLockoutTime(rateLimitCheck.resetTime)
+            : '15 minutes';
+          throw new Error(
+            `Too many failed login attempts. Please try again in ${timeRemaining}.`
+          );
+        }
+        
         const row = await findUserByEmail(String(creds.email));
         if (!row) return null;
 
         // verify password
         const ok = await bcrypt.compare(String(creds.password), row.password_hash);
         if (!ok) return null;
+
+        // Successful login - reset rate limit attempts
+        resetLoginAttempts(String(creds.email));
 
         // derive fields robustly
         const displayName =
