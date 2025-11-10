@@ -40,7 +40,7 @@ export default async function DomainHome({
         </div>
 
       {/* Dashboard Cards */}
-      <div className="mb-16 grid gap-6 sm:grid-cols-3">
+      <div className="mb-16 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         <div className="bg-card text-card-foreground border border-border rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow group cursor-pointer">
           <div className="flex items-start justify-between mb-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
@@ -92,6 +92,23 @@ export default async function DomainHome({
             <Link className="block text-sm font-medium text-primary hover:underline" href={`/${domain}/events`}>View events</Link>
           </div>
         </div>
+
+        <Link href={`/${domain}/tenders`} className="block bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/30 rounded-2xl p-6 shadow-sm hover:shadow-md transition-all group cursor-pointer">
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/20">
+              <svg className="h-6 w-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <div className="text-xs text-primary font-medium bg-primary/20 px-2 py-1 rounded-full">Live</div>
+          </div>
+          <div className="text-sm font-semibold text-muted-foreground mb-1">Government Tenders</div>
+          <div className="text-3xl font-bold text-foreground mb-2">Browse</div>
+          <div className="text-xs text-muted-foreground">Kazakhstan procurement opportunities</div>
+          <div className="mt-4 inline-flex items-center text-sm font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
+            View all tenders →
+          </div>
+        </Link>
       </div>
 
       {/* Latest Articles - Compact Rows */}

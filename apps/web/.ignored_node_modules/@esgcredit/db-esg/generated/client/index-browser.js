@@ -197,10 +197,10 @@ exports.Prisma.Pdf_translation_jobsScalarFieldEnum = {
   pages: 'pages',
   translated_pages: 'translated_pages',
   output_path: 'output_path',
-  output_pdf: 'output_pdf',
   created_at: 'created_at',
   updated_at: 'updated_at',
-  completed_at: 'completed_at'
+  completed_at: 'completed_at',
+  output_pdf: 'output_pdf'
 };
 
 exports.Prisma.Pdf_translationsScalarFieldEnum = {
@@ -374,6 +374,328 @@ exports.Prisma.Alert_content_sentScalarFieldEnum = {
   sent_at: 'sent_at'
 };
 
+exports.Prisma.Action_itemsScalarFieldEnum = {
+  id: 'id',
+  meeting_id: 'meeting_id',
+  title: 'title',
+  assignee_user_id: 'assignee_user_id',
+  due_date: 'due_date',
+  priority: 'priority',
+  status: 'status',
+  created_at: 'created_at',
+  updated_at: 'updated_at'
+};
+
+exports.Prisma.Article_ai_sessionsScalarFieldEnum = {
+  id: 'id',
+  user_id: 'user_id',
+  article_id: 'article_id',
+  domain: 'domain',
+  session_data: 'session_data',
+  message_count: 'message_count',
+  tokens_used: 'tokens_used',
+  cost_usd: 'cost_usd',
+  created_at: 'created_at',
+  updated_at: 'updated_at',
+  expires_at: 'expires_at'
+};
+
+exports.Prisma.Article_conversationsScalarFieldEnum = {
+  id: 'id',
+  session_id: 'session_id',
+  user_id: 'user_id',
+  article_id: 'article_id',
+  article_source: 'article_source',
+  article_summary: 'article_summary',
+  summary_generated_at: 'summary_generated_at',
+  summary_tokens: 'summary_tokens',
+  conversation_title: 'conversation_title',
+  total_messages: 'total_messages',
+  total_tokens_used: 'total_tokens_used',
+  total_cost_usd: 'total_cost_usd',
+  status: 'status',
+  created_at: 'created_at',
+  updated_at: 'updated_at',
+  last_message_at: 'last_message_at'
+};
+
+exports.Prisma.Article_messagesScalarFieldEnum = {
+  id: 'id',
+  conversation_id: 'conversation_id',
+  message_index: 'message_index',
+  role: 'role',
+  content: 'content',
+  metadata: 'metadata',
+  tokens_used: 'tokens_used',
+  created_at: 'created_at'
+};
+
+exports.Prisma.Article_tool_callsScalarFieldEnum = {
+  id: 'id',
+  conversation_id: 'conversation_id',
+  message_id: 'message_id',
+  tool_name: 'tool_name',
+  tool_input: 'tool_input',
+  tool_output: 'tool_output',
+  status: 'status',
+  error_message: 'error_message',
+  tokens_used: 'tokens_used',
+  execution_time_ms: 'execution_time_ms',
+  created_at: 'created_at'
+};
+
+exports.Prisma.DecisionsScalarFieldEnum = {
+  id: 'id',
+  meeting_id: 'meeting_id',
+  decision_text: 'decision_text',
+  decided_by_user_id: 'decided_by_user_id',
+  timestamp_in_meeting: 'timestamp_in_meeting',
+  created_at: 'created_at'
+};
+
+exports.Prisma.Domain_keywordsScalarFieldEnum = {
+  id: 'id',
+  domain: 'domain',
+  keyword: 'keyword',
+  category: 'category',
+  weight: 'weight',
+  language: 'language',
+  is_active: 'is_active',
+  created_at: 'created_at',
+  updated_at: 'updated_at'
+};
+
+exports.Prisma.Email_draftsScalarFieldEnum = {
+  id: 'id',
+  meeting_id: 'meeting_id',
+  subject: 'subject',
+  body: 'body',
+  sent: 'sent',
+  sent_at: 'sent_at',
+  created_at: 'created_at'
+};
+
+exports.Prisma.Meeting_participantsScalarFieldEnum = {
+  id: 'id',
+  meeting_id: 'meeting_id',
+  user_id: 'user_id',
+  role: 'role',
+  created_at: 'created_at'
+};
+
+exports.Prisma.Meeting_summariesScalarFieldEnum = {
+  id: 'id',
+  meeting_id: 'meeting_id',
+  summary_bullets: 'summary_bullets',
+  summary_paragraph: 'summary_paragraph',
+  key_topics: 'key_topics',
+  highlights: 'highlights',
+  created_at: 'created_at'
+};
+
+exports.Prisma.MeetingsScalarFieldEnum = {
+  id: 'id',
+  title: 'title',
+  date: 'date',
+  duration_sec: 'duration_sec',
+  recorded_by_user_id: 'recorded_by_user_id',
+  status: 'status',
+  recording_url: 'recording_url',
+  created_at: 'created_at',
+  updated_at: 'updated_at'
+};
+
+exports.Prisma.QuestionsScalarFieldEnum = {
+  id: 'id',
+  meeting_id: 'meeting_id',
+  question_text: 'question_text',
+  asked_by_user_id: 'asked_by_user_id',
+  resolved: 'resolved',
+  resolved_at: 'resolved_at',
+  resolved_by_user_id: 'resolved_by_user_id',
+  answer_text: 'answer_text',
+  timestamp_in_meeting: 'timestamp_in_meeting',
+  created_at: 'created_at'
+};
+
+exports.Prisma.RisksScalarFieldEnum = {
+  id: 'id',
+  meeting_id: 'meeting_id',
+  risk_text: 'risk_text',
+  raised_by_user_id: 'raised_by_user_id',
+  severity: 'severity',
+  timestamp_in_meeting: 'timestamp_in_meeting',
+  created_at: 'created_at'
+};
+
+exports.Prisma.Speaker_mappingsScalarFieldEnum = {
+  id: 'id',
+  meeting_id: 'meeting_id',
+  speaker_label: 'speaker_label',
+  user_id: 'user_id',
+  sample_text: 'sample_text',
+  confidence_score: 'confidence_score',
+  is_ai_suggested: 'is_ai_suggested',
+  created_at: 'created_at'
+};
+
+exports.Prisma.Tender_classificationsScalarFieldEnum = {
+  id: 'id',
+  tender_id: 'tender_id',
+  esg_score: 'esg_score',
+  credit_score: 'credit_score',
+  primary_domain: 'primary_domain',
+  reasoning: 'reasoning',
+  esg_keywords: 'esg_keywords',
+  credit_keywords: 'credit_keywords',
+  model_used: 'model_used',
+  prompt_tokens: 'prompt_tokens',
+  completion_tokens: 'completion_tokens',
+  classification_cost: 'classification_cost',
+  processing_time_ms: 'processing_time_ms',
+  created_at: 'created_at'
+};
+
+exports.Prisma.Tender_scrape_logsScalarFieldEnum = {
+  id: 'id',
+  source_id: 'source_id',
+  started_at: 'started_at',
+  completed_at: 'completed_at',
+  status: 'status',
+  tenders_found: 'tenders_found',
+  tenders_new: 'tenders_new',
+  tenders_updated: 'tenders_updated',
+  tenders_failed: 'tenders_failed',
+  error_message: 'error_message',
+  error_stack: 'error_stack',
+  duration_seconds: 'duration_seconds',
+  pages_scraped: 'pages_scraped',
+  scraper_version: 'scraper_version',
+  trigger_type: 'trigger_type'
+};
+
+exports.Prisma.Tender_sourcesScalarFieldEnum = {
+  id: 'id',
+  name: 'name',
+  short_name: 'short_name',
+  country: 'country',
+  base_url: 'base_url',
+  search_url_template: 'search_url_template',
+  is_active: 'is_active',
+  scrape_frequency_hours: 'scrape_frequency_hours',
+  requires_auth: 'requires_auth',
+  default_headers: 'default_headers',
+  scraper_config: 'scraper_config',
+  last_scrape_date: 'last_scrape_date',
+  last_scrape_status: 'last_scrape_status',
+  total_scrapes: 'total_scrapes',
+  successful_scrapes: 'successful_scrapes',
+  failed_scrapes: 'failed_scrapes',
+  success_rate: 'success_rate',
+  created_at: 'created_at',
+  updated_at: 'updated_at'
+};
+
+exports.Prisma.Tender_translationsScalarFieldEnum = {
+  id: 'id',
+  tender_id: 'tender_id',
+  source_language: 'source_language',
+  target_language: 'target_language',
+  total_characters: 'total_characters',
+  translation_method: 'translation_method',
+  translation_cost: 'translation_cost',
+  translation_time_ms: 'translation_time_ms',
+  created_at: 'created_at'
+};
+
+exports.Prisma.TendersScalarFieldEnum = {
+  id: 'id',
+  source_id: 'source_id',
+  lot_id: 'lot_id',
+  tender_number: 'tender_number',
+  tender_url: 'tender_url',
+  announcement_url: 'announcement_url',
+  original_title: 'original_title',
+  original_description: 'original_description',
+  original_additional_info: 'original_additional_info',
+  original_delivery_terms: 'original_delivery_terms',
+  original_language: 'original_language',
+  title: 'title',
+  description: 'description',
+  additional_info: 'additional_info',
+  delivery_terms: 'delivery_terms',
+  total_amount: 'total_amount',
+  currency: 'currency',
+  amount_by_year: 'amount_by_year',
+  advance_payment: 'advance_payment',
+  advance_percentage: 'advance_percentage',
+  ktru_code: 'ktru_code',
+  procurement_type: 'procurement_type',
+  procurement_method: 'procurement_method',
+  customer_name: 'customer_name',
+  customer_bin: 'customer_bin',
+  customer_address: 'customer_address',
+  customer_contact: 'customer_contact',
+  published_date: 'published_date',
+  application_start_date: 'application_start_date',
+  application_end_date: 'application_end_date',
+  contract_start_date: 'contract_start_date',
+  contract_end_date: 'contract_end_date',
+  original_status: 'original_status',
+  status: 'status',
+  is_active: 'is_active',
+  domain_classification: 'domain_classification',
+  primary_domain: 'primary_domain',
+  classification_confidence: 'classification_confidence',
+  matched_keywords: 'matched_keywords',
+  ai_summary: 'ai_summary',
+  classification_date: 'classification_date',
+  extra_data: 'extra_data',
+  delivery_locations: 'delivery_locations',
+  documents: 'documents',
+  created_at: 'created_at',
+  updated_at: 'updated_at'
+};
+
+exports.Prisma.Transcript_segmentsScalarFieldEnum = {
+  id: 'id',
+  meeting_id: 'meeting_id',
+  start_time: 'start_time',
+  end_time: 'end_time',
+  speaker_label: 'speaker_label',
+  speaker_user_id: 'speaker_user_id',
+  text: 'text',
+  created_at: 'created_at'
+};
+
+exports.Prisma.User_saved_tendersScalarFieldEnum = {
+  id: 'id',
+  user_id: 'user_id',
+  tender_id: 'tender_id',
+  notes: 'notes',
+  tags: 'tags',
+  status: 'status',
+  created_at: 'created_at',
+  updated_at: 'updated_at'
+};
+
+exports.Prisma.User_tender_alertsScalarFieldEnum = {
+  id: 'id',
+  user_id: 'user_id',
+  alert_name: 'alert_name',
+  keywords: 'keywords',
+  excluded_keywords: 'excluded_keywords',
+  min_amount: 'min_amount',
+  max_amount: 'max_amount',
+  countries: 'countries',
+  domains: 'domains',
+  is_active: 'is_active',
+  frequency: 'frequency',
+  last_sent: 'last_sent',
+  created_at: 'created_at',
+  updated_at: 'updated_at'
+};
+
 exports.Prisma.SortOrder = {
   asc: 'asc',
   desc: 'desc'
@@ -421,7 +743,29 @@ exports.Prisma.ModelName = {
   alert_preferences: 'alert_preferences',
   alert_history: 'alert_history',
   email_queue: 'email_queue',
-  alert_content_sent: 'alert_content_sent'
+  alert_content_sent: 'alert_content_sent',
+  action_items: 'action_items',
+  article_ai_sessions: 'article_ai_sessions',
+  article_conversations: 'article_conversations',
+  article_messages: 'article_messages',
+  article_tool_calls: 'article_tool_calls',
+  decisions: 'decisions',
+  domain_keywords: 'domain_keywords',
+  email_drafts: 'email_drafts',
+  meeting_participants: 'meeting_participants',
+  meeting_summaries: 'meeting_summaries',
+  meetings: 'meetings',
+  questions: 'questions',
+  risks: 'risks',
+  speaker_mappings: 'speaker_mappings',
+  tender_classifications: 'tender_classifications',
+  tender_scrape_logs: 'tender_scrape_logs',
+  tender_sources: 'tender_sources',
+  tender_translations: 'tender_translations',
+  tenders: 'tenders',
+  transcript_segments: 'transcript_segments',
+  user_saved_tenders: 'user_saved_tenders',
+  user_tender_alerts: 'user_tender_alerts'
 };
 
 /**

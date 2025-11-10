@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
-import { ChevronDown, BarChart3, FileText, Search, Brain } from 'lucide-react';
+import { ChevronDown, BarChart3, FileText, Search, Brain, FileCheck } from 'lucide-react';
 
 interface ToolsDropdownProps {
   domain: 'esg' | 'credit';
@@ -48,11 +48,13 @@ export default function ToolsDropdown({ domain, base }: ToolsDropdownProps) {
   const allTools = domain === 'esg' 
     ? [
         { href: `${base}/tools/ai-analyst`, icon: Brain, label: 'AI Analyst', highlight: true, adminOnly: true },
+        { href: `${base}/tenders`, icon: FileCheck, label: 'Tenders' },
         { href: `${base}/tools`, icon: BarChart3, label: 'ESG Score Tool' },
         { href: `${base}/pdfx`, icon: FileText, label: 'PDF Translator' },
       ]
     : [
         { href: `${base}/tools/ai-analyst`, icon: Brain, label: 'AI Analyst', highlight: true, adminOnly: true },
+        { href: `${base}/tenders`, icon: FileCheck, label: 'Tenders' },
         { href: `${base}/tools/fitch`, icon: Search, label: 'Fitch Tool' },
       ];
 
