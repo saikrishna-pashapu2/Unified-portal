@@ -63,6 +63,43 @@ export function checkLoginRateLimit(email: string): {
 }
 
 /**
+ * Record a failed login attempt (call this when password is wrong)
+ * @param email User email address
+ */
+export function recordFailedAttempt(email: string): {
+  remainingAttempts: number;
+  isLocked: boolean;
+} {
+  const key = email.toLowerCase().trim();
+  const now = Date.now();
+  const record = loginAttempts.get(key);
+
+  if (!record || now > record.resetTime) {
+    // Start fresh tracking
+    loginAttempts.set(key, {
+      count: 1,
+      resetTime: now + LOCKOUT_DURATION,
+      firstAttempt: now,
+    });
+    return {
+      remainingAttempts: MAX_ATTEMPTS - 1,
+      isLocked: false,
+    };
+  }
+
+  // Increment failed attempts
+  record.count++;
+  
+  const isLocked = record.count >= MAX_ATTEMPTS;
+  const remainingAttempts = Math.max(0, MAX_ATTEMPTS - record.count);
+
+  return {
+    remainingAttempts,
+    isLocked,
+  };
+}
+
+/**
  * Reset login attempts for a user (call on successful login)
  * @param email User email address
  */

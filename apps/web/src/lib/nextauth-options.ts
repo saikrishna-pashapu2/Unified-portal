@@ -2,7 +2,7 @@ import { type NextAuthOptions } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { findUserByEmail } from "@/lib/auth-db";
 import bcrypt from "bcryptjs";
-import { checkLoginRateLimit, resetLoginAttempts, formatLockoutTime } from "@/lib/rate-limit";
+import { checkLoginRateLimit, resetLoginAttempts, formatLockoutTime, recordFailedAttempt } from "@/lib/rate-limit";
 
 export const authOptions: NextAuthOptions = {
   pages: { signIn: "/signin" },           // use your custom page
@@ -30,11 +30,31 @@ export const authOptions: NextAuthOptions = {
         }
         
         const row = await findUserByEmail(String(creds.email));
-        if (!row) return null;
+        if (!row) {
+          // Record failed attempt
+          const failResult = recordFailedAttempt(String(creds.email));
+          if (failResult.remainingAttempts > 0) {
+            throw new Error(
+              `Invalid email or password. ${failResult.remainingAttempts} attempt${failResult.remainingAttempts === 1 ? '' : 's'} remaining.`
+            );
+          } else {
+            throw new Error('Too many failed login attempts. Please try again in 15 minutes.');
+          }
+        }
 
         // verify password
         const ok = await bcrypt.compare(String(creds.password), row.password_hash);
-        if (!ok) return null;
+        if (!ok) {
+          // Record failed attempt
+          const failResult = recordFailedAttempt(String(creds.email));
+          if (failResult.remainingAttempts > 0) {
+            throw new Error(
+              `Invalid email or password. ${failResult.remainingAttempts} attempt${failResult.remainingAttempts === 1 ? '' : 's'} remaining.`
+            );
+          } else {
+            throw new Error('Too many failed login attempts. Please try again in 15 minutes.');
+          }
+        }
 
         // Successful login - reset rate limit attempts
         resetLoginAttempts(String(creds.email));
