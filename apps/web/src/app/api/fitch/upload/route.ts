@@ -4,7 +4,7 @@ import * as XLSX from "xlsx";
 import { getSlug, getCompany } from "@/lib/fitch";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/nextauth-options";
-import { getPrisma } from "@/lib/db";
+import { creditPrisma } from "@esgcredit/db-credit";
 
 export const runtime = "nodejs";         // ensure Node runtime (not Edge)
 export const dynamic = "force-dynamic";  // disable static optimization
@@ -208,8 +208,7 @@ export async function POST(req: Request) {
       // Save to database history
       if (userEmail) {
         try {
-          const prisma = getPrisma("credit");
-          await prisma.fitch_upload_history.create({
+          await creditPrisma.fitch_upload_history.create({
             data: {
               user_email: userEmail,
               original_filename: originalFilename,

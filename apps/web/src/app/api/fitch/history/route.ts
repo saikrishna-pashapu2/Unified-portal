@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/nextauth-options";
-import { getPrisma } from "@/lib/db";
+import { creditPrisma } from "@esgcredit/db-credit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,9 +15,8 @@ export async function GET(req: Request) {
     }
 
     const userEmail = session.user.email;
-    const prisma = getPrisma("credit");
 
-    const history = await prisma.fitch_upload_history.findMany({
+    const history = await creditPrisma.fitch_upload_history.findMany({
       where: { user_email: userEmail },
       orderBy: { created_at: "desc" },
       take: 50, // Limit to last 50 uploads

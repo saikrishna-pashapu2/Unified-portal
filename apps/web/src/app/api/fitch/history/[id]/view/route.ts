@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/nextauth-options";
-import { getPrisma } from "@/lib/db";
+import { creditPrisma } from "@esgcredit/db-credit";
 import * as XLSX from "xlsx";
 
 export const runtime = "nodejs";
@@ -20,10 +20,9 @@ export async function GET(
 
     const userEmail = session.user.email;
     const historyId = parseInt(params.id);
-    const prisma = getPrisma("credit");
 
     // Get the history record
-    const history = await prisma.fitch_upload_history.findFirst({
+    const history = await creditPrisma.fitch_upload_history.findFirst({
       where: {
         id: historyId,
         user_email: userEmail, // Ensure user owns this upload

@@ -306,9 +306,9 @@ git push origin main
 #### 2. On EC2 - Clone New Version
 ```bash
 cd /var/www
-sudo git clone https://github.com/bullhunter6/Unified-portal.git portal-v1.0.4
-sudo chown -R ubuntu:ubuntu portal-v1.0.4
-cd portal-v1.0.4
+sudo git clone https://github.com/bullhunter6/Unified-portal.git portal-v1.0.5
+sudo chown -R ubuntu:ubuntu portal-v1.0.5
+cd portal-v1.0.5
 ```
 
 #### 3. Copy Environment File
@@ -344,7 +344,7 @@ mkdir -p logs
 cat > ecosystem.config.js << 'EOF'
 module.exports = {
   apps: [{
-    name: 'portal-v1.0.4',
+    name: 'portal-v1.0.5',
     cwd: '/var/www/current/apps/web',
     script: 'node_modules/next/dist/bin/next',
     args: 'start -p 3000',
