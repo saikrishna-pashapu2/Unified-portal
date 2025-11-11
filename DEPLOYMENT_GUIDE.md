@@ -376,7 +376,7 @@ pm2 delete all
 #### 10. Update Symlink
 ```bash
 cd /var/www
-sudo ln -sfn /var/www/portal-v1.0.4 /var/www/current
+sudo ln -sfn /var/www/portal-v1.0.5 /var/www/current
 ```
 
 #### 11. Start New Version

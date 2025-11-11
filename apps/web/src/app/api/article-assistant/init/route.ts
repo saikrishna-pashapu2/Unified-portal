@@ -191,6 +191,44 @@ export async function POST(request: NextRequest) {
         console.error("Error generating follow-up questions:", error);
         followUpQuestions = [];
       }
+    } else {
+      // New conversation with summary but no messages - generate initial suggested questions
+      try {
+        const openaiKey = process.env.OPENAI_API_KEY;
+        if (openaiKey) {
+          const prisma = getPrisma(domain);
+          let article: any = null;
+
+          if (domain === "credit") {
+            const rows = await prisma.$queryRaw<any[]>`
+              SELECT id, title, content
+              FROM credit_articles
+              WHERE id = ${conversation.article_id}
+              LIMIT 1
+            `;
+            article = rows[0] || null;
+          } else {
+            const rows = await prisma.$queryRaw<any[]>`
+              SELECT id, title, summary as content
+              FROM esg_articles
+              WHERE id = ${conversation.article_id}
+              LIMIT 1
+            `;
+            article = rows[0] || null;
+          }
+
+          if (article) {
+            followUpQuestions = await generateSuggestedQuestions(
+              article.content || "",
+              article.title || "Untitled",
+              openaiKey
+            );
+          }
+        }
+      } catch (error) {
+        console.error("Error generating suggested questions:", error);
+        followUpQuestions = [];
+      }
     }
 
     return NextResponse.json({
