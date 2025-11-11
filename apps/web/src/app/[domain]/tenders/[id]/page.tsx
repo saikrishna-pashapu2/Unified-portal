@@ -5,6 +5,7 @@ import { ArrowLeft, Calendar, DollarSign, Building2, FileText, ExternalLink, Ale
 import { formatDistanceToNow } from 'date-fns';
 import TenderSaveButton from '@/components/tenders/TenderSaveButton';
 
+
 export const revalidate = 300;
 
 export default async function TenderDetailPage({

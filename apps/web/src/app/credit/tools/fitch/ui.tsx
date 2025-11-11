@@ -12,7 +12,7 @@ import { FileText, ExternalLink, Building2 } from "lucide-react";
 type Company = any;
 
 export default function FitchTool() {
-  const [tab, setTab] = useState<"search"|"excel">("search");
+  const [tab, setTab] = useState<"search"|"excel"|"history">("search");
 
   return (
     <div className="space-y-6">
@@ -47,11 +47,23 @@ export default function FitchTool() {
           >
             Excel Update
           </button>
+          <button
+            className={cn(
+              "px-4 py-2 rounded-lg border text-sm font-medium transition-colors",
+              tab === "history" 
+                ? "bg-primary text-primary-foreground border-primary" 
+                : "bg-card text-card-foreground border-border hover:bg-muted"
+            )}
+            onClick={() => setTab("history")}
+          >
+            History
+          </button>
         </div>
 
         <div>
           {tab === "search" && <SearchSection />}
           {tab === "excel" && <ExcelSection />}
+          {tab === "history" && <HistorySection />}
         </div>
       </div>
     </div>
@@ -188,12 +200,127 @@ function SearchSection() {
   );
 }
 
+/* --------------------- HISTORY --------------------- */
+function HistorySection() {
+  const [history, setHistory] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string|null>(null);
+
+  useEffect(() => {
+    fetchHistory();
+  }, []);
+
+  async function fetchHistory() {
+    try {
+      setLoading(true);
+      const res = await fetch("/api/fitch/history");
+      if (!res.ok) throw new Error("Failed to fetch history");
+      const data = await res.json();
+      setHistory(data.history || []);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function formatDate(dateStr: string) {
+    return new Date(dateStr).toLocaleString();
+  }
+
+  function formatFileSize(bytes: number) {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <FileText className="h-5 w-5 text-primary" />
+          Upload History
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {loading && (
+          <div className="text-center py-8 text-muted-foreground">
+            Loading history...
+          </div>
+        )}
+
+        {error && (
+          <div className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-lg">
+            {error}
+          </div>
+        )}
+
+        {!loading && !error && history.length === 0 && (
+          <div className="text-center py-8 text-muted-foreground">
+            No upload history yet. Upload an Excel file to get started!
+          </div>
+        )}
+
+        {!loading && !error && history.length > 0 && (
+          <div className="space-y-3">
+            {history.map((item) => (
+              <div
+                key={item.id}
+                className="border border-border rounded-lg p-4 hover:bg-muted/50 transition-colors"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 space-y-2">
+                    <div className="font-medium">{item.original_filename}</div>
+                    <div className="text-sm text-muted-foreground space-y-1">
+                      <div>Uploaded: {formatDate(item.created_at)}</div>
+                      <div className="flex gap-4">
+                        <span>Companies: {item.companies_count}</span>
+                        <span className="text-green-600">Success: {item.success_count}</span>
+                        {item.error_count > 0 && (
+                          <span className="text-destructive">Errors: {item.error_count}</span>
+                        )}
+                      </div>
+                      <div>Size: {formatFileSize(item.file_size)}</div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => window.location.href = `/credit/tools/fitch/view/${item.id}`}
+                      className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted flex-shrink-0"
+                    >
+                      <FileText className="h-4 w-4" />
+                      View
+                    </button>
+                    <a
+                      href={`/api/fitch/history/${item.id}`}
+                      className="inline-flex items-center gap-2 rounded-lg border border-primary bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20 flex-shrink-0"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      Download
+                    </a>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 /* --------------------- EXCEL --------------------- */
 function ExcelSection() {
   const [file, setFile] = useState<File|null>(null);
   const [jobId, setJobId] = useState<string|null>(null);
   const [status, setStatus] = useState<any|null>(null);
   const [isPolling, setIsPolling] = useState(false);
+
+  // Clear any stale jobId from localStorage on mount
+  useEffect(() => {
+    // Don't auto-restore - clear stale jobs instead
+    localStorage.removeItem("fitchJobId");
+  }, []);
 
   // Only poll when we have an active job
   useEffect(() => {
@@ -202,6 +329,15 @@ function ExcelSection() {
     const t = setInterval(async () => {
       try {
         const res = await fetch(`/api/fitch/status?jobId=${jobId}`, { cache: "no-store" });
+        
+        // If job not found (404), clear stale state
+        if (res.status === 404) {
+          setStatus({ status: "error", error: "Job not found (may have expired or server restarted)" });
+          setIsPolling(false);
+          localStorage.removeItem("fitchJobId");
+          return;
+        }
+        
         if (!res.ok) return;
         const data = await res.json();
         setStatus(data);
@@ -250,11 +386,25 @@ function ExcelSection() {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="bg-muted/50 border border-border rounded-lg p-4">
-          <p className="text-sm text-muted-foreground">
-            Upload an <strong>.xlsx</strong> or <strong>.csv</strong> file with a <em>name</em> or <em>company</em> column.
-            We&apos;ll add Fitch columns: <code className="bg-muted px-1 rounded">__fitch_name</code>, <code className="bg-muted px-1 rounded">__fitch_latest_rating</code>, <code className="bg-muted px-1 rounded">__fitch_latest_action</code>, <code className="bg-muted px-1 rounded">__fitch_rac_count</code>.
+          <p className="text-sm text-muted-foreground mb-2">
+            Upload an <strong>.xlsx</strong> or <strong>.csv</strong> file with a <em>Company</em> or <em>Company Name</em> column.
           </p>
-          <p className="text-xs text-muted-foreground mt-2">
+          <p className="text-sm text-muted-foreground mb-2">
+            We&apos;ll add these Fitch columns:
+          </p>
+          <ul className="text-xs text-muted-foreground space-y-1 ml-4 list-disc">
+            <li><code className="bg-muted px-1 rounded">Fitch Name</code> - Official company name from Fitch</li>
+            <li><code className="bg-muted px-1 rounded">Fitch Slug</code> - Fitch permalink identifier</li>
+            <li><code className="bg-muted px-1 rounded">Rating Code</code> - Latest rating (e.g., AAA, BB+)</li>
+            <li><code className="bg-muted px-1 rounded">Rating Action</code> - Action description</li>
+            <li><code className="bg-muted px-1 rounded">Rating Change Date</code> - When the rating changed</li>
+            <li><code className="bg-muted px-1 rounded">Rating Type</code> - Type description</li>
+            <li><code className="bg-muted px-1 rounded">Rating Alert Code</code> - Alert code if any</li>
+            <li><code className="bg-muted px-1 rounded">RAC Count</code> - Number of recent RAC reports</li>
+            <li><code className="bg-muted px-1 rounded">Latest RAC Title</code> - Most recent RAC title</li>
+            <li><code className="bg-muted px-1 rounded">Latest RAC Slug</code> - RAC permalink</li>
+          </ul>
+          <p className="text-xs text-muted-foreground mt-3">
             You can navigate anywhere while it processes; progress is tracked below.
           </p>
         </div>
@@ -284,13 +434,22 @@ function ExcelSection() {
             </Button>
           )}
           {canDownload && (
-            <a
-              href={`/api/fitch/download?jobId=${jobId}`}
-              className="inline-flex items-center gap-2 rounded-lg border border-primary bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20"
-            >
-              <ExternalLink className="h-4 w-4" />
-              Download result
-            </a>
+            <>
+              <button
+                onClick={() => window.location.href = `/credit/tools/fitch/preview?jobId=${jobId}`}
+                className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+              >
+                <FileText className="h-4 w-4" />
+                View Results
+              </button>
+              <a
+                href={`/api/fitch/download?jobId=${jobId}`}
+                className="inline-flex items-center gap-2 rounded-lg border border-primary bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20"
+              >
+                <ExternalLink className="h-4 w-4" />
+                Download result
+              </a>
+            </>
           )}
         </div>
 
@@ -310,8 +469,20 @@ function ExcelSection() {
               )}
               {status?.status === "processing" && (
                 <>
-                  <Progress value={50} className="animate-pulse" />
-                  <span className="text-primary">⚡ Processing your Excel file...</span>
+                  <Progress 
+                    value={status.progress ? (status.progress.current / status.progress.total) * 100 : 50} 
+                  />
+                  <div className="space-y-1">
+                    <span className="text-primary">⚡ Processing your Excel file...</span>
+                    {status.progress && (
+                      <div className="text-xs text-muted-foreground">
+                        <div>Progress: {status.progress.current} / {status.progress.total} companies</div>
+                        {status.progress.currentCompany && (
+                          <div className="truncate">Currently processing: <span className="font-medium">{status.progress.currentCompany}</span></div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </>
               )}
               {status?.status === "done" && (

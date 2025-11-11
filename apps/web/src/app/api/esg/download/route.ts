@@ -1,13 +1,9 @@
 import { NextResponse } from "next/server";
 import { ESG_JOBS } from "../upload/jobstore";
 import { esgPrisma } from "@esgcredit/db-esg";
-import * as fs from "fs";
-import * as path from "path";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const UPLOAD_DIR = path.join(process.cwd(), "uploads", "esg");
 
 export async function GET(req: Request) {
   const id = new URL(req.url).searchParams.get("jobId") || "";
@@ -24,23 +20,28 @@ export async function GET(req: Request) {
     });
   }
   
-  // Fallback to database and disk file
+  // Fallback to database
   try {
-    const dbJob = await esgPrisma.file_uploads.findUnique({ where: { task_id: id } });
-    if (!dbJob || dbJob.status !== "done" || !dbJob.output_filename) {
+    const dbJob = await esgPrisma.file_uploads.findUnique({ 
+      where: { task_id: id },
+      select: {
+        status: true,
+        output_filename: true,
+        file_data: true,
+      }
+    });
+    
+    if (!dbJob || dbJob.status !== "done" || !dbJob.file_data) {
       return NextResponse.json({ error: "File not ready for download" }, { status: 400 });
     }
     
-    const filePath = path.join(UPLOAD_DIR, dbJob.output_filename);
-    if (!fs.existsSync(filePath)) {
-      return NextResponse.json({ error: "File not found on disk" }, { status: 404 });
-    }
+    // Convert Buffer to Uint8Array for NextResponse
+    const fileBuffer = new Uint8Array(dbJob.file_data);
     
-    const fileBuffer = fs.readFileSync(filePath);
     return new NextResponse(fileBuffer, {
       headers: {
         "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "content-disposition": `attachment; filename="${dbJob.output_filename}"`,
+        "content-disposition": `attachment; filename="${dbJob.output_filename ?? `esg_updated_${id}.xlsx`}"`,
         "cache-control": "no-store"
       }
     });

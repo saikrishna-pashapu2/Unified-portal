@@ -55,6 +55,7 @@ model file_uploads {
   original_filename String    @db.VarChar(256)
   stored_filename   String    @db.VarChar(256)
   output_filename   String?   @db.VarChar(256)
+  file_data         Bytes?
   status            String?   @db.VarChar(20)
   error_message     String?
   user_id           Int?

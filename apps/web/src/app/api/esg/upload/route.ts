@@ -2,19 +2,11 @@ import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { ESG_JOBS, type EsgJob } from "./jobstore";
 import { esgPrisma } from "@esgcredit/db-esg";
-import * as fs from "fs";
-import * as path from "path";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const uid = () => Math.random().toString(36).slice(2, 12);
-
-// Ensure upload directory exists
-const UPLOAD_DIR = path.join(process.cwd(), "uploads", "esg");
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
 
 async function insertRow(job: EsgJob, original_filename: string, userId: string | null) {
   // Only include user_id if it's provided and valid
@@ -37,15 +29,22 @@ async function insertRow(job: EsgJob, original_filename: string, userId: string 
   await esgPrisma.file_uploads.create({ data });
 }
 
-async function updateRow(job: EsgJob, patch: Partial<{status: string, error_message: string, output_filename: string}>) {
+async function updateRow(job: EsgJob, patch: Partial<{status: string, error_message: string, output_filename: string, file_data: Buffer}>) {
+  const updateData: any = {
+    status: patch.status,
+    error_message: patch.error_message,
+    output_filename: patch.output_filename,
+    updated_at: new Date(),
+  };
+
+  // Only include file_data if it's provided
+  if (patch.file_data) {
+    updateData.file_data = patch.file_data;
+  }
+
   await esgPrisma.file_uploads.update({
     where: { task_id: job.id },
-    data: {
-      status: patch.status,
-      error_message: patch.error_message,
-      output_filename: patch.output_filename,
-      updated_at: new Date(),
-    },
+    data: updateData,
   });
 }
 
@@ -155,17 +154,20 @@ export async function POST(req: Request) {
           return;
         }
 
-        // Save file to disk
+        // Generate filename for reference
         const filename = `esg_updated_${job.id}_${Date.now()}.xlsx`;
-        const filePath = path.join(UPLOAD_DIR, filename);
-        fs.writeFileSync(filePath, outBuffer);
 
         job.buffer = outBuffer; // Keep in memory for immediate access
         job.filename = filename;
-        job.filePath = filePath;
         job.status = "done";
         job.progress = 100;
-        await updateRow(job, { status: "done", output_filename: filename });
+        
+        // Save file to database instead of disk
+        await updateRow(job, { 
+          status: "done", 
+          output_filename: filename,
+          file_data: outBuffer 
+        });
       } catch (e: any) {
         console.error("Excel processing error:", e);
         job.status = "error";

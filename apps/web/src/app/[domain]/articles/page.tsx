@@ -195,7 +195,18 @@ export default async function ArticlesPage({
           </div>
         ) : (
           <div className="space-y-6">
-            {serializedItems.map((a: any, i: number) => (
+            {serializedItems.map((a: any, i: number) => {
+              // Build back URL with current filters
+              const backParams = new URLSearchParams();
+              if (searchParams.date) backParams.set('date', searchParams.date);
+              if (searchParams.source) backParams.set('source', searchParams.source);
+              if (page > 1) backParams.set('page', String(page));
+              const backQuery = backParams.toString();
+              const articleHref = backQuery 
+                ? `/${params.domain}/articles/${a.id}?back=${encodeURIComponent(`/${params.domain}/articles?${backQuery}`)}`
+                : `/${params.domain}/articles/${a.id}`;
+
+              return (
               <article 
                 key={`${a.id ?? i}`} 
                 className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 hover:shadow-xl transition-all duration-300 group"
@@ -216,7 +227,7 @@ export default async function ArticlesPage({
                   <div className="flex-1 min-w-0">
                     {/* Title */}
                     <h3 className="text-xl font-bold text-gray-900 mb-4 group-hover:text-blue-600 transition-colors leading-7">
-                      <Link href={`/${params.domain}/articles/${a.id}`} className="block">
+                      <Link href={articleHref} className="block">
                         {a.title ?? "Untitled"}
                       </Link>
                     </h3>
@@ -315,7 +326,8 @@ export default async function ArticlesPage({
                   </div>
                 </div>
               </article>
-            ))}
+              );
+            })}
           </div>
         )}
 

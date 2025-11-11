@@ -178,6 +178,11 @@ export type users = $Result.DefaultSelection<Prisma.$usersPayload>
  * 
  */
 export type usersession = $Result.DefaultSelection<Prisma.$usersessionPayload>
+/**
+ * Model fitch_upload_history
+ * 
+ */
+export type fitch_upload_history = $Result.DefaultSelection<Prisma.$fitch_upload_historyPayload>
 
 /**
  * Enums
@@ -681,6 +686,16 @@ export class PrismaClient<
     * ```
     */
   get usersession(): Prisma.usersessionDelegate<ExtArgs>;
+
+  /**
+   * `prisma.fitch_upload_history`: Exposes CRUD operations for the **fitch_upload_history** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more Fitch_upload_histories
+    * const fitch_upload_histories = await prisma.fitch_upload_history.findMany()
+    * ```
+    */
+  get fitch_upload_history(): Prisma.fitch_upload_historyDelegate<ExtArgs>;
 }
 
 export namespace Prisma {
@@ -1154,7 +1169,8 @@ export namespace Prisma {
     user_events: 'user_events',
     user_permissions: 'user_permissions',
     users: 'users',
-    usersession: 'usersession'
+    usersession: 'usersession',
+    fitch_upload_history: 'fitch_upload_history'
   };
 
   export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -1170,7 +1186,7 @@ export namespace Prisma {
 
   export type TypeMap<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, ClientOptions = {}> = {
     meta: {
-      modelProps: "activity_logs" | "activitylog" | "ai_assistant_config" | "ai_conversations" | "ai_entity_memory" | "ai_knowledge_base" | "ai_session_memory" | "article" | "article_tags" | "articlestar" | "articleview" | "credit_articles" | "email_alerts" | "event" | "eventregistration" | "events" | "methodologies" | "newsletter_logs" | "newsletter_preferences" | "newsletter_subscriptions" | "permission" | "publications" | "refreshtoken" | "roles" | "tag" | "user" | "user_activity" | "user_alerts" | "user_article_stars" | "user_events" | "user_permissions" | "users" | "usersession"
+      modelProps: "activity_logs" | "activitylog" | "ai_assistant_config" | "ai_conversations" | "ai_entity_memory" | "ai_knowledge_base" | "ai_session_memory" | "article" | "article_tags" | "articlestar" | "articleview" | "credit_articles" | "email_alerts" | "event" | "eventregistration" | "events" | "methodologies" | "newsletter_logs" | "newsletter_preferences" | "newsletter_subscriptions" | "permission" | "publications" | "refreshtoken" | "roles" | "tag" | "user" | "user_activity" | "user_alerts" | "user_article_stars" | "user_events" | "user_permissions" | "users" | "usersession" | "fitch_upload_history"
       txIsolationLevel: Prisma.TransactionIsolationLevel
     }
     model: {
@@ -3481,6 +3497,76 @@ export namespace Prisma {
           count: {
             args: Prisma.usersessionCountArgs<ExtArgs>
             result: $Utils.Optional<UsersessionCountAggregateOutputType> | number
+          }
+        }
+      }
+      fitch_upload_history: {
+        payload: Prisma.$fitch_upload_historyPayload<ExtArgs>
+        fields: Prisma.fitch_upload_historyFieldRefs
+        operations: {
+          findUnique: {
+            args: Prisma.fitch_upload_historyFindUniqueArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$fitch_upload_historyPayload> | null
+          }
+          findUniqueOrThrow: {
+            args: Prisma.fitch_upload_historyFindUniqueOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$fitch_upload_historyPayload>
+          }
+          findFirst: {
+            args: Prisma.fitch_upload_historyFindFirstArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$fitch_upload_historyPayload> | null
+          }
+          findFirstOrThrow: {
+            args: Prisma.fitch_upload_historyFindFirstOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$fitch_upload_historyPayload>
+          }
+          findMany: {
+            args: Prisma.fitch_upload_historyFindManyArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$fitch_upload_historyPayload>[]
+          }
+          create: {
+            args: Prisma.fitch_upload_historyCreateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$fitch_upload_historyPayload>
+          }
+          createMany: {
+            args: Prisma.fitch_upload_historyCreateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          createManyAndReturn: {
+            args: Prisma.fitch_upload_historyCreateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$fitch_upload_historyPayload>[]
+          }
+          delete: {
+            args: Prisma.fitch_upload_historyDeleteArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$fitch_upload_historyPayload>
+          }
+          update: {
+            args: Prisma.fitch_upload_historyUpdateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$fitch_upload_historyPayload>
+          }
+          deleteMany: {
+            args: Prisma.fitch_upload_historyDeleteManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateMany: {
+            args: Prisma.fitch_upload_historyUpdateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          upsert: {
+            args: Prisma.fitch_upload_historyUpsertArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$fitch_upload_historyPayload>
+          }
+          aggregate: {
+            args: Prisma.Fitch_upload_historyAggregateArgs<ExtArgs>
+            result: $Utils.Optional<AggregateFitch_upload_history>
+          }
+          groupBy: {
+            args: Prisma.fitch_upload_historyGroupByArgs<ExtArgs>
+            result: $Utils.Optional<Fitch_upload_historyGroupByOutputType>[]
+          }
+          count: {
+            args: Prisma.fitch_upload_historyCountArgs<ExtArgs>
+            result: $Utils.Optional<Fitch_upload_historyCountAggregateOutputType> | number
           }
         }
       }
@@ -38342,6 +38428,994 @@ export namespace Prisma {
 
 
   /**
+   * Model fitch_upload_history
+   */
+
+  export type AggregateFitch_upload_history = {
+    _count: Fitch_upload_historyCountAggregateOutputType | null
+    _avg: Fitch_upload_historyAvgAggregateOutputType | null
+    _sum: Fitch_upload_historySumAggregateOutputType | null
+    _min: Fitch_upload_historyMinAggregateOutputType | null
+    _max: Fitch_upload_historyMaxAggregateOutputType | null
+  }
+
+  export type Fitch_upload_historyAvgAggregateOutputType = {
+    id: number | null
+    companies_count: number | null
+    success_count: number | null
+    error_count: number | null
+    file_size: number | null
+  }
+
+  export type Fitch_upload_historySumAggregateOutputType = {
+    id: number | null
+    companies_count: number | null
+    success_count: number | null
+    error_count: number | null
+    file_size: number | null
+  }
+
+  export type Fitch_upload_historyMinAggregateOutputType = {
+    id: number | null
+    user_email: string | null
+    original_filename: string | null
+    updated_filename: string | null
+    file_data: Buffer | null
+    companies_count: number | null
+    success_count: number | null
+    error_count: number | null
+    file_size: number | null
+    created_at: Date | null
+  }
+
+  export type Fitch_upload_historyMaxAggregateOutputType = {
+    id: number | null
+    user_email: string | null
+    original_filename: string | null
+    updated_filename: string | null
+    file_data: Buffer | null
+    companies_count: number | null
+    success_count: number | null
+    error_count: number | null
+    file_size: number | null
+    created_at: Date | null
+  }
+
+  export type Fitch_upload_historyCountAggregateOutputType = {
+    id: number
+    user_email: number
+    original_filename: number
+    updated_filename: number
+    file_data: number
+    companies_count: number
+    success_count: number
+    error_count: number
+    file_size: number
+    created_at: number
+    _all: number
+  }
+
+
+  export type Fitch_upload_historyAvgAggregateInputType = {
+    id?: true
+    companies_count?: true
+    success_count?: true
+    error_count?: true
+    file_size?: true
+  }
+
+  export type Fitch_upload_historySumAggregateInputType = {
+    id?: true
+    companies_count?: true
+    success_count?: true
+    error_count?: true
+    file_size?: true
+  }
+
+  export type Fitch_upload_historyMinAggregateInputType = {
+    id?: true
+    user_email?: true
+    original_filename?: true
+    updated_filename?: true
+    file_data?: true
+    companies_count?: true
+    success_count?: true
+    error_count?: true
+    file_size?: true
+    created_at?: true
+  }
+
+  export type Fitch_upload_historyMaxAggregateInputType = {
+    id?: true
+    user_email?: true
+    original_filename?: true
+    updated_filename?: true
+    file_data?: true
+    companies_count?: true
+    success_count?: true
+    error_count?: true
+    file_size?: true
+    created_at?: true
+  }
+
+  export type Fitch_upload_historyCountAggregateInputType = {
+    id?: true
+    user_email?: true
+    original_filename?: true
+    updated_filename?: true
+    file_data?: true
+    companies_count?: true
+    success_count?: true
+    error_count?: true
+    file_size?: true
+    created_at?: true
+    _all?: true
+  }
+
+  export type Fitch_upload_historyAggregateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which fitch_upload_history to aggregate.
+     */
+    where?: fitch_upload_historyWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of fitch_upload_histories to fetch.
+     */
+    orderBy?: fitch_upload_historyOrderByWithRelationInput | fitch_upload_historyOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the start position
+     */
+    cursor?: fitch_upload_historyWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` fitch_upload_histories from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` fitch_upload_histories.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Count returned fitch_upload_histories
+    **/
+    _count?: true | Fitch_upload_historyCountAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to average
+    **/
+    _avg?: Fitch_upload_historyAvgAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to sum
+    **/
+    _sum?: Fitch_upload_historySumAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the minimum value
+    **/
+    _min?: Fitch_upload_historyMinAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the maximum value
+    **/
+    _max?: Fitch_upload_historyMaxAggregateInputType
+  }
+
+  export type GetFitch_upload_historyAggregateType<T extends Fitch_upload_historyAggregateArgs> = {
+        [P in keyof T & keyof AggregateFitch_upload_history]: P extends '_count' | 'count'
+      ? T[P] extends true
+        ? number
+        : GetScalarType<T[P], AggregateFitch_upload_history[P]>
+      : GetScalarType<T[P], AggregateFitch_upload_history[P]>
+  }
+
+
+
+
+  export type fitch_upload_historyGroupByArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: fitch_upload_historyWhereInput
+    orderBy?: fitch_upload_historyOrderByWithAggregationInput | fitch_upload_historyOrderByWithAggregationInput[]
+    by: Fitch_upload_historyScalarFieldEnum[] | Fitch_upload_historyScalarFieldEnum
+    having?: fitch_upload_historyScalarWhereWithAggregatesInput
+    take?: number
+    skip?: number
+    _count?: Fitch_upload_historyCountAggregateInputType | true
+    _avg?: Fitch_upload_historyAvgAggregateInputType
+    _sum?: Fitch_upload_historySumAggregateInputType
+    _min?: Fitch_upload_historyMinAggregateInputType
+    _max?: Fitch_upload_historyMaxAggregateInputType
+  }
+
+  export type Fitch_upload_historyGroupByOutputType = {
+    id: number
+    user_email: string
+    original_filename: string
+    updated_filename: string
+    file_data: Buffer
+    companies_count: number
+    success_count: number
+    error_count: number
+    file_size: number | null
+    created_at: Date
+    _count: Fitch_upload_historyCountAggregateOutputType | null
+    _avg: Fitch_upload_historyAvgAggregateOutputType | null
+    _sum: Fitch_upload_historySumAggregateOutputType | null
+    _min: Fitch_upload_historyMinAggregateOutputType | null
+    _max: Fitch_upload_historyMaxAggregateOutputType | null
+  }
+
+  type GetFitch_upload_historyGroupByPayload<T extends fitch_upload_historyGroupByArgs> = Prisma.PrismaPromise<
+    Array<
+      PickEnumerable<Fitch_upload_historyGroupByOutputType, T['by']> &
+        {
+          [P in ((keyof T) & (keyof Fitch_upload_historyGroupByOutputType))]: P extends '_count'
+            ? T[P] extends boolean
+              ? number
+              : GetScalarType<T[P], Fitch_upload_historyGroupByOutputType[P]>
+            : GetScalarType<T[P], Fitch_upload_historyGroupByOutputType[P]>
+        }
+      >
+    >
+
+
+  export type fitch_upload_historySelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    user_email?: boolean
+    original_filename?: boolean
+    updated_filename?: boolean
+    file_data?: boolean
+    companies_count?: boolean
+    success_count?: boolean
+    error_count?: boolean
+    file_size?: boolean
+    created_at?: boolean
+  }, ExtArgs["result"]["fitch_upload_history"]>
+
+  export type fitch_upload_historySelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    user_email?: boolean
+    original_filename?: boolean
+    updated_filename?: boolean
+    file_data?: boolean
+    companies_count?: boolean
+    success_count?: boolean
+    error_count?: boolean
+    file_size?: boolean
+    created_at?: boolean
+  }, ExtArgs["result"]["fitch_upload_history"]>
+
+  export type fitch_upload_historySelectScalar = {
+    id?: boolean
+    user_email?: boolean
+    original_filename?: boolean
+    updated_filename?: boolean
+    file_data?: boolean
+    companies_count?: boolean
+    success_count?: boolean
+    error_count?: boolean
+    file_size?: boolean
+    created_at?: boolean
+  }
+
+
+  export type $fitch_upload_historyPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    name: "fitch_upload_history"
+    objects: {}
+    scalars: $Extensions.GetPayloadResult<{
+      id: number
+      user_email: string
+      original_filename: string
+      updated_filename: string
+      file_data: Buffer
+      companies_count: number
+      success_count: number
+      error_count: number
+      file_size: number | null
+      created_at: Date
+    }, ExtArgs["result"]["fitch_upload_history"]>
+    composites: {}
+  }
+
+  type fitch_upload_historyGetPayload<S extends boolean | null | undefined | fitch_upload_historyDefaultArgs> = $Result.GetResult<Prisma.$fitch_upload_historyPayload, S>
+
+  type fitch_upload_historyCountArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = 
+    Omit<fitch_upload_historyFindManyArgs, 'select' | 'include' | 'distinct'> & {
+      select?: Fitch_upload_historyCountAggregateInputType | true
+    }
+
+  export interface fitch_upload_historyDelegate<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> {
+    [K: symbol]: { types: Prisma.TypeMap<ExtArgs>['model']['fitch_upload_history'], meta: { name: 'fitch_upload_history' } }
+    /**
+     * Find zero or one Fitch_upload_history that matches the filter.
+     * @param {fitch_upload_historyFindUniqueArgs} args - Arguments to find a Fitch_upload_history
+     * @example
+     * // Get one Fitch_upload_history
+     * const fitch_upload_history = await prisma.fitch_upload_history.findUnique({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUnique<T extends fitch_upload_historyFindUniqueArgs>(args: SelectSubset<T, fitch_upload_historyFindUniqueArgs<ExtArgs>>): Prisma__fitch_upload_historyClient<$Result.GetResult<Prisma.$fitch_upload_historyPayload<ExtArgs>, T, "findUnique"> | null, null, ExtArgs>
+
+    /**
+     * Find one Fitch_upload_history that matches the filter or throw an error with `error.code='P2025'` 
+     * if no matches were found.
+     * @param {fitch_upload_historyFindUniqueOrThrowArgs} args - Arguments to find a Fitch_upload_history
+     * @example
+     * // Get one Fitch_upload_history
+     * const fitch_upload_history = await prisma.fitch_upload_history.findUniqueOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUniqueOrThrow<T extends fitch_upload_historyFindUniqueOrThrowArgs>(args: SelectSubset<T, fitch_upload_historyFindUniqueOrThrowArgs<ExtArgs>>): Prisma__fitch_upload_historyClient<$Result.GetResult<Prisma.$fitch_upload_historyPayload<ExtArgs>, T, "findUniqueOrThrow">, never, ExtArgs>
+
+    /**
+     * Find the first Fitch_upload_history that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {fitch_upload_historyFindFirstArgs} args - Arguments to find a Fitch_upload_history
+     * @example
+     * // Get one Fitch_upload_history
+     * const fitch_upload_history = await prisma.fitch_upload_history.findFirst({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirst<T extends fitch_upload_historyFindFirstArgs>(args?: SelectSubset<T, fitch_upload_historyFindFirstArgs<ExtArgs>>): Prisma__fitch_upload_historyClient<$Result.GetResult<Prisma.$fitch_upload_historyPayload<ExtArgs>, T, "findFirst"> | null, null, ExtArgs>
+
+    /**
+     * Find the first Fitch_upload_history that matches the filter or
+     * throw `PrismaKnownClientError` with `P2025` code if no matches were found.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {fitch_upload_historyFindFirstOrThrowArgs} args - Arguments to find a Fitch_upload_history
+     * @example
+     * // Get one Fitch_upload_history
+     * const fitch_upload_history = await prisma.fitch_upload_history.findFirstOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirstOrThrow<T extends fitch_upload_historyFindFirstOrThrowArgs>(args?: SelectSubset<T, fitch_upload_historyFindFirstOrThrowArgs<ExtArgs>>): Prisma__fitch_upload_historyClient<$Result.GetResult<Prisma.$fitch_upload_historyPayload<ExtArgs>, T, "findFirstOrThrow">, never, ExtArgs>
+
+    /**
+     * Find zero or more Fitch_upload_histories that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {fitch_upload_historyFindManyArgs} args - Arguments to filter and select certain fields only.
+     * @example
+     * // Get all Fitch_upload_histories
+     * const fitch_upload_histories = await prisma.fitch_upload_history.findMany()
+     * 
+     * // Get first 10 Fitch_upload_histories
+     * const fitch_upload_histories = await prisma.fitch_upload_history.findMany({ take: 10 })
+     * 
+     * // Only select the `id`
+     * const fitch_upload_historyWithIdOnly = await prisma.fitch_upload_history.findMany({ select: { id: true } })
+     * 
+     */
+    findMany<T extends fitch_upload_historyFindManyArgs>(args?: SelectSubset<T, fitch_upload_historyFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$fitch_upload_historyPayload<ExtArgs>, T, "findMany">>
+
+    /**
+     * Create a Fitch_upload_history.
+     * @param {fitch_upload_historyCreateArgs} args - Arguments to create a Fitch_upload_history.
+     * @example
+     * // Create one Fitch_upload_history
+     * const Fitch_upload_history = await prisma.fitch_upload_history.create({
+     *   data: {
+     *     // ... data to create a Fitch_upload_history
+     *   }
+     * })
+     * 
+     */
+    create<T extends fitch_upload_historyCreateArgs>(args: SelectSubset<T, fitch_upload_historyCreateArgs<ExtArgs>>): Prisma__fitch_upload_historyClient<$Result.GetResult<Prisma.$fitch_upload_historyPayload<ExtArgs>, T, "create">, never, ExtArgs>
+
+    /**
+     * Create many Fitch_upload_histories.
+     * @param {fitch_upload_historyCreateManyArgs} args - Arguments to create many Fitch_upload_histories.
+     * @example
+     * // Create many Fitch_upload_histories
+     * const fitch_upload_history = await prisma.fitch_upload_history.createMany({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     *     
+     */
+    createMany<T extends fitch_upload_historyCreateManyArgs>(args?: SelectSubset<T, fitch_upload_historyCreateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Create many Fitch_upload_histories and returns the data saved in the database.
+     * @param {fitch_upload_historyCreateManyAndReturnArgs} args - Arguments to create many Fitch_upload_histories.
+     * @example
+     * // Create many Fitch_upload_histories
+     * const fitch_upload_history = await prisma.fitch_upload_history.createManyAndReturn({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Create many Fitch_upload_histories and only return the `id`
+     * const fitch_upload_historyWithIdOnly = await prisma.fitch_upload_history.createManyAndReturn({ 
+     *   select: { id: true },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    createManyAndReturn<T extends fitch_upload_historyCreateManyAndReturnArgs>(args?: SelectSubset<T, fitch_upload_historyCreateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$fitch_upload_historyPayload<ExtArgs>, T, "createManyAndReturn">>
+
+    /**
+     * Delete a Fitch_upload_history.
+     * @param {fitch_upload_historyDeleteArgs} args - Arguments to delete one Fitch_upload_history.
+     * @example
+     * // Delete one Fitch_upload_history
+     * const Fitch_upload_history = await prisma.fitch_upload_history.delete({
+     *   where: {
+     *     // ... filter to delete one Fitch_upload_history
+     *   }
+     * })
+     * 
+     */
+    delete<T extends fitch_upload_historyDeleteArgs>(args: SelectSubset<T, fitch_upload_historyDeleteArgs<ExtArgs>>): Prisma__fitch_upload_historyClient<$Result.GetResult<Prisma.$fitch_upload_historyPayload<ExtArgs>, T, "delete">, never, ExtArgs>
+
+    /**
+     * Update one Fitch_upload_history.
+     * @param {fitch_upload_historyUpdateArgs} args - Arguments to update one Fitch_upload_history.
+     * @example
+     * // Update one Fitch_upload_history
+     * const fitch_upload_history = await prisma.fitch_upload_history.update({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    update<T extends fitch_upload_historyUpdateArgs>(args: SelectSubset<T, fitch_upload_historyUpdateArgs<ExtArgs>>): Prisma__fitch_upload_historyClient<$Result.GetResult<Prisma.$fitch_upload_historyPayload<ExtArgs>, T, "update">, never, ExtArgs>
+
+    /**
+     * Delete zero or more Fitch_upload_histories.
+     * @param {fitch_upload_historyDeleteManyArgs} args - Arguments to filter Fitch_upload_histories to delete.
+     * @example
+     * // Delete a few Fitch_upload_histories
+     * const { count } = await prisma.fitch_upload_history.deleteMany({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     * 
+     */
+    deleteMany<T extends fitch_upload_historyDeleteManyArgs>(args?: SelectSubset<T, fitch_upload_historyDeleteManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more Fitch_upload_histories.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {fitch_upload_historyUpdateManyArgs} args - Arguments to update one or more rows.
+     * @example
+     * // Update many Fitch_upload_histories
+     * const fitch_upload_history = await prisma.fitch_upload_history.updateMany({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    updateMany<T extends fitch_upload_historyUpdateManyArgs>(args: SelectSubset<T, fitch_upload_historyUpdateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Create or update one Fitch_upload_history.
+     * @param {fitch_upload_historyUpsertArgs} args - Arguments to update or create a Fitch_upload_history.
+     * @example
+     * // Update or create a Fitch_upload_history
+     * const fitch_upload_history = await prisma.fitch_upload_history.upsert({
+     *   create: {
+     *     // ... data to create a Fitch_upload_history
+     *   },
+     *   update: {
+     *     // ... in case it already exists, update
+     *   },
+     *   where: {
+     *     // ... the filter for the Fitch_upload_history we want to update
+     *   }
+     * })
+     */
+    upsert<T extends fitch_upload_historyUpsertArgs>(args: SelectSubset<T, fitch_upload_historyUpsertArgs<ExtArgs>>): Prisma__fitch_upload_historyClient<$Result.GetResult<Prisma.$fitch_upload_historyPayload<ExtArgs>, T, "upsert">, never, ExtArgs>
+
+
+    /**
+     * Count the number of Fitch_upload_histories.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {fitch_upload_historyCountArgs} args - Arguments to filter Fitch_upload_histories to count.
+     * @example
+     * // Count the number of Fitch_upload_histories
+     * const count = await prisma.fitch_upload_history.count({
+     *   where: {
+     *     // ... the filter for the Fitch_upload_histories we want to count
+     *   }
+     * })
+    **/
+    count<T extends fitch_upload_historyCountArgs>(
+      args?: Subset<T, fitch_upload_historyCountArgs>,
+    ): Prisma.PrismaPromise<
+      T extends $Utils.Record<'select', any>
+        ? T['select'] extends true
+          ? number
+          : GetScalarType<T['select'], Fitch_upload_historyCountAggregateOutputType>
+        : number
+    >
+
+    /**
+     * Allows you to perform aggregations operations on a Fitch_upload_history.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {Fitch_upload_historyAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @example
+     * // Ordered by age ascending
+     * // Where email contains prisma.io
+     * // Limited to the 10 users
+     * const aggregations = await prisma.user.aggregate({
+     *   _avg: {
+     *     age: true,
+     *   },
+     *   where: {
+     *     email: {
+     *       contains: "prisma.io",
+     *     },
+     *   },
+     *   orderBy: {
+     *     age: "asc",
+     *   },
+     *   take: 10,
+     * })
+    **/
+    aggregate<T extends Fitch_upload_historyAggregateArgs>(args: Subset<T, Fitch_upload_historyAggregateArgs>): Prisma.PrismaPromise<GetFitch_upload_historyAggregateType<T>>
+
+    /**
+     * Group by Fitch_upload_history.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {fitch_upload_historyGroupByArgs} args - Group by arguments.
+     * @example
+     * // Group by city, order by createdAt, get count
+     * const result = await prisma.user.groupBy({
+     *   by: ['city', 'createdAt'],
+     *   orderBy: {
+     *     createdAt: true
+     *   },
+     *   _count: {
+     *     _all: true
+     *   },
+     * })
+     * 
+    **/
+    groupBy<
+      T extends fitch_upload_historyGroupByArgs,
+      HasSelectOrTake extends Or<
+        Extends<'skip', Keys<T>>,
+        Extends<'take', Keys<T>>
+      >,
+      OrderByArg extends True extends HasSelectOrTake
+        ? { orderBy: fitch_upload_historyGroupByArgs['orderBy'] }
+        : { orderBy?: fitch_upload_historyGroupByArgs['orderBy'] },
+      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
+      ByFields extends MaybeTupleToUnion<T['by']>,
+      ByValid extends Has<ByFields, OrderFields>,
+      HavingFields extends GetHavingFields<T['having']>,
+      HavingValid extends Has<ByFields, HavingFields>,
+      ByEmpty extends T['by'] extends never[] ? True : False,
+      InputErrors extends ByEmpty extends True
+      ? `Error: "by" must not be empty.`
+      : HavingValid extends False
+      ? {
+          [P in HavingFields]: P extends ByFields
+            ? never
+            : P extends string
+            ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
+            : [
+                Error,
+                'Field ',
+                P,
+                ` in "having" needs to be provided in "by"`,
+              ]
+        }[HavingFields]
+      : 'take' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "take", you also need to provide "orderBy"'
+      : 'skip' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "skip", you also need to provide "orderBy"'
+      : ByValid extends True
+      ? {}
+      : {
+          [P in OrderFields]: P extends ByFields
+            ? never
+            : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+        }[OrderFields]
+    >(args: SubsetIntersection<T, fitch_upload_historyGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetFitch_upload_historyGroupByPayload<T> : Prisma.PrismaPromise<InputErrors>
+  /**
+   * Fields of the fitch_upload_history model
+   */
+  readonly fields: fitch_upload_historyFieldRefs;
+  }
+
+  /**
+   * The delegate class that acts as a "Promise-like" for fitch_upload_history.
+   * Why is this prefixed with `Prisma__`?
+   * Because we want to prevent naming conflicts as mentioned in
+   * https://github.com/prisma/prisma-client-js/issues/707
+   */
+  export interface Prisma__fitch_upload_historyClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> extends Prisma.PrismaPromise<T> {
+    readonly [Symbol.toStringTag]: "PrismaPromise"
+    /**
+     * Attaches callbacks for the resolution and/or rejection of the Promise.
+     * @param onfulfilled The callback to execute when the Promise is resolved.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of which ever callback is executed.
+     */
+    then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): $Utils.JsPromise<TResult1 | TResult2>
+    /**
+     * Attaches a callback for only the rejection of the Promise.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of the callback.
+     */
+    catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null): $Utils.JsPromise<T | TResult>
+    /**
+     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
+     * resolved value cannot be modified from the callback.
+     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
+     * @returns A Promise for the completion of the callback.
+     */
+    finally(onfinally?: (() => void) | undefined | null): $Utils.JsPromise<T>
+  }
+
+
+
+
+  /**
+   * Fields of the fitch_upload_history model
+   */ 
+  interface fitch_upload_historyFieldRefs {
+    readonly id: FieldRef<"fitch_upload_history", 'Int'>
+    readonly user_email: FieldRef<"fitch_upload_history", 'String'>
+    readonly original_filename: FieldRef<"fitch_upload_history", 'String'>
+    readonly updated_filename: FieldRef<"fitch_upload_history", 'String'>
+    readonly file_data: FieldRef<"fitch_upload_history", 'Bytes'>
+    readonly companies_count: FieldRef<"fitch_upload_history", 'Int'>
+    readonly success_count: FieldRef<"fitch_upload_history", 'Int'>
+    readonly error_count: FieldRef<"fitch_upload_history", 'Int'>
+    readonly file_size: FieldRef<"fitch_upload_history", 'Int'>
+    readonly created_at: FieldRef<"fitch_upload_history", 'DateTime'>
+  }
+    
+
+  // Custom InputTypes
+  /**
+   * fitch_upload_history findUnique
+   */
+  export type fitch_upload_historyFindUniqueArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the fitch_upload_history
+     */
+    select?: fitch_upload_historySelect<ExtArgs> | null
+    /**
+     * Filter, which fitch_upload_history to fetch.
+     */
+    where: fitch_upload_historyWhereUniqueInput
+  }
+
+  /**
+   * fitch_upload_history findUniqueOrThrow
+   */
+  export type fitch_upload_historyFindUniqueOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the fitch_upload_history
+     */
+    select?: fitch_upload_historySelect<ExtArgs> | null
+    /**
+     * Filter, which fitch_upload_history to fetch.
+     */
+    where: fitch_upload_historyWhereUniqueInput
+  }
+
+  /**
+   * fitch_upload_history findFirst
+   */
+  export type fitch_upload_historyFindFirstArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the fitch_upload_history
+     */
+    select?: fitch_upload_historySelect<ExtArgs> | null
+    /**
+     * Filter, which fitch_upload_history to fetch.
+     */
+    where?: fitch_upload_historyWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of fitch_upload_histories to fetch.
+     */
+    orderBy?: fitch_upload_historyOrderByWithRelationInput | fitch_upload_historyOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for fitch_upload_histories.
+     */
+    cursor?: fitch_upload_historyWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` fitch_upload_histories from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` fitch_upload_histories.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of fitch_upload_histories.
+     */
+    distinct?: Fitch_upload_historyScalarFieldEnum | Fitch_upload_historyScalarFieldEnum[]
+  }
+
+  /**
+   * fitch_upload_history findFirstOrThrow
+   */
+  export type fitch_upload_historyFindFirstOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the fitch_upload_history
+     */
+    select?: fitch_upload_historySelect<ExtArgs> | null
+    /**
+     * Filter, which fitch_upload_history to fetch.
+     */
+    where?: fitch_upload_historyWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of fitch_upload_histories to fetch.
+     */
+    orderBy?: fitch_upload_historyOrderByWithRelationInput | fitch_upload_historyOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for fitch_upload_histories.
+     */
+    cursor?: fitch_upload_historyWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` fitch_upload_histories from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` fitch_upload_histories.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of fitch_upload_histories.
+     */
+    distinct?: Fitch_upload_historyScalarFieldEnum | Fitch_upload_historyScalarFieldEnum[]
+  }
+
+  /**
+   * fitch_upload_history findMany
+   */
+  export type fitch_upload_historyFindManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the fitch_upload_history
+     */
+    select?: fitch_upload_historySelect<ExtArgs> | null
+    /**
+     * Filter, which fitch_upload_histories to fetch.
+     */
+    where?: fitch_upload_historyWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of fitch_upload_histories to fetch.
+     */
+    orderBy?: fitch_upload_historyOrderByWithRelationInput | fitch_upload_historyOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for listing fitch_upload_histories.
+     */
+    cursor?: fitch_upload_historyWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` fitch_upload_histories from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` fitch_upload_histories.
+     */
+    skip?: number
+    distinct?: Fitch_upload_historyScalarFieldEnum | Fitch_upload_historyScalarFieldEnum[]
+  }
+
+  /**
+   * fitch_upload_history create
+   */
+  export type fitch_upload_historyCreateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the fitch_upload_history
+     */
+    select?: fitch_upload_historySelect<ExtArgs> | null
+    /**
+     * The data needed to create a fitch_upload_history.
+     */
+    data: XOR<fitch_upload_historyCreateInput, fitch_upload_historyUncheckedCreateInput>
+  }
+
+  /**
+   * fitch_upload_history createMany
+   */
+  export type fitch_upload_historyCreateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to create many fitch_upload_histories.
+     */
+    data: fitch_upload_historyCreateManyInput | fitch_upload_historyCreateManyInput[]
+    skipDuplicates?: boolean
+  }
+
+  /**
+   * fitch_upload_history createManyAndReturn
+   */
+  export type fitch_upload_historyCreateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the fitch_upload_history
+     */
+    select?: fitch_upload_historySelectCreateManyAndReturn<ExtArgs> | null
+    /**
+     * The data used to create many fitch_upload_histories.
+     */
+    data: fitch_upload_historyCreateManyInput | fitch_upload_historyCreateManyInput[]
+    skipDuplicates?: boolean
+  }
+
+  /**
+   * fitch_upload_history update
+   */
+  export type fitch_upload_historyUpdateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the fitch_upload_history
+     */
+    select?: fitch_upload_historySelect<ExtArgs> | null
+    /**
+     * The data needed to update a fitch_upload_history.
+     */
+    data: XOR<fitch_upload_historyUpdateInput, fitch_upload_historyUncheckedUpdateInput>
+    /**
+     * Choose, which fitch_upload_history to update.
+     */
+    where: fitch_upload_historyWhereUniqueInput
+  }
+
+  /**
+   * fitch_upload_history updateMany
+   */
+  export type fitch_upload_historyUpdateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to update fitch_upload_histories.
+     */
+    data: XOR<fitch_upload_historyUpdateManyMutationInput, fitch_upload_historyUncheckedUpdateManyInput>
+    /**
+     * Filter which fitch_upload_histories to update
+     */
+    where?: fitch_upload_historyWhereInput
+  }
+
+  /**
+   * fitch_upload_history upsert
+   */
+  export type fitch_upload_historyUpsertArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the fitch_upload_history
+     */
+    select?: fitch_upload_historySelect<ExtArgs> | null
+    /**
+     * The filter to search for the fitch_upload_history to update in case it exists.
+     */
+    where: fitch_upload_historyWhereUniqueInput
+    /**
+     * In case the fitch_upload_history found by the `where` argument doesn't exist, create a new fitch_upload_history with this data.
+     */
+    create: XOR<fitch_upload_historyCreateInput, fitch_upload_historyUncheckedCreateInput>
+    /**
+     * In case the fitch_upload_history was found with the provided `where` argument, update it with this data.
+     */
+    update: XOR<fitch_upload_historyUpdateInput, fitch_upload_historyUncheckedUpdateInput>
+  }
+
+  /**
+   * fitch_upload_history delete
+   */
+  export type fitch_upload_historyDeleteArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the fitch_upload_history
+     */
+    select?: fitch_upload_historySelect<ExtArgs> | null
+    /**
+     * Filter which fitch_upload_history to delete.
+     */
+    where: fitch_upload_historyWhereUniqueInput
+  }
+
+  /**
+   * fitch_upload_history deleteMany
+   */
+  export type fitch_upload_historyDeleteManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which fitch_upload_histories to delete
+     */
+    where?: fitch_upload_historyWhereInput
+  }
+
+  /**
+   * fitch_upload_history without action
+   */
+  export type fitch_upload_historyDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the fitch_upload_history
+     */
+    select?: fitch_upload_historySelect<ExtArgs> | null
+  }
+
+
+  /**
    * Enums
    */
 
@@ -38878,6 +39952,22 @@ export namespace Prisma {
   export type UsersessionScalarFieldEnum = (typeof UsersessionScalarFieldEnum)[keyof typeof UsersessionScalarFieldEnum]
 
 
+  export const Fitch_upload_historyScalarFieldEnum: {
+    id: 'id',
+    user_email: 'user_email',
+    original_filename: 'original_filename',
+    updated_filename: 'updated_filename',
+    file_data: 'file_data',
+    companies_count: 'companies_count',
+    success_count: 'success_count',
+    error_count: 'error_count',
+    file_size: 'file_size',
+    created_at: 'created_at'
+  };
+
+  export type Fitch_upload_historyScalarFieldEnum = (typeof Fitch_upload_historyScalarFieldEnum)[keyof typeof Fitch_upload_historyScalarFieldEnum]
+
+
   export const SortOrder: {
     asc: 'asc',
     desc: 'desc'
@@ -39040,6 +40130,20 @@ export namespace Prisma {
    * Reference to a field of type 'userrole[]'
    */
   export type ListEnumuserroleFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'userrole[]'>
+    
+
+
+  /**
+   * Reference to a field of type 'Bytes'
+   */
+  export type BytesFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Bytes'>
+    
+
+
+  /**
+   * Reference to a field of type 'Bytes[]'
+   */
+  export type ListBytesFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Bytes[]'>
     
   /**
    * Deep Input Types
@@ -41788,6 +42892,85 @@ export namespace Prisma {
     id?: IntWithAggregatesFilter<"usersession"> | number
     created_at?: DateTimeWithAggregatesFilter<"usersession"> | Date | string
     updated_at?: DateTimeWithAggregatesFilter<"usersession"> | Date | string
+  }
+
+  export type fitch_upload_historyWhereInput = {
+    AND?: fitch_upload_historyWhereInput | fitch_upload_historyWhereInput[]
+    OR?: fitch_upload_historyWhereInput[]
+    NOT?: fitch_upload_historyWhereInput | fitch_upload_historyWhereInput[]
+    id?: IntFilter<"fitch_upload_history"> | number
+    user_email?: StringFilter<"fitch_upload_history"> | string
+    original_filename?: StringFilter<"fitch_upload_history"> | string
+    updated_filename?: StringFilter<"fitch_upload_history"> | string
+    file_data?: BytesFilter<"fitch_upload_history"> | Buffer
+    companies_count?: IntFilter<"fitch_upload_history"> | number
+    success_count?: IntFilter<"fitch_upload_history"> | number
+    error_count?: IntFilter<"fitch_upload_history"> | number
+    file_size?: IntNullableFilter<"fitch_upload_history"> | number | null
+    created_at?: DateTimeFilter<"fitch_upload_history"> | Date | string
+  }
+
+  export type fitch_upload_historyOrderByWithRelationInput = {
+    id?: SortOrder
+    user_email?: SortOrder
+    original_filename?: SortOrder
+    updated_filename?: SortOrder
+    file_data?: SortOrder
+    companies_count?: SortOrder
+    success_count?: SortOrder
+    error_count?: SortOrder
+    file_size?: SortOrderInput | SortOrder
+    created_at?: SortOrder
+  }
+
+  export type fitch_upload_historyWhereUniqueInput = Prisma.AtLeast<{
+    id?: number
+    AND?: fitch_upload_historyWhereInput | fitch_upload_historyWhereInput[]
+    OR?: fitch_upload_historyWhereInput[]
+    NOT?: fitch_upload_historyWhereInput | fitch_upload_historyWhereInput[]
+    user_email?: StringFilter<"fitch_upload_history"> | string
+    original_filename?: StringFilter<"fitch_upload_history"> | string
+    updated_filename?: StringFilter<"fitch_upload_history"> | string
+    file_data?: BytesFilter<"fitch_upload_history"> | Buffer
+    companies_count?: IntFilter<"fitch_upload_history"> | number
+    success_count?: IntFilter<"fitch_upload_history"> | number
+    error_count?: IntFilter<"fitch_upload_history"> | number
+    file_size?: IntNullableFilter<"fitch_upload_history"> | number | null
+    created_at?: DateTimeFilter<"fitch_upload_history"> | Date | string
+  }, "id">
+
+  export type fitch_upload_historyOrderByWithAggregationInput = {
+    id?: SortOrder
+    user_email?: SortOrder
+    original_filename?: SortOrder
+    updated_filename?: SortOrder
+    file_data?: SortOrder
+    companies_count?: SortOrder
+    success_count?: SortOrder
+    error_count?: SortOrder
+    file_size?: SortOrderInput | SortOrder
+    created_at?: SortOrder
+    _count?: fitch_upload_historyCountOrderByAggregateInput
+    _avg?: fitch_upload_historyAvgOrderByAggregateInput
+    _max?: fitch_upload_historyMaxOrderByAggregateInput
+    _min?: fitch_upload_historyMinOrderByAggregateInput
+    _sum?: fitch_upload_historySumOrderByAggregateInput
+  }
+
+  export type fitch_upload_historyScalarWhereWithAggregatesInput = {
+    AND?: fitch_upload_historyScalarWhereWithAggregatesInput | fitch_upload_historyScalarWhereWithAggregatesInput[]
+    OR?: fitch_upload_historyScalarWhereWithAggregatesInput[]
+    NOT?: fitch_upload_historyScalarWhereWithAggregatesInput | fitch_upload_historyScalarWhereWithAggregatesInput[]
+    id?: IntWithAggregatesFilter<"fitch_upload_history"> | number
+    user_email?: StringWithAggregatesFilter<"fitch_upload_history"> | string
+    original_filename?: StringWithAggregatesFilter<"fitch_upload_history"> | string
+    updated_filename?: StringWithAggregatesFilter<"fitch_upload_history"> | string
+    file_data?: BytesWithAggregatesFilter<"fitch_upload_history"> | Buffer
+    companies_count?: IntWithAggregatesFilter<"fitch_upload_history"> | number
+    success_count?: IntWithAggregatesFilter<"fitch_upload_history"> | number
+    error_count?: IntWithAggregatesFilter<"fitch_upload_history"> | number
+    file_size?: IntNullableWithAggregatesFilter<"fitch_upload_history"> | number | null
+    created_at?: DateTimeWithAggregatesFilter<"fitch_upload_history"> | Date | string
   }
 
   export type activity_logsCreateInput = {
@@ -44745,6 +45928,94 @@ export namespace Prisma {
     updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
+  export type fitch_upload_historyCreateInput = {
+    user_email: string
+    original_filename: string
+    updated_filename: string
+    file_data: Buffer
+    companies_count?: number
+    success_count?: number
+    error_count?: number
+    file_size?: number | null
+    created_at?: Date | string
+  }
+
+  export type fitch_upload_historyUncheckedCreateInput = {
+    id?: number
+    user_email: string
+    original_filename: string
+    updated_filename: string
+    file_data: Buffer
+    companies_count?: number
+    success_count?: number
+    error_count?: number
+    file_size?: number | null
+    created_at?: Date | string
+  }
+
+  export type fitch_upload_historyUpdateInput = {
+    user_email?: StringFieldUpdateOperationsInput | string
+    original_filename?: StringFieldUpdateOperationsInput | string
+    updated_filename?: StringFieldUpdateOperationsInput | string
+    file_data?: BytesFieldUpdateOperationsInput | Buffer
+    companies_count?: IntFieldUpdateOperationsInput | number
+    success_count?: IntFieldUpdateOperationsInput | number
+    error_count?: IntFieldUpdateOperationsInput | number
+    file_size?: NullableIntFieldUpdateOperationsInput | number | null
+    created_at?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type fitch_upload_historyUncheckedUpdateInput = {
+    id?: IntFieldUpdateOperationsInput | number
+    user_email?: StringFieldUpdateOperationsInput | string
+    original_filename?: StringFieldUpdateOperationsInput | string
+    updated_filename?: StringFieldUpdateOperationsInput | string
+    file_data?: BytesFieldUpdateOperationsInput | Buffer
+    companies_count?: IntFieldUpdateOperationsInput | number
+    success_count?: IntFieldUpdateOperationsInput | number
+    error_count?: IntFieldUpdateOperationsInput | number
+    file_size?: NullableIntFieldUpdateOperationsInput | number | null
+    created_at?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type fitch_upload_historyCreateManyInput = {
+    id?: number
+    user_email: string
+    original_filename: string
+    updated_filename: string
+    file_data: Buffer
+    companies_count?: number
+    success_count?: number
+    error_count?: number
+    file_size?: number | null
+    created_at?: Date | string
+  }
+
+  export type fitch_upload_historyUpdateManyMutationInput = {
+    user_email?: StringFieldUpdateOperationsInput | string
+    original_filename?: StringFieldUpdateOperationsInput | string
+    updated_filename?: StringFieldUpdateOperationsInput | string
+    file_data?: BytesFieldUpdateOperationsInput | Buffer
+    companies_count?: IntFieldUpdateOperationsInput | number
+    success_count?: IntFieldUpdateOperationsInput | number
+    error_count?: IntFieldUpdateOperationsInput | number
+    file_size?: NullableIntFieldUpdateOperationsInput | number | null
+    created_at?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type fitch_upload_historyUncheckedUpdateManyInput = {
+    id?: IntFieldUpdateOperationsInput | number
+    user_email?: StringFieldUpdateOperationsInput | string
+    original_filename?: StringFieldUpdateOperationsInput | string
+    updated_filename?: StringFieldUpdateOperationsInput | string
+    file_data?: BytesFieldUpdateOperationsInput | Buffer
+    companies_count?: IntFieldUpdateOperationsInput | number
+    success_count?: IntFieldUpdateOperationsInput | number
+    error_count?: IntFieldUpdateOperationsInput | number
+    file_size?: NullableIntFieldUpdateOperationsInput | number | null
+    created_at?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
   export type IntFilter<$PrismaModel = never> = {
     equals?: number | IntFieldRefInput<$PrismaModel>
     in?: number[] | ListIntFieldRefInput<$PrismaModel>
@@ -47025,6 +48296,78 @@ export namespace Prisma {
     id?: SortOrder
   }
 
+  export type BytesFilter<$PrismaModel = never> = {
+    equals?: Buffer | BytesFieldRefInput<$PrismaModel>
+    in?: Buffer[] | ListBytesFieldRefInput<$PrismaModel>
+    notIn?: Buffer[] | ListBytesFieldRefInput<$PrismaModel>
+    not?: NestedBytesFilter<$PrismaModel> | Buffer
+  }
+
+  export type fitch_upload_historyCountOrderByAggregateInput = {
+    id?: SortOrder
+    user_email?: SortOrder
+    original_filename?: SortOrder
+    updated_filename?: SortOrder
+    file_data?: SortOrder
+    companies_count?: SortOrder
+    success_count?: SortOrder
+    error_count?: SortOrder
+    file_size?: SortOrder
+    created_at?: SortOrder
+  }
+
+  export type fitch_upload_historyAvgOrderByAggregateInput = {
+    id?: SortOrder
+    companies_count?: SortOrder
+    success_count?: SortOrder
+    error_count?: SortOrder
+    file_size?: SortOrder
+  }
+
+  export type fitch_upload_historyMaxOrderByAggregateInput = {
+    id?: SortOrder
+    user_email?: SortOrder
+    original_filename?: SortOrder
+    updated_filename?: SortOrder
+    file_data?: SortOrder
+    companies_count?: SortOrder
+    success_count?: SortOrder
+    error_count?: SortOrder
+    file_size?: SortOrder
+    created_at?: SortOrder
+  }
+
+  export type fitch_upload_historyMinOrderByAggregateInput = {
+    id?: SortOrder
+    user_email?: SortOrder
+    original_filename?: SortOrder
+    updated_filename?: SortOrder
+    file_data?: SortOrder
+    companies_count?: SortOrder
+    success_count?: SortOrder
+    error_count?: SortOrder
+    file_size?: SortOrder
+    created_at?: SortOrder
+  }
+
+  export type fitch_upload_historySumOrderByAggregateInput = {
+    id?: SortOrder
+    companies_count?: SortOrder
+    success_count?: SortOrder
+    error_count?: SortOrder
+    file_size?: SortOrder
+  }
+
+  export type BytesWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: Buffer | BytesFieldRefInput<$PrismaModel>
+    in?: Buffer[] | ListBytesFieldRefInput<$PrismaModel>
+    notIn?: Buffer[] | ListBytesFieldRefInput<$PrismaModel>
+    not?: NestedBytesWithAggregatesFilter<$PrismaModel> | Buffer
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedBytesFilter<$PrismaModel>
+    _max?: NestedBytesFilter<$PrismaModel>
+  }
+
   export type usersCreateNestedOneWithoutActivity_logsInput = {
     create?: XOR<usersCreateWithoutActivity_logsInput, usersUncheckedCreateWithoutActivity_logsInput>
     connectOrCreate?: usersCreateOrConnectWithoutActivity_logsInput
@@ -48590,6 +49933,10 @@ export namespace Prisma {
     update?: XOR<XOR<userUpdateToOneWithWhereWithoutUsersessionInput, userUpdateWithoutUsersessionInput>, userUncheckedUpdateWithoutUsersessionInput>
   }
 
+  export type BytesFieldUpdateOperationsInput = {
+    set?: Buffer
+  }
+
   export type NestedIntFilter<$PrismaModel = never> = {
     equals?: number | IntFieldRefInput<$PrismaModel>
     in?: number[] | ListIntFieldRefInput<$PrismaModel>
@@ -48923,6 +50270,23 @@ export namespace Prisma {
     _count?: NestedIntFilter<$PrismaModel>
     _min?: NestedEnumuserroleFilter<$PrismaModel>
     _max?: NestedEnumuserroleFilter<$PrismaModel>
+  }
+
+  export type NestedBytesFilter<$PrismaModel = never> = {
+    equals?: Buffer | BytesFieldRefInput<$PrismaModel>
+    in?: Buffer[] | ListBytesFieldRefInput<$PrismaModel>
+    notIn?: Buffer[] | ListBytesFieldRefInput<$PrismaModel>
+    not?: NestedBytesFilter<$PrismaModel> | Buffer
+  }
+
+  export type NestedBytesWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: Buffer | BytesFieldRefInput<$PrismaModel>
+    in?: Buffer[] | ListBytesFieldRefInput<$PrismaModel>
+    notIn?: Buffer[] | ListBytesFieldRefInput<$PrismaModel>
+    not?: NestedBytesWithAggregatesFilter<$PrismaModel> | Buffer
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedBytesFilter<$PrismaModel>
+    _max?: NestedBytesFilter<$PrismaModel>
   }
 
   export type usersCreateWithoutActivity_logsInput = {
@@ -54897,6 +56261,10 @@ export namespace Prisma {
      * @deprecated Use usersessionDefaultArgs instead
      */
     export type usersessionArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = usersessionDefaultArgs<ExtArgs>
+    /**
+     * @deprecated Use fitch_upload_historyDefaultArgs instead
+     */
+    export type fitch_upload_historyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = fitch_upload_historyDefaultArgs<ExtArgs>
 
   /**
    * Batch Payload for updateMany & deleteMany & createMany

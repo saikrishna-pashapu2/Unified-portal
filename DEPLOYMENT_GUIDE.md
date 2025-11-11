@@ -306,14 +306,14 @@ git push origin main
 #### 2. On EC2 - Clone New Version
 ```bash
 cd /var/www
-sudo git clone https://github.com/bullhunter6/Unified-portal.git portal-v1.0.1
-sudo chown -R ubuntu:ubuntu portal-v1.0.1
+sudo git clone https://github.com/bullhunter6/Unified-portal.git portal-v1.0.4
+sudo chown -R ubuntu:ubuntu portal-v1.0.4
 cd portal-v1.0.4
 ```
 
 #### 3. Copy Environment File
 ```bash
-cp /var/www/portal-v1.0.0/.env .env
+cp /var/www/portal-v1.0.4/.env .env
 cp .env apps/web/.env
 ```
 
@@ -398,7 +398,7 @@ Visit `http://YOUR_EC2_IP:3000` and verify everything works.
 #### 14. (Optional) Clean Up Old Version
 After confirming the new version works for a few days:
 ```bash
-sudo rm -rf /var/www/portal-v1.0.0
+sudo rm -rf /var/www/portal-v1.0.4
 ```
 
 ---

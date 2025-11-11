@@ -49,26 +49,10 @@ export async function DELETE(req: Request) {
       );
     }
 
-    // Delete the record from database
+    // Delete the record from database (file_data is stored in DB, no disk cleanup needed)
     const deletedRecord = await esgPrisma.file_uploads.delete({
       where: { task_id: taskId },
     });
-
-    // Also try to delete the physical file if it exists
-    try {
-      const fs = require("fs");
-      const path = require("path");
-      if (deletedRecord.output_filename) {
-        const UPLOAD_DIR = path.join(process.cwd(), "uploads", "esg");
-        const filePath = path.join(UPLOAD_DIR, deletedRecord.output_filename);
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-        }
-      }
-    } catch (fileError) {
-      console.error("Failed to delete physical file:", fileError);
-      // Continue even if file deletion fails
-    }
 
     return NextResponse.json({ success: true, deleted: deletedRecord });
   } catch (error: any) {

@@ -546,6 +546,19 @@ exports.Prisma.UsersessionScalarFieldEnum = {
   updated_at: 'updated_at'
 };
 
+exports.Prisma.Fitch_upload_historyScalarFieldEnum = {
+  id: 'id',
+  user_email: 'user_email',
+  original_filename: 'original_filename',
+  updated_filename: 'updated_filename',
+  file_data: 'file_data',
+  companies_count: 'companies_count',
+  success_count: 'success_count',
+  error_count: 'error_count',
+  file_size: 'file_size',
+  created_at: 'created_at'
+};
+
 exports.Prisma.SortOrder = {
   asc: 'asc',
   desc: 'desc'
@@ -639,7 +652,8 @@ exports.Prisma.ModelName = {
   user_events: 'user_events',
   user_permissions: 'user_permissions',
   users: 'users',
-  usersession: 'usersession'
+  usersession: 'usersession',
+  fitch_upload_history: 'fitch_upload_history'
 };
 
 /**

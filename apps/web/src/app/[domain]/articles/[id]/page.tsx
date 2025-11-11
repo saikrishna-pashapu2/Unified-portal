@@ -59,11 +59,18 @@ export const revalidate = 0;
 
 export default async function ArticleDetail({
   params,
-}: { params: { domain: "esg" | "credit"; id: string } }) {
+  searchParams,
+}: { 
+  params: { domain: "esg" | "credit"; id: string };
+  searchParams: { back?: string };
+}) {
   const item = await fetchArticle(params.domain, params.id);
   if (!item) {
     return <div className="mx-auto max-w-3xl p-6">Not found</div>;
   }
+
+  // Determine the back URL - use the one from query params if available, otherwise default
+  const backUrl = searchParams.back || `/${params.domain}/articles`;
 
   const body =
     params.domain === "esg" ? (item as any).summary ?? "" : (item as any).content ?? "";
@@ -122,7 +129,7 @@ export default async function ArticleDetail({
       {/* Header with Back Navigation - Full Width */}
       <div className="px-6 py-4 bg-white border-b border-gray-200 shadow-sm">
         <Link 
-          href={`/${params.domain}/articles`}
+          href={backUrl}
           className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />

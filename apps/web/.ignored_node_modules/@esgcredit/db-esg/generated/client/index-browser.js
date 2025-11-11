@@ -167,6 +167,7 @@ exports.Prisma.File_uploadsScalarFieldEnum = {
   original_filename: 'original_filename',
   stored_filename: 'stored_filename',
   output_filename: 'output_filename',
+  file_data: 'file_data',
   status: 'status',
   error_message: 'error_message',
   user_id: 'user_id',

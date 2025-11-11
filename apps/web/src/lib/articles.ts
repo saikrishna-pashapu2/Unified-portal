@@ -181,3 +181,30 @@ export async function fetchSources(domain: Domain): Promise<string[]> {
     return rows.map((r: { source: string | null }) => r.source!).filter(Boolean);
   }
 }
+
+export async function fetchCreditSources(opts?: { 
+  region?: string | null; 
+  sector?: string | null;
+}): Promise<string[]> {
+  const prisma = getPrisma("credit");
+  
+  const conditions: string[] = ["source IS NOT NULL"];
+  const params: any[] = [];
+  
+  if (opts?.region) {
+    params.push(opts.region);
+    conditions.push(`region = $${params.length}`);
+  }
+  
+  if (opts?.sector) {
+    params.push(opts.sector);
+    conditions.push(`sector = $${params.length}`);
+  }
+  
+  const whereClause = conditions.join(" AND ");
+  const query = `SELECT DISTINCT source FROM credit_articles WHERE ${whereClause} ORDER BY source ASC`;
+  
+  const rows = await prisma.$queryRawUnsafe<{ source: string | null }[]>(query, ...params);
+  
+  return rows.map((r: { source: string | null }) => r.source!).filter(Boolean);
+}

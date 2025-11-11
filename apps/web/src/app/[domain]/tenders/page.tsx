@@ -5,6 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 export const revalidate = 300; // Revalidate every 5 minutes
 
+
 export default async function TendersPage({
   params,
   searchParams,

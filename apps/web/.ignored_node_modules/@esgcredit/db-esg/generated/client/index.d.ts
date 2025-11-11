@@ -7394,6 +7394,7 @@ export namespace Prisma {
     original_filename: string | null
     stored_filename: string | null
     output_filename: string | null
+    file_data: Buffer | null
     status: string | null
     error_message: string | null
     user_id: number | null
@@ -7407,6 +7408,7 @@ export namespace Prisma {
     original_filename: string | null
     stored_filename: string | null
     output_filename: string | null
+    file_data: Buffer | null
     status: string | null
     error_message: string | null
     user_id: number | null
@@ -7420,6 +7422,7 @@ export namespace Prisma {
     original_filename: number
     stored_filename: number
     output_filename: number
+    file_data: number
     status: number
     error_message: number
     user_id: number
@@ -7445,6 +7448,7 @@ export namespace Prisma {
     original_filename?: true
     stored_filename?: true
     output_filename?: true
+    file_data?: true
     status?: true
     error_message?: true
     user_id?: true
@@ -7458,6 +7462,7 @@ export namespace Prisma {
     original_filename?: true
     stored_filename?: true
     output_filename?: true
+    file_data?: true
     status?: true
     error_message?: true
     user_id?: true
@@ -7471,6 +7476,7 @@ export namespace Prisma {
     original_filename?: true
     stored_filename?: true
     output_filename?: true
+    file_data?: true
     status?: true
     error_message?: true
     user_id?: true
@@ -7571,6 +7577,7 @@ export namespace Prisma {
     original_filename: string
     stored_filename: string
     output_filename: string | null
+    file_data: Buffer | null
     status: string | null
     error_message: string | null
     user_id: number | null
@@ -7603,6 +7610,7 @@ export namespace Prisma {
     original_filename?: boolean
     stored_filename?: boolean
     output_filename?: boolean
+    file_data?: boolean
     status?: boolean
     error_message?: boolean
     user_id?: boolean
@@ -7617,6 +7625,7 @@ export namespace Prisma {
     original_filename?: boolean
     stored_filename?: boolean
     output_filename?: boolean
+    file_data?: boolean
     status?: boolean
     error_message?: boolean
     user_id?: boolean
@@ -7631,6 +7640,7 @@ export namespace Prisma {
     original_filename?: boolean
     stored_filename?: boolean
     output_filename?: boolean
+    file_data?: boolean
     status?: boolean
     error_message?: boolean
     user_id?: boolean
@@ -7656,6 +7666,7 @@ export namespace Prisma {
       original_filename: string
       stored_filename: string
       output_filename: string | null
+      file_data: Buffer | null
       status: string | null
       error_message: string | null
       user_id: number | null
@@ -8060,6 +8071,7 @@ export namespace Prisma {
     readonly original_filename: FieldRef<"file_uploads", 'String'>
     readonly stored_filename: FieldRef<"file_uploads", 'String'>
     readonly output_filename: FieldRef<"file_uploads", 'String'>
+    readonly file_data: FieldRef<"file_uploads", 'Bytes'>
     readonly status: FieldRef<"file_uploads", 'String'>
     readonly error_message: FieldRef<"file_uploads", 'String'>
     readonly user_id: FieldRef<"file_uploads", 'Int'>
@@ -45672,6 +45684,7 @@ export namespace Prisma {
     original_filename: 'original_filename',
     stored_filename: 'stored_filename',
     output_filename: 'output_filename',
+    file_data: 'file_data',
     status: 'status',
     error_message: 'error_message',
     user_id: 'user_id',
@@ -46402,13 +46415,6 @@ export namespace Prisma {
 
 
   /**
-   * Reference to a field of type 'Json'
-   */
-  export type JsonFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Json'>
-    
-
-
-  /**
    * Reference to a field of type 'Bytes'
    */
   export type BytesFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Bytes'>
@@ -46419,6 +46425,13 @@ export namespace Prisma {
    * Reference to a field of type 'Bytes[]'
    */
   export type ListBytesFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Bytes[]'>
+    
+
+
+  /**
+   * Reference to a field of type 'Json'
+   */
+  export type JsonFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Json'>
     
 
 
@@ -46705,6 +46718,7 @@ export namespace Prisma {
     original_filename?: StringFilter<"file_uploads"> | string
     stored_filename?: StringFilter<"file_uploads"> | string
     output_filename?: StringNullableFilter<"file_uploads"> | string | null
+    file_data?: BytesNullableFilter<"file_uploads"> | Buffer | null
     status?: StringNullableFilter<"file_uploads"> | string | null
     error_message?: StringNullableFilter<"file_uploads"> | string | null
     user_id?: IntNullableFilter<"file_uploads"> | number | null
@@ -46719,6 +46733,7 @@ export namespace Prisma {
     original_filename?: SortOrder
     stored_filename?: SortOrder
     output_filename?: SortOrderInput | SortOrder
+    file_data?: SortOrderInput | SortOrder
     status?: SortOrderInput | SortOrder
     error_message?: SortOrderInput | SortOrder
     user_id?: SortOrderInput | SortOrder
@@ -46736,6 +46751,7 @@ export namespace Prisma {
     original_filename?: StringFilter<"file_uploads"> | string
     stored_filename?: StringFilter<"file_uploads"> | string
     output_filename?: StringNullableFilter<"file_uploads"> | string | null
+    file_data?: BytesNullableFilter<"file_uploads"> | Buffer | null
     status?: StringNullableFilter<"file_uploads"> | string | null
     error_message?: StringNullableFilter<"file_uploads"> | string | null
     user_id?: IntNullableFilter<"file_uploads"> | number | null
@@ -46750,6 +46766,7 @@ export namespace Prisma {
     original_filename?: SortOrder
     stored_filename?: SortOrder
     output_filename?: SortOrderInput | SortOrder
+    file_data?: SortOrderInput | SortOrder
     status?: SortOrderInput | SortOrder
     error_message?: SortOrderInput | SortOrder
     user_id?: SortOrderInput | SortOrder
@@ -46771,6 +46788,7 @@ export namespace Prisma {
     original_filename?: StringWithAggregatesFilter<"file_uploads"> | string
     stored_filename?: StringWithAggregatesFilter<"file_uploads"> | string
     output_filename?: StringNullableWithAggregatesFilter<"file_uploads"> | string | null
+    file_data?: BytesNullableWithAggregatesFilter<"file_uploads"> | Buffer | null
     status?: StringNullableWithAggregatesFilter<"file_uploads"> | string | null
     error_message?: StringNullableWithAggregatesFilter<"file_uploads"> | string | null
     user_id?: IntNullableWithAggregatesFilter<"file_uploads"> | number | null
@@ -50365,6 +50383,7 @@ export namespace Prisma {
     original_filename: string
     stored_filename: string
     output_filename?: string | null
+    file_data?: Buffer | null
     status?: string | null
     error_message?: string | null
     created_at?: Date | string | null
@@ -50378,6 +50397,7 @@ export namespace Prisma {
     original_filename: string
     stored_filename: string
     output_filename?: string | null
+    file_data?: Buffer | null
     status?: string | null
     error_message?: string | null
     user_id?: number | null
@@ -50390,6 +50410,7 @@ export namespace Prisma {
     original_filename?: StringFieldUpdateOperationsInput | string
     stored_filename?: StringFieldUpdateOperationsInput | string
     output_filename?: NullableStringFieldUpdateOperationsInput | string | null
+    file_data?: NullableBytesFieldUpdateOperationsInput | Buffer | null
     status?: NullableStringFieldUpdateOperationsInput | string | null
     error_message?: NullableStringFieldUpdateOperationsInput | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -50403,6 +50424,7 @@ export namespace Prisma {
     original_filename?: StringFieldUpdateOperationsInput | string
     stored_filename?: StringFieldUpdateOperationsInput | string
     output_filename?: NullableStringFieldUpdateOperationsInput | string | null
+    file_data?: NullableBytesFieldUpdateOperationsInput | Buffer | null
     status?: NullableStringFieldUpdateOperationsInput | string | null
     error_message?: NullableStringFieldUpdateOperationsInput | string | null
     user_id?: NullableIntFieldUpdateOperationsInput | number | null
@@ -50416,6 +50438,7 @@ export namespace Prisma {
     original_filename: string
     stored_filename: string
     output_filename?: string | null
+    file_data?: Buffer | null
     status?: string | null
     error_message?: string | null
     user_id?: number | null
@@ -50428,6 +50451,7 @@ export namespace Prisma {
     original_filename?: StringFieldUpdateOperationsInput | string
     stored_filename?: StringFieldUpdateOperationsInput | string
     output_filename?: NullableStringFieldUpdateOperationsInput | string | null
+    file_data?: NullableBytesFieldUpdateOperationsInput | Buffer | null
     status?: NullableStringFieldUpdateOperationsInput | string | null
     error_message?: NullableStringFieldUpdateOperationsInput | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -50440,6 +50464,7 @@ export namespace Prisma {
     original_filename?: StringFieldUpdateOperationsInput | string
     stored_filename?: StringFieldUpdateOperationsInput | string
     output_filename?: NullableStringFieldUpdateOperationsInput | string | null
+    file_data?: NullableBytesFieldUpdateOperationsInput | Buffer | null
     status?: NullableStringFieldUpdateOperationsInput | string | null
     error_message?: NullableStringFieldUpdateOperationsInput | string | null
     user_id?: NullableIntFieldUpdateOperationsInput | number | null
@@ -54412,6 +54437,13 @@ export namespace Prisma {
     id?: SortOrder
   }
 
+  export type BytesNullableFilter<$PrismaModel = never> = {
+    equals?: Buffer | BytesFieldRefInput<$PrismaModel> | null
+    in?: Buffer[] | ListBytesFieldRefInput<$PrismaModel> | null
+    notIn?: Buffer[] | ListBytesFieldRefInput<$PrismaModel> | null
+    not?: NestedBytesNullableFilter<$PrismaModel> | Buffer | null
+  }
+
   export type IntNullableFilter<$PrismaModel = never> = {
     equals?: number | IntFieldRefInput<$PrismaModel> | null
     in?: number[] | ListIntFieldRefInput<$PrismaModel> | null
@@ -54434,6 +54466,7 @@ export namespace Prisma {
     original_filename?: SortOrder
     stored_filename?: SortOrder
     output_filename?: SortOrder
+    file_data?: SortOrder
     status?: SortOrder
     error_message?: SortOrder
     user_id?: SortOrder
@@ -54452,6 +54485,7 @@ export namespace Prisma {
     original_filename?: SortOrder
     stored_filename?: SortOrder
     output_filename?: SortOrder
+    file_data?: SortOrder
     status?: SortOrder
     error_message?: SortOrder
     user_id?: SortOrder
@@ -54465,6 +54499,7 @@ export namespace Prisma {
     original_filename?: SortOrder
     stored_filename?: SortOrder
     output_filename?: SortOrder
+    file_data?: SortOrder
     status?: SortOrder
     error_message?: SortOrder
     user_id?: SortOrder
@@ -54475,6 +54510,16 @@ export namespace Prisma {
   export type file_uploadsSumOrderByAggregateInput = {
     id?: SortOrder
     user_id?: SortOrder
+  }
+
+  export type BytesNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: Buffer | BytesFieldRefInput<$PrismaModel> | null
+    in?: Buffer[] | ListBytesFieldRefInput<$PrismaModel> | null
+    notIn?: Buffer[] | ListBytesFieldRefInput<$PrismaModel> | null
+    not?: NestedBytesNullableWithAggregatesFilter<$PrismaModel> | Buffer | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedBytesNullableFilter<$PrismaModel>
+    _max?: NestedBytesNullableFilter<$PrismaModel>
   }
 
   export type IntNullableWithAggregatesFilter<$PrismaModel = never> = {
@@ -54583,13 +54628,6 @@ export namespace Prisma {
     gt?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     gte?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     not?: NestedDateTimeFilter<$PrismaModel> | Date | string
-  }
-
-  export type BytesNullableFilter<$PrismaModel = never> = {
-    equals?: Buffer | BytesFieldRefInput<$PrismaModel> | null
-    in?: Buffer[] | ListBytesFieldRefInput<$PrismaModel> | null
-    notIn?: Buffer[] | ListBytesFieldRefInput<$PrismaModel> | null
-    not?: NestedBytesNullableFilter<$PrismaModel> | Buffer | null
   }
 
   export type pdf_translation_jobsCountOrderByAggregateInput = {
@@ -54717,16 +54755,6 @@ export namespace Prisma {
     _count?: NestedIntFilter<$PrismaModel>
     _min?: NestedDateTimeFilter<$PrismaModel>
     _max?: NestedDateTimeFilter<$PrismaModel>
-  }
-
-  export type BytesNullableWithAggregatesFilter<$PrismaModel = never> = {
-    equals?: Buffer | BytesFieldRefInput<$PrismaModel> | null
-    in?: Buffer[] | ListBytesFieldRefInput<$PrismaModel> | null
-    notIn?: Buffer[] | ListBytesFieldRefInput<$PrismaModel> | null
-    not?: NestedBytesNullableWithAggregatesFilter<$PrismaModel> | Buffer | null
-    _count?: NestedIntNullableFilter<$PrismaModel>
-    _min?: NestedBytesNullableFilter<$PrismaModel>
-    _max?: NestedBytesNullableFilter<$PrismaModel>
   }
 
   export type FloatNullableFilter<$PrismaModel = never> = {
@@ -57134,6 +57162,10 @@ export namespace Prisma {
     connect?: usersWhereUniqueInput
   }
 
+  export type NullableBytesFieldUpdateOperationsInput = {
+    set?: Buffer | null
+  }
+
   export type usersUpdateOneWithoutFile_uploadsNestedInput = {
     create?: XOR<usersCreateWithoutFile_uploadsInput, usersUncheckedCreateWithoutFile_uploadsInput>
     connectOrCreate?: usersCreateOrConnectWithoutFile_uploadsInput
@@ -57174,10 +57206,6 @@ export namespace Prisma {
 
   export type DateTimeFieldUpdateOperationsInput = {
     set?: Date | string
-  }
-
-  export type NullableBytesFieldUpdateOperationsInput = {
-    set?: Buffer | null
   }
 
   export type usersUpdateOneRequiredWithoutPdf_translation_jobsNestedInput = {
@@ -59596,6 +59624,23 @@ export namespace Prisma {
     _max?: NestedStringNullableFilter<$PrismaModel>
   }
 
+  export type NestedBytesNullableFilter<$PrismaModel = never> = {
+    equals?: Buffer | BytesFieldRefInput<$PrismaModel> | null
+    in?: Buffer[] | ListBytesFieldRefInput<$PrismaModel> | null
+    notIn?: Buffer[] | ListBytesFieldRefInput<$PrismaModel> | null
+    not?: NestedBytesNullableFilter<$PrismaModel> | Buffer | null
+  }
+
+  export type NestedBytesNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: Buffer | BytesFieldRefInput<$PrismaModel> | null
+    in?: Buffer[] | ListBytesFieldRefInput<$PrismaModel> | null
+    notIn?: Buffer[] | ListBytesFieldRefInput<$PrismaModel> | null
+    not?: NestedBytesNullableWithAggregatesFilter<$PrismaModel> | Buffer | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedBytesNullableFilter<$PrismaModel>
+    _max?: NestedBytesNullableFilter<$PrismaModel>
+  }
+
   export type NestedIntNullableWithAggregatesFilter<$PrismaModel = never> = {
     equals?: number | IntFieldRefInput<$PrismaModel> | null
     in?: number[] | ListIntFieldRefInput<$PrismaModel> | null
@@ -59643,13 +59688,6 @@ export namespace Prisma {
     gt?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     gte?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     not?: NestedDateTimeFilter<$PrismaModel> | Date | string
-  }
-
-  export type NestedBytesNullableFilter<$PrismaModel = never> = {
-    equals?: Buffer | BytesFieldRefInput<$PrismaModel> | null
-    in?: Buffer[] | ListBytesFieldRefInput<$PrismaModel> | null
-    notIn?: Buffer[] | ListBytesFieldRefInput<$PrismaModel> | null
-    not?: NestedBytesNullableFilter<$PrismaModel> | Buffer | null
   }
 
   export type NestedUuidWithAggregatesFilter<$PrismaModel = never> = {
@@ -59700,16 +59738,6 @@ export namespace Prisma {
     _count?: NestedIntFilter<$PrismaModel>
     _min?: NestedDateTimeFilter<$PrismaModel>
     _max?: NestedDateTimeFilter<$PrismaModel>
-  }
-
-  export type NestedBytesNullableWithAggregatesFilter<$PrismaModel = never> = {
-    equals?: Buffer | BytesFieldRefInput<$PrismaModel> | null
-    in?: Buffer[] | ListBytesFieldRefInput<$PrismaModel> | null
-    notIn?: Buffer[] | ListBytesFieldRefInput<$PrismaModel> | null
-    not?: NestedBytesNullableWithAggregatesFilter<$PrismaModel> | Buffer | null
-    _count?: NestedIntNullableFilter<$PrismaModel>
-    _min?: NestedBytesNullableFilter<$PrismaModel>
-    _max?: NestedBytesNullableFilter<$PrismaModel>
   }
 
   export type NestedFloatNullableWithAggregatesFilter<$PrismaModel = never> = {
@@ -61297,6 +61325,7 @@ export namespace Prisma {
     original_filename: string
     stored_filename: string
     output_filename?: string | null
+    file_data?: Buffer | null
     status?: string | null
     error_message?: string | null
     created_at?: Date | string | null
@@ -61309,6 +61338,7 @@ export namespace Prisma {
     original_filename: string
     stored_filename: string
     output_filename?: string | null
+    file_data?: Buffer | null
     status?: string | null
     error_message?: string | null
     created_at?: Date | string | null
@@ -62024,6 +62054,7 @@ export namespace Prisma {
     original_filename?: StringFilter<"file_uploads"> | string
     stored_filename?: StringFilter<"file_uploads"> | string
     output_filename?: StringNullableFilter<"file_uploads"> | string | null
+    file_data?: BytesNullableFilter<"file_uploads"> | Buffer | null
     status?: StringNullableFilter<"file_uploads"> | string | null
     error_message?: StringNullableFilter<"file_uploads"> | string | null
     user_id?: IntNullableFilter<"file_uploads"> | number | null
@@ -67901,6 +67932,7 @@ export namespace Prisma {
     original_filename: string
     stored_filename: string
     output_filename?: string | null
+    file_data?: Buffer | null
     status?: string | null
     error_message?: string | null
     created_at?: Date | string | null
@@ -68418,6 +68450,7 @@ export namespace Prisma {
     original_filename?: StringFieldUpdateOperationsInput | string
     stored_filename?: StringFieldUpdateOperationsInput | string
     output_filename?: NullableStringFieldUpdateOperationsInput | string | null
+    file_data?: NullableBytesFieldUpdateOperationsInput | Buffer | null
     status?: NullableStringFieldUpdateOperationsInput | string | null
     error_message?: NullableStringFieldUpdateOperationsInput | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -68430,6 +68463,7 @@ export namespace Prisma {
     original_filename?: StringFieldUpdateOperationsInput | string
     stored_filename?: StringFieldUpdateOperationsInput | string
     output_filename?: NullableStringFieldUpdateOperationsInput | string | null
+    file_data?: NullableBytesFieldUpdateOperationsInput | Buffer | null
     status?: NullableStringFieldUpdateOperationsInput | string | null
     error_message?: NullableStringFieldUpdateOperationsInput | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -68442,6 +68476,7 @@ export namespace Prisma {
     original_filename?: StringFieldUpdateOperationsInput | string
     stored_filename?: StringFieldUpdateOperationsInput | string
     output_filename?: NullableStringFieldUpdateOperationsInput | string | null
+    file_data?: NullableBytesFieldUpdateOperationsInput | Buffer | null
     status?: NullableStringFieldUpdateOperationsInput | string | null
     error_message?: NullableStringFieldUpdateOperationsInput | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null

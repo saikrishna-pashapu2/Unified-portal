@@ -18,7 +18,7 @@ import {
   type CreditRegion,
   type CreditSector,
 } from "@/lib/credit-articles";
-import { fetchSources } from "@/lib/articles";
+import { fetchCreditSources } from "@/lib/articles";
 import CreditArticlesHeader from "@/components/articles/CreditArticlesHeader";
 import CreditArticleRowCard from "@/components/articles/CreditArticleRowCard";
 import { getLikeCounts, getUserLikedSet } from "@/lib/likes";
@@ -115,9 +115,12 @@ export default async function CreditArticlesPage({
   const page = Math.max(1, Number(searchParams.page ?? "1") || 1);
   const date = searchParams.date;
 
-  const sourcesPromise = fetchSources("credit");
+  // Fetch sources filtered by region and sector
+  const sources = await fetchCreditSources({
+    region: selectedRegion,
+    sector: selectedSector,
+  });
   const rawSource = searchParams.source?.trim() ?? "";
-  const sources = await sourcesPromise;
   const sourceOptions = [...sources].sort((a, b) => a.localeCompare(b));
   const selectedSource = sourceOptions.includes(rawSource) ? rawSource : undefined;
 
@@ -165,12 +168,17 @@ export default async function CreditArticlesPage({
 
       <label className="flex flex-col text-sm font-medium text-card-foreground">
         <span className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">Date</span>
-        <input
-          type="date"
-          name="date"
-          defaultValue={selectedDateValue}
-          className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-        />
+        <div className="relative">
+          <input
+            type="date"
+            name="date"
+            defaultValue={selectedDateValue}
+            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm transition-all duration-200 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 hover:border-primary/50 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:rounded [&::-webkit-calendar-picker-indicator]:p-1 [&::-webkit-calendar-picker-indicator]:opacity-60 [&::-webkit-calendar-picker-indicator]:transition-opacity [&::-webkit-calendar-picker-indicator]:hover:bg-primary/10 [&::-webkit-calendar-picker-indicator]:hover:opacity-100"
+            style={{
+              colorScheme: 'light dark'
+            }}
+          />
+        </div>
       </label>
 
       <label className="flex flex-col text-sm font-medium text-card-foreground">
@@ -178,7 +186,7 @@ export default async function CreditArticlesPage({
         <select
           name="source"
           defaultValue={selectedSource ?? ""}
-          className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+          className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm transition-all duration-200 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 hover:border-primary/50"
         >
           <option value="">All sources</option>
           {sourceOptions.map((source) => (
@@ -191,14 +199,17 @@ export default async function CreditArticlesPage({
 
       <button
         type="submit"
-        className="h-full rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition hover:bg-primary/90"
+        className="h-full rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-all duration-200 hover:bg-primary/90 hover:shadow-md active:scale-95"
       >
         Apply
       </button>
 
       <Link
-        href="/credit/articles"
-        className="flex h-full items-center justify-center rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground transition hover:bg-muted"
+        href={href("/credit/articles", {
+          region: selectedRegion,
+          sector: selectedSector,
+        })}
+        className="flex h-full items-center justify-center rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground transition-all duration-200 hover:bg-muted hover:border-primary/50 active:scale-95"
       >
         Reset
       </Link>
@@ -338,11 +349,22 @@ export default async function CreditArticlesPage({
                 const articleId = Number(article.id);
                 const isValidId = Number.isFinite(articleId);
 
+                const backParams = new URLSearchParams();
+                if (selectedRegion) backParams.set('region', selectedRegion);
+                if (selectedSector) backParams.set('sector', selectedSector);
+                if (selectedSource) backParams.set('source', selectedSource);
+                if (date) backParams.set('date', date);
+                if (page > 1) backParams.set('page', String(page));
+                const backQuery = backParams.toString();
+                const articleDetailHref = backQuery 
+                  ? `/credit/articles/${article.id}?back=${encodeURIComponent(`/credit/articles?${backQuery}`)}`
+                  : `/credit/articles/${article.id}`;
+
                 return (
                   <CreditArticleRowCard
                     key={article.id}
                     title={article.title}
-                    detailHref={`/credit/articles/${article.id}`}
+                    detailHref={articleDetailHref}
                     externalHref={article.link}
                     source={article.source}
                     dateLabel={dateLabel}

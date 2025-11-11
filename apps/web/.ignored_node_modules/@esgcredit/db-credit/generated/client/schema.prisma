@@ -632,3 +632,19 @@ enum userrole {
   USER
   GUEST
 }
+
+model fitch_upload_history {
+  id                Int      @id @default(autoincrement())
+  user_email        String   @db.VarChar(255) // Store email instead of foreign key
+  original_filename String   @db.VarChar(255)
+  updated_filename  String   @db.VarChar(255)
+  file_data         Bytes // Store the actual Excel file
+  companies_count   Int      @default(0)
+  success_count     Int      @default(0)
+  error_count       Int      @default(0)
+  file_size         Int? // in bytes
+  created_at        DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([user_email])
+  @@index([created_at])
+}
