@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { useRouter } from "next/navigation";
 // Force dynamic rendering - this page uses searchParams
 export const dynamic = 'force-dynamic';
 
-export default function PreviewPage() {
+function PreviewContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const jobId = searchParams.get("jobId");
@@ -147,5 +147,21 @@ export default function PreviewPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+export default function PreviewPage() {
+  return (
+    <Suspense fallback={
+      <div className="container mx-auto max-w-7xl px-4 py-8">
+        <Card>
+          <CardContent className="p-8">
+            <div className="text-center text-muted-foreground">Loading preview...</div>
+          </CardContent>
+        </Card>
+      </div>
+    }>
+      <PreviewContent />
+    </Suspense>
   );
 }
