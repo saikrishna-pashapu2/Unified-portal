@@ -7,6 +7,9 @@ import { Button } from "@/components/ui/button";
 import { FileText, Download, ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 
+// Force dynamic rendering - this page uses searchParams
+export const dynamic = 'force-dynamic';
+
 export default function PreviewPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
