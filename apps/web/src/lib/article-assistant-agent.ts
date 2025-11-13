@@ -55,7 +55,7 @@ export async function generateArticleSummary(
 Article: "${articleTitle}"
 
 Content:
-${articleContent.slice(0, 4000)} ${articleContent.length > 4000 ? "..." : ""}
+${articleContent.slice(0, 40000)} ${articleContent.length > 40000 ? "..." : ""}
 
 Generate the structured summary now with "Overview" section first, then "Key Points" as bullet points:`;
 
@@ -253,7 +253,7 @@ Summary:
 ${articleSummary || "Not available"}
 
 Full Article:
-${articleContent.slice(0, 3000)}${articleContent.length > 3000 ? "..." : ""}
+${articleContent.slice(0, 30000)}${articleContent.length > 30000 ? "..." : ""}
 
 Remember: Use web_search proactively to provide comprehensive, well-sourced answers with hyperlinks.`;
 
@@ -515,7 +515,7 @@ Guidelines:
 Input:
 - **Article Title:** "${articleTitle}"
 - **Article Content:** 
-${articleContent.slice(0, 3000)}${articleContent.length > 30000 ? "..." : ""}
+${articleContent.slice(0, 30000)}${articleContent.length > 30000 ? "..." : ""}
 
 Output:
 Write **exactly 4 questions**, one per line, with no numbering or bullet points.
@@ -576,7 +576,7 @@ Rules:
 Inputs:
 - Article Title: "${articleTitle}"
 - Article Content:
-${articleContent?.slice?.(0, 4000) ?? ""}${articleContent && articleContent.length > 4000 ? " ..." : ""}
+${articleContent?.slice?.(0, 40000) ?? ""}${articleContent && articleContent.length > 40000 ? " ..." : ""}
 - Recent Conversation (most recent first):
 ${recentConversation}
 

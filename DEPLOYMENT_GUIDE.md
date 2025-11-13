@@ -417,7 +417,7 @@ pm2 logs portal-v1.0.4
 
 ### View Last 50 Lines
 ```bash
-pm2 logs portal-v1.0.0 --lines 50 --nostream
+pm2 logs portal-v1.0.5 --lines 50 --nostream
 ```
 
 ### Restart Application
@@ -528,7 +528,7 @@ free -h
 
 **Restart Application:**
 ```bash
-pm2 restart portal-v1.0.0
+pm2 restart portal-v1.0.5
 ```
 
 **Increase Max Memory (if needed):**
@@ -643,7 +643,7 @@ Apply indexes from `DATABASE_ARCHITECTURE.md` if you have many records.
 ### Daily Checks
 ```bash
 pm2 status
-pm2 logs portal-v1.0.0 --lines 20 --nostream
+pm2 logs portal-v1.0.5
 ```
 
 ### Weekly Maintenance
@@ -706,3 +706,40 @@ curl -s http://169.254.169.254/latest/meta-data/public-ipv4
 
 **Deployment Completed**: October 15, 2025
 **Document Version**: 1.0.0
+
+
+
+
+
+
+topic:
+        Indirect Greenhouse Gas Emissions (Scope 2)
+          Questions based on the topic:
+                Reliable and auditable data for company's indirect GHG emissions (Scope 2)
+                Market based indirect Greenhouse Gas Emissions from energy purchased and consumed (scope 2) (2021) (met. ton. CO2e)
+                Market based indirect Greenhouse Gas Emissions from energy purchased and consumed (scope 2) (2022) (met. ton. CO2e)
+                Market based indirect Greenhouse Gas Emissions from energy purchased and consumed (scope 2) (2023) (met. ton. CO2e)
+                Market based indirect Greenhouse Gas Emissions from energy purchased and consumed (scope 2) (2024) (met. ton. CO2e)
+                Target for market based indirect Greenhouse Gas Emissions for last fiscal year reported (met. ton. CO2e)
+                Indirect Greenhouse Gas Emissions: Data coverage for market based emissions (2021)
+                Indirect Greenhouse Gas Emissions: Data coverage for market based emissions (2022)
+                Indirect Greenhouse Gas Emissions: Data coverage for market based emissions (2023)
+                Indirect Greenhouse Gas Emissions: Data coverage for market based emissions (2024)
+                Public reporting: Indirect GHG Emissions (scope 2) data is publicly available
+                Third party verification: Indirect GHG Emissions (scope 2) data verified by third party in the most recent fiscal year reported
+                Data consistency: Indirect GHG Emissions (scope 2) data reported in the questionnaire differs from publicly available data
+                Data consistency: Temporary coverage reduction or target challenge in Indirect GHG emissions (Scope 2) data due to corporate actions
+                Data consistency: Indirect GHG Emissions (scope 2) data is not reported in absolute terms and is normalized
+                Location based indirect Greenhouse Gas Emissions from energy purchased and consumed (scope 2) (2021) (met. ton. CO2e)
+                Location based indirect Greenhouse Gas Emissions from energy purchased and consumed (scope 2) (2022) (met. ton. CO2e)
+                Location based indirect Greenhouse Gas Emissions from energy purchased and consumed (scope 2) (2023) (met. ton. CO2e)
+                Location based indirect Greenhouse Gas Emissions from energy purchased and consumed (scope 2) (2024) (met. ton. CO2e)
+                Target for location based indirect Greenhouse Gas Emissions for last fiscal year reported (met. ton. CO2e)
+                Indirect Greenhouse Gas Emissions: Data coverage for location based emissions (2021)
+                Indirect Greenhouse Gas Emissions: Data coverage for location based emissions (2022)
+                Indirect Greenhouse Gas Emissions: Data coverage for location based emissions (2023)
+                Indirect Greenhouse Gas Emissions: Data coverage for location based emissions (2024)
+              
+Instructions: for each question, just answer yes or no with evidence. 
+              also write comment for all questions, for example: no historical data for 2022, no target for reporting year, no clear data coverage
+              
