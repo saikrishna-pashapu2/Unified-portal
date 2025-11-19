@@ -2,10 +2,12 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import HistoryList from '@/components/pdfx/HistoryList';
 import { Upload, FileText, Download, Eye, Clock, CheckCircle, XCircle, Languages, Sparkles } from 'lucide-react';
 
 export default function PdfxHome() {
+  const params = useParams();
   const [activeTab, setActiveTab] = useState<'upload' | 'history'>('upload');
   const [file, setFile] = useState<File | null>(null);
   const [lang, setLang] = useState('English');
@@ -92,7 +94,7 @@ export default function PdfxHome() {
               PDF Translator
             </h1>
             <p className="mt-6 text-lg leading-8 text-white/90 max-w-2xl mx-auto">
-              Transform your PDF documents into any language with precision and speed. 
+              Transform your PDF documents into any language with precision and speed.
               Powered by advanced AI technology for accurate, context-aware translations.
             </p>
           </div>
@@ -105,22 +107,20 @@ export default function PdfxHome() {
           <div className="inline-flex items-center p-1 bg-white/70 backdrop-blur-sm rounded-xl shadow-lg border border-white/50">
             <button
               onClick={() => setActiveTab('upload')}
-              className={`flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
-                activeTab === 'upload'
-                  ? 'bg-white text-blue-600 shadow-md'
-                  : 'text-gray-600 hover:text-gray-800 hover:bg-white/50'
-              }`}
+              className={`flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${activeTab === 'upload'
+                ? 'bg-white text-blue-600 shadow-md'
+                : 'text-gray-600 hover:text-gray-800 hover:bg-white/50'
+                }`}
             >
               <Upload className="h-4 w-4" />
               New Translation
             </button>
             <button
               onClick={() => setActiveTab('history')}
-              className={`flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
-                activeTab === 'history'
-                  ? 'bg-white text-blue-600 shadow-md'
-                  : 'text-gray-600 hover:text-gray-800 hover:bg-white/50'
-              }`}
+              className={`flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${activeTab === 'history'
+                ? 'bg-white text-blue-600 shadow-md'
+                : 'text-gray-600 hover:text-gray-800 hover:bg-white/50'
+                }`}
             >
               <Clock className="h-4 w-4" />
               History
@@ -144,13 +144,12 @@ export default function PdfxHome() {
 
                 {/* File Upload Area */}
                 <div
-                  className={`relative border-2 border-dashed rounded-xl p-12 text-center transition-all duration-200 ${
-                    dragActive
-                      ? 'border-blue-400 bg-blue-50'
-                      : file
+                  className={`relative border-2 border-dashed rounded-xl p-12 text-center transition-all duration-200 ${dragActive
+                    ? 'border-blue-400 bg-blue-50'
+                    : file
                       ? 'border-green-400 bg-green-50'
                       : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50/50'
-                  }`}
+                    }`}
                   onDragEnter={handleDrag}
                   onDragLeave={handleDrag}
                   onDragOver={handleDrag}
@@ -163,7 +162,7 @@ export default function PdfxHome() {
                     onChange={e => setFile(e.target.files?.[0] || null)}
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   />
-                  
+
                   {file ? (
                     <div className="flex items-center justify-center gap-3">
                       <CheckCircle className="h-8 w-8 text-green-500" />
@@ -237,13 +236,12 @@ export default function PdfxHome() {
                       ) : (
                         <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
                       )}
-                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                        status === 'completed' 
-                          ? 'bg-green-100 text-green-700'
-                          : status === 'error'
+                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${status === 'completed'
+                        ? 'bg-green-100 text-green-700'
+                        : status === 'error'
                           ? 'bg-red-100 text-red-700'
                           : 'bg-blue-100 text-blue-700'
-                      }`}>
+                        }`}>
                         {status}
                       </span>
                     </div>
@@ -262,12 +260,11 @@ export default function PdfxHome() {
                       />
                     </div>
                   </div>
-
                   {/* Action Buttons */}
                   {status === 'completed' && (
                     <div className="flex flex-col sm:flex-row gap-4 pt-4">
                       <Link
-                        href={`/esg/pdfx/${jobId}/view`}
+                        href={`/${params?.domain || 'esg'}/pdfx/${jobId}/view`}
                         className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-colors"
                       >
                         <Eye className="h-4 w-4" />

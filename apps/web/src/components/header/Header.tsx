@@ -1,8 +1,7 @@
 import Link from "next/link";
 import DomainSwitch from "./DomainSwitch";
 import UserMenu from "./UserMenu";
-import ToolsDropdown from "./ToolsDropdown";
-import { Home, Newspaper, CalendarCheck, BookOpen, Search } from "lucide-react";
+import { Home, Newspaper, CalendarCheck, BookOpen, Search, BarChart3 } from "lucide-react";
 
 const NavLink = ({ href, children, active = false }: { href: string; children: React.ReactNode; active?: boolean }) => (
   <Link 
@@ -60,7 +59,12 @@ export default function Header({ domain }: { domain: "esg" | "credit" }) {
               Publications
             </span>
           </NavLink>
-          <ToolsDropdown domain={domain} base={base} />
+          <NavLink href={`${base}/tools`}>
+            <span className="inline-flex items-center gap-2">
+              <BarChart3 size={16} />
+              Tools
+            </span>
+          </NavLink>
         </nav>
 
         {/* Right Actions */}

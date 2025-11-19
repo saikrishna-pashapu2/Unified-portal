@@ -183,6 +183,11 @@ export type usersession = $Result.DefaultSelection<Prisma.$usersessionPayload>
  * 
  */
 export type fitch_upload_history = $Result.DefaultSelection<Prisma.$fitch_upload_historyPayload>
+/**
+ * Model weekly_digest
+ * 
+ */
+export type weekly_digest = $Result.DefaultSelection<Prisma.$weekly_digestPayload>
 
 /**
  * Enums
@@ -696,6 +701,16 @@ export class PrismaClient<
     * ```
     */
   get fitch_upload_history(): Prisma.fitch_upload_historyDelegate<ExtArgs>;
+
+  /**
+   * `prisma.weekly_digest`: Exposes CRUD operations for the **weekly_digest** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more Weekly_digests
+    * const weekly_digests = await prisma.weekly_digest.findMany()
+    * ```
+    */
+  get weekly_digest(): Prisma.weekly_digestDelegate<ExtArgs>;
 }
 
 export namespace Prisma {
@@ -1170,7 +1185,8 @@ export namespace Prisma {
     user_permissions: 'user_permissions',
     users: 'users',
     usersession: 'usersession',
-    fitch_upload_history: 'fitch_upload_history'
+    fitch_upload_history: 'fitch_upload_history',
+    weekly_digest: 'weekly_digest'
   };
 
   export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -1186,7 +1202,7 @@ export namespace Prisma {
 
   export type TypeMap<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, ClientOptions = {}> = {
     meta: {
-      modelProps: "activity_logs" | "activitylog" | "ai_assistant_config" | "ai_conversations" | "ai_entity_memory" | "ai_knowledge_base" | "ai_session_memory" | "article" | "article_tags" | "articlestar" | "articleview" | "credit_articles" | "email_alerts" | "event" | "eventregistration" | "events" | "methodologies" | "newsletter_logs" | "newsletter_preferences" | "newsletter_subscriptions" | "permission" | "publications" | "refreshtoken" | "roles" | "tag" | "user" | "user_activity" | "user_alerts" | "user_article_stars" | "user_events" | "user_permissions" | "users" | "usersession" | "fitch_upload_history"
+      modelProps: "activity_logs" | "activitylog" | "ai_assistant_config" | "ai_conversations" | "ai_entity_memory" | "ai_knowledge_base" | "ai_session_memory" | "article" | "article_tags" | "articlestar" | "articleview" | "credit_articles" | "email_alerts" | "event" | "eventregistration" | "events" | "methodologies" | "newsletter_logs" | "newsletter_preferences" | "newsletter_subscriptions" | "permission" | "publications" | "refreshtoken" | "roles" | "tag" | "user" | "user_activity" | "user_alerts" | "user_article_stars" | "user_events" | "user_permissions" | "users" | "usersession" | "fitch_upload_history" | "weekly_digest"
       txIsolationLevel: Prisma.TransactionIsolationLevel
     }
     model: {
@@ -3567,6 +3583,76 @@ export namespace Prisma {
           count: {
             args: Prisma.fitch_upload_historyCountArgs<ExtArgs>
             result: $Utils.Optional<Fitch_upload_historyCountAggregateOutputType> | number
+          }
+        }
+      }
+      weekly_digest: {
+        payload: Prisma.$weekly_digestPayload<ExtArgs>
+        fields: Prisma.weekly_digestFieldRefs
+        operations: {
+          findUnique: {
+            args: Prisma.weekly_digestFindUniqueArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$weekly_digestPayload> | null
+          }
+          findUniqueOrThrow: {
+            args: Prisma.weekly_digestFindUniqueOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$weekly_digestPayload>
+          }
+          findFirst: {
+            args: Prisma.weekly_digestFindFirstArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$weekly_digestPayload> | null
+          }
+          findFirstOrThrow: {
+            args: Prisma.weekly_digestFindFirstOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$weekly_digestPayload>
+          }
+          findMany: {
+            args: Prisma.weekly_digestFindManyArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$weekly_digestPayload>[]
+          }
+          create: {
+            args: Prisma.weekly_digestCreateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$weekly_digestPayload>
+          }
+          createMany: {
+            args: Prisma.weekly_digestCreateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          createManyAndReturn: {
+            args: Prisma.weekly_digestCreateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$weekly_digestPayload>[]
+          }
+          delete: {
+            args: Prisma.weekly_digestDeleteArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$weekly_digestPayload>
+          }
+          update: {
+            args: Prisma.weekly_digestUpdateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$weekly_digestPayload>
+          }
+          deleteMany: {
+            args: Prisma.weekly_digestDeleteManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateMany: {
+            args: Prisma.weekly_digestUpdateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          upsert: {
+            args: Prisma.weekly_digestUpsertArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$weekly_digestPayload>
+          }
+          aggregate: {
+            args: Prisma.Weekly_digestAggregateArgs<ExtArgs>
+            result: $Utils.Optional<AggregateWeekly_digest>
+          }
+          groupBy: {
+            args: Prisma.weekly_digestGroupByArgs<ExtArgs>
+            result: $Utils.Optional<Weekly_digestGroupByOutputType>[]
+          }
+          count: {
+            args: Prisma.weekly_digestCountArgs<ExtArgs>
+            result: $Utils.Optional<Weekly_digestCountAggregateOutputType> | number
           }
         }
       }
@@ -39416,6 +39502,918 @@ export namespace Prisma {
 
 
   /**
+   * Model weekly_digest
+   */
+
+  export type AggregateWeekly_digest = {
+    _count: Weekly_digestCountAggregateOutputType | null
+    _avg: Weekly_digestAvgAggregateOutputType | null
+    _sum: Weekly_digestSumAggregateOutputType | null
+    _min: Weekly_digestMinAggregateOutputType | null
+    _max: Weekly_digestMaxAggregateOutputType | null
+  }
+
+  export type Weekly_digestAvgAggregateOutputType = {
+    id: number | null
+  }
+
+  export type Weekly_digestSumAggregateOutputType = {
+    id: number | null
+  }
+
+  export type Weekly_digestMinAggregateOutputType = {
+    id: number | null
+    week_start: Date | null
+    week_end: Date | null
+    content: string | null
+    created_at: Date | null
+  }
+
+  export type Weekly_digestMaxAggregateOutputType = {
+    id: number | null
+    week_start: Date | null
+    week_end: Date | null
+    content: string | null
+    created_at: Date | null
+  }
+
+  export type Weekly_digestCountAggregateOutputType = {
+    id: number
+    week_start: number
+    week_end: number
+    content: number
+    created_at: number
+    _all: number
+  }
+
+
+  export type Weekly_digestAvgAggregateInputType = {
+    id?: true
+  }
+
+  export type Weekly_digestSumAggregateInputType = {
+    id?: true
+  }
+
+  export type Weekly_digestMinAggregateInputType = {
+    id?: true
+    week_start?: true
+    week_end?: true
+    content?: true
+    created_at?: true
+  }
+
+  export type Weekly_digestMaxAggregateInputType = {
+    id?: true
+    week_start?: true
+    week_end?: true
+    content?: true
+    created_at?: true
+  }
+
+  export type Weekly_digestCountAggregateInputType = {
+    id?: true
+    week_start?: true
+    week_end?: true
+    content?: true
+    created_at?: true
+    _all?: true
+  }
+
+  export type Weekly_digestAggregateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which weekly_digest to aggregate.
+     */
+    where?: weekly_digestWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of weekly_digests to fetch.
+     */
+    orderBy?: weekly_digestOrderByWithRelationInput | weekly_digestOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the start position
+     */
+    cursor?: weekly_digestWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` weekly_digests from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` weekly_digests.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Count returned weekly_digests
+    **/
+    _count?: true | Weekly_digestCountAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to average
+    **/
+    _avg?: Weekly_digestAvgAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to sum
+    **/
+    _sum?: Weekly_digestSumAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the minimum value
+    **/
+    _min?: Weekly_digestMinAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the maximum value
+    **/
+    _max?: Weekly_digestMaxAggregateInputType
+  }
+
+  export type GetWeekly_digestAggregateType<T extends Weekly_digestAggregateArgs> = {
+        [P in keyof T & keyof AggregateWeekly_digest]: P extends '_count' | 'count'
+      ? T[P] extends true
+        ? number
+        : GetScalarType<T[P], AggregateWeekly_digest[P]>
+      : GetScalarType<T[P], AggregateWeekly_digest[P]>
+  }
+
+
+
+
+  export type weekly_digestGroupByArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: weekly_digestWhereInput
+    orderBy?: weekly_digestOrderByWithAggregationInput | weekly_digestOrderByWithAggregationInput[]
+    by: Weekly_digestScalarFieldEnum[] | Weekly_digestScalarFieldEnum
+    having?: weekly_digestScalarWhereWithAggregatesInput
+    take?: number
+    skip?: number
+    _count?: Weekly_digestCountAggregateInputType | true
+    _avg?: Weekly_digestAvgAggregateInputType
+    _sum?: Weekly_digestSumAggregateInputType
+    _min?: Weekly_digestMinAggregateInputType
+    _max?: Weekly_digestMaxAggregateInputType
+  }
+
+  export type Weekly_digestGroupByOutputType = {
+    id: number
+    week_start: Date
+    week_end: Date
+    content: string
+    created_at: Date
+    _count: Weekly_digestCountAggregateOutputType | null
+    _avg: Weekly_digestAvgAggregateOutputType | null
+    _sum: Weekly_digestSumAggregateOutputType | null
+    _min: Weekly_digestMinAggregateOutputType | null
+    _max: Weekly_digestMaxAggregateOutputType | null
+  }
+
+  type GetWeekly_digestGroupByPayload<T extends weekly_digestGroupByArgs> = Prisma.PrismaPromise<
+    Array<
+      PickEnumerable<Weekly_digestGroupByOutputType, T['by']> &
+        {
+          [P in ((keyof T) & (keyof Weekly_digestGroupByOutputType))]: P extends '_count'
+            ? T[P] extends boolean
+              ? number
+              : GetScalarType<T[P], Weekly_digestGroupByOutputType[P]>
+            : GetScalarType<T[P], Weekly_digestGroupByOutputType[P]>
+        }
+      >
+    >
+
+
+  export type weekly_digestSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    week_start?: boolean
+    week_end?: boolean
+    content?: boolean
+    created_at?: boolean
+  }, ExtArgs["result"]["weekly_digest"]>
+
+  export type weekly_digestSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    week_start?: boolean
+    week_end?: boolean
+    content?: boolean
+    created_at?: boolean
+  }, ExtArgs["result"]["weekly_digest"]>
+
+  export type weekly_digestSelectScalar = {
+    id?: boolean
+    week_start?: boolean
+    week_end?: boolean
+    content?: boolean
+    created_at?: boolean
+  }
+
+
+  export type $weekly_digestPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    name: "weekly_digest"
+    objects: {}
+    scalars: $Extensions.GetPayloadResult<{
+      id: number
+      week_start: Date
+      week_end: Date
+      content: string
+      created_at: Date
+    }, ExtArgs["result"]["weekly_digest"]>
+    composites: {}
+  }
+
+  type weekly_digestGetPayload<S extends boolean | null | undefined | weekly_digestDefaultArgs> = $Result.GetResult<Prisma.$weekly_digestPayload, S>
+
+  type weekly_digestCountArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = 
+    Omit<weekly_digestFindManyArgs, 'select' | 'include' | 'distinct'> & {
+      select?: Weekly_digestCountAggregateInputType | true
+    }
+
+  export interface weekly_digestDelegate<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> {
+    [K: symbol]: { types: Prisma.TypeMap<ExtArgs>['model']['weekly_digest'], meta: { name: 'weekly_digest' } }
+    /**
+     * Find zero or one Weekly_digest that matches the filter.
+     * @param {weekly_digestFindUniqueArgs} args - Arguments to find a Weekly_digest
+     * @example
+     * // Get one Weekly_digest
+     * const weekly_digest = await prisma.weekly_digest.findUnique({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUnique<T extends weekly_digestFindUniqueArgs>(args: SelectSubset<T, weekly_digestFindUniqueArgs<ExtArgs>>): Prisma__weekly_digestClient<$Result.GetResult<Prisma.$weekly_digestPayload<ExtArgs>, T, "findUnique"> | null, null, ExtArgs>
+
+    /**
+     * Find one Weekly_digest that matches the filter or throw an error with `error.code='P2025'` 
+     * if no matches were found.
+     * @param {weekly_digestFindUniqueOrThrowArgs} args - Arguments to find a Weekly_digest
+     * @example
+     * // Get one Weekly_digest
+     * const weekly_digest = await prisma.weekly_digest.findUniqueOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUniqueOrThrow<T extends weekly_digestFindUniqueOrThrowArgs>(args: SelectSubset<T, weekly_digestFindUniqueOrThrowArgs<ExtArgs>>): Prisma__weekly_digestClient<$Result.GetResult<Prisma.$weekly_digestPayload<ExtArgs>, T, "findUniqueOrThrow">, never, ExtArgs>
+
+    /**
+     * Find the first Weekly_digest that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {weekly_digestFindFirstArgs} args - Arguments to find a Weekly_digest
+     * @example
+     * // Get one Weekly_digest
+     * const weekly_digest = await prisma.weekly_digest.findFirst({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirst<T extends weekly_digestFindFirstArgs>(args?: SelectSubset<T, weekly_digestFindFirstArgs<ExtArgs>>): Prisma__weekly_digestClient<$Result.GetResult<Prisma.$weekly_digestPayload<ExtArgs>, T, "findFirst"> | null, null, ExtArgs>
+
+    /**
+     * Find the first Weekly_digest that matches the filter or
+     * throw `PrismaKnownClientError` with `P2025` code if no matches were found.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {weekly_digestFindFirstOrThrowArgs} args - Arguments to find a Weekly_digest
+     * @example
+     * // Get one Weekly_digest
+     * const weekly_digest = await prisma.weekly_digest.findFirstOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirstOrThrow<T extends weekly_digestFindFirstOrThrowArgs>(args?: SelectSubset<T, weekly_digestFindFirstOrThrowArgs<ExtArgs>>): Prisma__weekly_digestClient<$Result.GetResult<Prisma.$weekly_digestPayload<ExtArgs>, T, "findFirstOrThrow">, never, ExtArgs>
+
+    /**
+     * Find zero or more Weekly_digests that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {weekly_digestFindManyArgs} args - Arguments to filter and select certain fields only.
+     * @example
+     * // Get all Weekly_digests
+     * const weekly_digests = await prisma.weekly_digest.findMany()
+     * 
+     * // Get first 10 Weekly_digests
+     * const weekly_digests = await prisma.weekly_digest.findMany({ take: 10 })
+     * 
+     * // Only select the `id`
+     * const weekly_digestWithIdOnly = await prisma.weekly_digest.findMany({ select: { id: true } })
+     * 
+     */
+    findMany<T extends weekly_digestFindManyArgs>(args?: SelectSubset<T, weekly_digestFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$weekly_digestPayload<ExtArgs>, T, "findMany">>
+
+    /**
+     * Create a Weekly_digest.
+     * @param {weekly_digestCreateArgs} args - Arguments to create a Weekly_digest.
+     * @example
+     * // Create one Weekly_digest
+     * const Weekly_digest = await prisma.weekly_digest.create({
+     *   data: {
+     *     // ... data to create a Weekly_digest
+     *   }
+     * })
+     * 
+     */
+    create<T extends weekly_digestCreateArgs>(args: SelectSubset<T, weekly_digestCreateArgs<ExtArgs>>): Prisma__weekly_digestClient<$Result.GetResult<Prisma.$weekly_digestPayload<ExtArgs>, T, "create">, never, ExtArgs>
+
+    /**
+     * Create many Weekly_digests.
+     * @param {weekly_digestCreateManyArgs} args - Arguments to create many Weekly_digests.
+     * @example
+     * // Create many Weekly_digests
+     * const weekly_digest = await prisma.weekly_digest.createMany({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     *     
+     */
+    createMany<T extends weekly_digestCreateManyArgs>(args?: SelectSubset<T, weekly_digestCreateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Create many Weekly_digests and returns the data saved in the database.
+     * @param {weekly_digestCreateManyAndReturnArgs} args - Arguments to create many Weekly_digests.
+     * @example
+     * // Create many Weekly_digests
+     * const weekly_digest = await prisma.weekly_digest.createManyAndReturn({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Create many Weekly_digests and only return the `id`
+     * const weekly_digestWithIdOnly = await prisma.weekly_digest.createManyAndReturn({ 
+     *   select: { id: true },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    createManyAndReturn<T extends weekly_digestCreateManyAndReturnArgs>(args?: SelectSubset<T, weekly_digestCreateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$weekly_digestPayload<ExtArgs>, T, "createManyAndReturn">>
+
+    /**
+     * Delete a Weekly_digest.
+     * @param {weekly_digestDeleteArgs} args - Arguments to delete one Weekly_digest.
+     * @example
+     * // Delete one Weekly_digest
+     * const Weekly_digest = await prisma.weekly_digest.delete({
+     *   where: {
+     *     // ... filter to delete one Weekly_digest
+     *   }
+     * })
+     * 
+     */
+    delete<T extends weekly_digestDeleteArgs>(args: SelectSubset<T, weekly_digestDeleteArgs<ExtArgs>>): Prisma__weekly_digestClient<$Result.GetResult<Prisma.$weekly_digestPayload<ExtArgs>, T, "delete">, never, ExtArgs>
+
+    /**
+     * Update one Weekly_digest.
+     * @param {weekly_digestUpdateArgs} args - Arguments to update one Weekly_digest.
+     * @example
+     * // Update one Weekly_digest
+     * const weekly_digest = await prisma.weekly_digest.update({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    update<T extends weekly_digestUpdateArgs>(args: SelectSubset<T, weekly_digestUpdateArgs<ExtArgs>>): Prisma__weekly_digestClient<$Result.GetResult<Prisma.$weekly_digestPayload<ExtArgs>, T, "update">, never, ExtArgs>
+
+    /**
+     * Delete zero or more Weekly_digests.
+     * @param {weekly_digestDeleteManyArgs} args - Arguments to filter Weekly_digests to delete.
+     * @example
+     * // Delete a few Weekly_digests
+     * const { count } = await prisma.weekly_digest.deleteMany({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     * 
+     */
+    deleteMany<T extends weekly_digestDeleteManyArgs>(args?: SelectSubset<T, weekly_digestDeleteManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more Weekly_digests.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {weekly_digestUpdateManyArgs} args - Arguments to update one or more rows.
+     * @example
+     * // Update many Weekly_digests
+     * const weekly_digest = await prisma.weekly_digest.updateMany({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    updateMany<T extends weekly_digestUpdateManyArgs>(args: SelectSubset<T, weekly_digestUpdateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Create or update one Weekly_digest.
+     * @param {weekly_digestUpsertArgs} args - Arguments to update or create a Weekly_digest.
+     * @example
+     * // Update or create a Weekly_digest
+     * const weekly_digest = await prisma.weekly_digest.upsert({
+     *   create: {
+     *     // ... data to create a Weekly_digest
+     *   },
+     *   update: {
+     *     // ... in case it already exists, update
+     *   },
+     *   where: {
+     *     // ... the filter for the Weekly_digest we want to update
+     *   }
+     * })
+     */
+    upsert<T extends weekly_digestUpsertArgs>(args: SelectSubset<T, weekly_digestUpsertArgs<ExtArgs>>): Prisma__weekly_digestClient<$Result.GetResult<Prisma.$weekly_digestPayload<ExtArgs>, T, "upsert">, never, ExtArgs>
+
+
+    /**
+     * Count the number of Weekly_digests.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {weekly_digestCountArgs} args - Arguments to filter Weekly_digests to count.
+     * @example
+     * // Count the number of Weekly_digests
+     * const count = await prisma.weekly_digest.count({
+     *   where: {
+     *     // ... the filter for the Weekly_digests we want to count
+     *   }
+     * })
+    **/
+    count<T extends weekly_digestCountArgs>(
+      args?: Subset<T, weekly_digestCountArgs>,
+    ): Prisma.PrismaPromise<
+      T extends $Utils.Record<'select', any>
+        ? T['select'] extends true
+          ? number
+          : GetScalarType<T['select'], Weekly_digestCountAggregateOutputType>
+        : number
+    >
+
+    /**
+     * Allows you to perform aggregations operations on a Weekly_digest.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {Weekly_digestAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @example
+     * // Ordered by age ascending
+     * // Where email contains prisma.io
+     * // Limited to the 10 users
+     * const aggregations = await prisma.user.aggregate({
+     *   _avg: {
+     *     age: true,
+     *   },
+     *   where: {
+     *     email: {
+     *       contains: "prisma.io",
+     *     },
+     *   },
+     *   orderBy: {
+     *     age: "asc",
+     *   },
+     *   take: 10,
+     * })
+    **/
+    aggregate<T extends Weekly_digestAggregateArgs>(args: Subset<T, Weekly_digestAggregateArgs>): Prisma.PrismaPromise<GetWeekly_digestAggregateType<T>>
+
+    /**
+     * Group by Weekly_digest.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {weekly_digestGroupByArgs} args - Group by arguments.
+     * @example
+     * // Group by city, order by createdAt, get count
+     * const result = await prisma.user.groupBy({
+     *   by: ['city', 'createdAt'],
+     *   orderBy: {
+     *     createdAt: true
+     *   },
+     *   _count: {
+     *     _all: true
+     *   },
+     * })
+     * 
+    **/
+    groupBy<
+      T extends weekly_digestGroupByArgs,
+      HasSelectOrTake extends Or<
+        Extends<'skip', Keys<T>>,
+        Extends<'take', Keys<T>>
+      >,
+      OrderByArg extends True extends HasSelectOrTake
+        ? { orderBy: weekly_digestGroupByArgs['orderBy'] }
+        : { orderBy?: weekly_digestGroupByArgs['orderBy'] },
+      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
+      ByFields extends MaybeTupleToUnion<T['by']>,
+      ByValid extends Has<ByFields, OrderFields>,
+      HavingFields extends GetHavingFields<T['having']>,
+      HavingValid extends Has<ByFields, HavingFields>,
+      ByEmpty extends T['by'] extends never[] ? True : False,
+      InputErrors extends ByEmpty extends True
+      ? `Error: "by" must not be empty.`
+      : HavingValid extends False
+      ? {
+          [P in HavingFields]: P extends ByFields
+            ? never
+            : P extends string
+            ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
+            : [
+                Error,
+                'Field ',
+                P,
+                ` in "having" needs to be provided in "by"`,
+              ]
+        }[HavingFields]
+      : 'take' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "take", you also need to provide "orderBy"'
+      : 'skip' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "skip", you also need to provide "orderBy"'
+      : ByValid extends True
+      ? {}
+      : {
+          [P in OrderFields]: P extends ByFields
+            ? never
+            : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+        }[OrderFields]
+    >(args: SubsetIntersection<T, weekly_digestGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetWeekly_digestGroupByPayload<T> : Prisma.PrismaPromise<InputErrors>
+  /**
+   * Fields of the weekly_digest model
+   */
+  readonly fields: weekly_digestFieldRefs;
+  }
+
+  /**
+   * The delegate class that acts as a "Promise-like" for weekly_digest.
+   * Why is this prefixed with `Prisma__`?
+   * Because we want to prevent naming conflicts as mentioned in
+   * https://github.com/prisma/prisma-client-js/issues/707
+   */
+  export interface Prisma__weekly_digestClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> extends Prisma.PrismaPromise<T> {
+    readonly [Symbol.toStringTag]: "PrismaPromise"
+    /**
+     * Attaches callbacks for the resolution and/or rejection of the Promise.
+     * @param onfulfilled The callback to execute when the Promise is resolved.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of which ever callback is executed.
+     */
+    then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): $Utils.JsPromise<TResult1 | TResult2>
+    /**
+     * Attaches a callback for only the rejection of the Promise.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of the callback.
+     */
+    catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null): $Utils.JsPromise<T | TResult>
+    /**
+     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
+     * resolved value cannot be modified from the callback.
+     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
+     * @returns A Promise for the completion of the callback.
+     */
+    finally(onfinally?: (() => void) | undefined | null): $Utils.JsPromise<T>
+  }
+
+
+
+
+  /**
+   * Fields of the weekly_digest model
+   */ 
+  interface weekly_digestFieldRefs {
+    readonly id: FieldRef<"weekly_digest", 'Int'>
+    readonly week_start: FieldRef<"weekly_digest", 'DateTime'>
+    readonly week_end: FieldRef<"weekly_digest", 'DateTime'>
+    readonly content: FieldRef<"weekly_digest", 'String'>
+    readonly created_at: FieldRef<"weekly_digest", 'DateTime'>
+  }
+    
+
+  // Custom InputTypes
+  /**
+   * weekly_digest findUnique
+   */
+  export type weekly_digestFindUniqueArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the weekly_digest
+     */
+    select?: weekly_digestSelect<ExtArgs> | null
+    /**
+     * Filter, which weekly_digest to fetch.
+     */
+    where: weekly_digestWhereUniqueInput
+  }
+
+  /**
+   * weekly_digest findUniqueOrThrow
+   */
+  export type weekly_digestFindUniqueOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the weekly_digest
+     */
+    select?: weekly_digestSelect<ExtArgs> | null
+    /**
+     * Filter, which weekly_digest to fetch.
+     */
+    where: weekly_digestWhereUniqueInput
+  }
+
+  /**
+   * weekly_digest findFirst
+   */
+  export type weekly_digestFindFirstArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the weekly_digest
+     */
+    select?: weekly_digestSelect<ExtArgs> | null
+    /**
+     * Filter, which weekly_digest to fetch.
+     */
+    where?: weekly_digestWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of weekly_digests to fetch.
+     */
+    orderBy?: weekly_digestOrderByWithRelationInput | weekly_digestOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for weekly_digests.
+     */
+    cursor?: weekly_digestWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` weekly_digests from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` weekly_digests.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of weekly_digests.
+     */
+    distinct?: Weekly_digestScalarFieldEnum | Weekly_digestScalarFieldEnum[]
+  }
+
+  /**
+   * weekly_digest findFirstOrThrow
+   */
+  export type weekly_digestFindFirstOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the weekly_digest
+     */
+    select?: weekly_digestSelect<ExtArgs> | null
+    /**
+     * Filter, which weekly_digest to fetch.
+     */
+    where?: weekly_digestWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of weekly_digests to fetch.
+     */
+    orderBy?: weekly_digestOrderByWithRelationInput | weekly_digestOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for weekly_digests.
+     */
+    cursor?: weekly_digestWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` weekly_digests from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` weekly_digests.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of weekly_digests.
+     */
+    distinct?: Weekly_digestScalarFieldEnum | Weekly_digestScalarFieldEnum[]
+  }
+
+  /**
+   * weekly_digest findMany
+   */
+  export type weekly_digestFindManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the weekly_digest
+     */
+    select?: weekly_digestSelect<ExtArgs> | null
+    /**
+     * Filter, which weekly_digests to fetch.
+     */
+    where?: weekly_digestWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of weekly_digests to fetch.
+     */
+    orderBy?: weekly_digestOrderByWithRelationInput | weekly_digestOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for listing weekly_digests.
+     */
+    cursor?: weekly_digestWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` weekly_digests from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` weekly_digests.
+     */
+    skip?: number
+    distinct?: Weekly_digestScalarFieldEnum | Weekly_digestScalarFieldEnum[]
+  }
+
+  /**
+   * weekly_digest create
+   */
+  export type weekly_digestCreateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the weekly_digest
+     */
+    select?: weekly_digestSelect<ExtArgs> | null
+    /**
+     * The data needed to create a weekly_digest.
+     */
+    data: XOR<weekly_digestCreateInput, weekly_digestUncheckedCreateInput>
+  }
+
+  /**
+   * weekly_digest createMany
+   */
+  export type weekly_digestCreateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to create many weekly_digests.
+     */
+    data: weekly_digestCreateManyInput | weekly_digestCreateManyInput[]
+    skipDuplicates?: boolean
+  }
+
+  /**
+   * weekly_digest createManyAndReturn
+   */
+  export type weekly_digestCreateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the weekly_digest
+     */
+    select?: weekly_digestSelectCreateManyAndReturn<ExtArgs> | null
+    /**
+     * The data used to create many weekly_digests.
+     */
+    data: weekly_digestCreateManyInput | weekly_digestCreateManyInput[]
+    skipDuplicates?: boolean
+  }
+
+  /**
+   * weekly_digest update
+   */
+  export type weekly_digestUpdateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the weekly_digest
+     */
+    select?: weekly_digestSelect<ExtArgs> | null
+    /**
+     * The data needed to update a weekly_digest.
+     */
+    data: XOR<weekly_digestUpdateInput, weekly_digestUncheckedUpdateInput>
+    /**
+     * Choose, which weekly_digest to update.
+     */
+    where: weekly_digestWhereUniqueInput
+  }
+
+  /**
+   * weekly_digest updateMany
+   */
+  export type weekly_digestUpdateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to update weekly_digests.
+     */
+    data: XOR<weekly_digestUpdateManyMutationInput, weekly_digestUncheckedUpdateManyInput>
+    /**
+     * Filter which weekly_digests to update
+     */
+    where?: weekly_digestWhereInput
+  }
+
+  /**
+   * weekly_digest upsert
+   */
+  export type weekly_digestUpsertArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the weekly_digest
+     */
+    select?: weekly_digestSelect<ExtArgs> | null
+    /**
+     * The filter to search for the weekly_digest to update in case it exists.
+     */
+    where: weekly_digestWhereUniqueInput
+    /**
+     * In case the weekly_digest found by the `where` argument doesn't exist, create a new weekly_digest with this data.
+     */
+    create: XOR<weekly_digestCreateInput, weekly_digestUncheckedCreateInput>
+    /**
+     * In case the weekly_digest was found with the provided `where` argument, update it with this data.
+     */
+    update: XOR<weekly_digestUpdateInput, weekly_digestUncheckedUpdateInput>
+  }
+
+  /**
+   * weekly_digest delete
+   */
+  export type weekly_digestDeleteArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the weekly_digest
+     */
+    select?: weekly_digestSelect<ExtArgs> | null
+    /**
+     * Filter which weekly_digest to delete.
+     */
+    where: weekly_digestWhereUniqueInput
+  }
+
+  /**
+   * weekly_digest deleteMany
+   */
+  export type weekly_digestDeleteManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which weekly_digests to delete
+     */
+    where?: weekly_digestWhereInput
+  }
+
+  /**
+   * weekly_digest without action
+   */
+  export type weekly_digestDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the weekly_digest
+     */
+    select?: weekly_digestSelect<ExtArgs> | null
+  }
+
+
+  /**
    * Enums
    */
 
@@ -39966,6 +40964,17 @@ export namespace Prisma {
   };
 
   export type Fitch_upload_historyScalarFieldEnum = (typeof Fitch_upload_historyScalarFieldEnum)[keyof typeof Fitch_upload_historyScalarFieldEnum]
+
+
+  export const Weekly_digestScalarFieldEnum: {
+    id: 'id',
+    week_start: 'week_start',
+    week_end: 'week_end',
+    content: 'content',
+    created_at: 'created_at'
+  };
+
+  export type Weekly_digestScalarFieldEnum = (typeof Weekly_digestScalarFieldEnum)[keyof typeof Weekly_digestScalarFieldEnum]
 
 
   export const SortOrder: {
@@ -42971,6 +43980,60 @@ export namespace Prisma {
     error_count?: IntWithAggregatesFilter<"fitch_upload_history"> | number
     file_size?: IntNullableWithAggregatesFilter<"fitch_upload_history"> | number | null
     created_at?: DateTimeWithAggregatesFilter<"fitch_upload_history"> | Date | string
+  }
+
+  export type weekly_digestWhereInput = {
+    AND?: weekly_digestWhereInput | weekly_digestWhereInput[]
+    OR?: weekly_digestWhereInput[]
+    NOT?: weekly_digestWhereInput | weekly_digestWhereInput[]
+    id?: IntFilter<"weekly_digest"> | number
+    week_start?: DateTimeFilter<"weekly_digest"> | Date | string
+    week_end?: DateTimeFilter<"weekly_digest"> | Date | string
+    content?: StringFilter<"weekly_digest"> | string
+    created_at?: DateTimeFilter<"weekly_digest"> | Date | string
+  }
+
+  export type weekly_digestOrderByWithRelationInput = {
+    id?: SortOrder
+    week_start?: SortOrder
+    week_end?: SortOrder
+    content?: SortOrder
+    created_at?: SortOrder
+  }
+
+  export type weekly_digestWhereUniqueInput = Prisma.AtLeast<{
+    id?: number
+    AND?: weekly_digestWhereInput | weekly_digestWhereInput[]
+    OR?: weekly_digestWhereInput[]
+    NOT?: weekly_digestWhereInput | weekly_digestWhereInput[]
+    week_start?: DateTimeFilter<"weekly_digest"> | Date | string
+    week_end?: DateTimeFilter<"weekly_digest"> | Date | string
+    content?: StringFilter<"weekly_digest"> | string
+    created_at?: DateTimeFilter<"weekly_digest"> | Date | string
+  }, "id">
+
+  export type weekly_digestOrderByWithAggregationInput = {
+    id?: SortOrder
+    week_start?: SortOrder
+    week_end?: SortOrder
+    content?: SortOrder
+    created_at?: SortOrder
+    _count?: weekly_digestCountOrderByAggregateInput
+    _avg?: weekly_digestAvgOrderByAggregateInput
+    _max?: weekly_digestMaxOrderByAggregateInput
+    _min?: weekly_digestMinOrderByAggregateInput
+    _sum?: weekly_digestSumOrderByAggregateInput
+  }
+
+  export type weekly_digestScalarWhereWithAggregatesInput = {
+    AND?: weekly_digestScalarWhereWithAggregatesInput | weekly_digestScalarWhereWithAggregatesInput[]
+    OR?: weekly_digestScalarWhereWithAggregatesInput[]
+    NOT?: weekly_digestScalarWhereWithAggregatesInput | weekly_digestScalarWhereWithAggregatesInput[]
+    id?: IntWithAggregatesFilter<"weekly_digest"> | number
+    week_start?: DateTimeWithAggregatesFilter<"weekly_digest"> | Date | string
+    week_end?: DateTimeWithAggregatesFilter<"weekly_digest"> | Date | string
+    content?: StringWithAggregatesFilter<"weekly_digest"> | string
+    created_at?: DateTimeWithAggregatesFilter<"weekly_digest"> | Date | string
   }
 
   export type activity_logsCreateInput = {
@@ -46016,6 +47079,59 @@ export namespace Prisma {
     created_at?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
+  export type weekly_digestCreateInput = {
+    week_start: Date | string
+    week_end: Date | string
+    content: string
+    created_at?: Date | string
+  }
+
+  export type weekly_digestUncheckedCreateInput = {
+    id?: number
+    week_start: Date | string
+    week_end: Date | string
+    content: string
+    created_at?: Date | string
+  }
+
+  export type weekly_digestUpdateInput = {
+    week_start?: DateTimeFieldUpdateOperationsInput | Date | string
+    week_end?: DateTimeFieldUpdateOperationsInput | Date | string
+    content?: StringFieldUpdateOperationsInput | string
+    created_at?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type weekly_digestUncheckedUpdateInput = {
+    id?: IntFieldUpdateOperationsInput | number
+    week_start?: DateTimeFieldUpdateOperationsInput | Date | string
+    week_end?: DateTimeFieldUpdateOperationsInput | Date | string
+    content?: StringFieldUpdateOperationsInput | string
+    created_at?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type weekly_digestCreateManyInput = {
+    id?: number
+    week_start: Date | string
+    week_end: Date | string
+    content: string
+    created_at?: Date | string
+  }
+
+  export type weekly_digestUpdateManyMutationInput = {
+    week_start?: DateTimeFieldUpdateOperationsInput | Date | string
+    week_end?: DateTimeFieldUpdateOperationsInput | Date | string
+    content?: StringFieldUpdateOperationsInput | string
+    created_at?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type weekly_digestUncheckedUpdateManyInput = {
+    id?: IntFieldUpdateOperationsInput | number
+    week_start?: DateTimeFieldUpdateOperationsInput | Date | string
+    week_end?: DateTimeFieldUpdateOperationsInput | Date | string
+    content?: StringFieldUpdateOperationsInput | string
+    created_at?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
   export type IntFilter<$PrismaModel = never> = {
     equals?: number | IntFieldRefInput<$PrismaModel>
     in?: number[] | ListIntFieldRefInput<$PrismaModel>
@@ -48366,6 +49482,38 @@ export namespace Prisma {
     _count?: NestedIntFilter<$PrismaModel>
     _min?: NestedBytesFilter<$PrismaModel>
     _max?: NestedBytesFilter<$PrismaModel>
+  }
+
+  export type weekly_digestCountOrderByAggregateInput = {
+    id?: SortOrder
+    week_start?: SortOrder
+    week_end?: SortOrder
+    content?: SortOrder
+    created_at?: SortOrder
+  }
+
+  export type weekly_digestAvgOrderByAggregateInput = {
+    id?: SortOrder
+  }
+
+  export type weekly_digestMaxOrderByAggregateInput = {
+    id?: SortOrder
+    week_start?: SortOrder
+    week_end?: SortOrder
+    content?: SortOrder
+    created_at?: SortOrder
+  }
+
+  export type weekly_digestMinOrderByAggregateInput = {
+    id?: SortOrder
+    week_start?: SortOrder
+    week_end?: SortOrder
+    content?: SortOrder
+    created_at?: SortOrder
+  }
+
+  export type weekly_digestSumOrderByAggregateInput = {
+    id?: SortOrder
   }
 
   export type usersCreateNestedOneWithoutActivity_logsInput = {
@@ -56265,6 +57413,10 @@ export namespace Prisma {
      * @deprecated Use fitch_upload_historyDefaultArgs instead
      */
     export type fitch_upload_historyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = fitch_upload_historyDefaultArgs<ExtArgs>
+    /**
+     * @deprecated Use weekly_digestDefaultArgs instead
+     */
+    export type weekly_digestArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = weekly_digestDefaultArgs<ExtArgs>
 
   /**
    * Batch Payload for updateMany & deleteMany & createMany

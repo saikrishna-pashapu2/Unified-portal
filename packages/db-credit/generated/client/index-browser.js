@@ -559,6 +559,14 @@ exports.Prisma.Fitch_upload_historyScalarFieldEnum = {
   created_at: 'created_at'
 };
 
+exports.Prisma.Weekly_digestScalarFieldEnum = {
+  id: 'id',
+  week_start: 'week_start',
+  week_end: 'week_end',
+  content: 'content',
+  created_at: 'created_at'
+};
+
 exports.Prisma.SortOrder = {
   asc: 'asc',
   desc: 'desc'
@@ -653,7 +661,8 @@ exports.Prisma.ModelName = {
   user_permissions: 'user_permissions',
   users: 'users',
   usersession: 'usersession',
-  fitch_upload_history: 'fitch_upload_history'
+  fitch_upload_history: 'fitch_upload_history',
+  weekly_digest: 'weekly_digest'
 };
 
 /**

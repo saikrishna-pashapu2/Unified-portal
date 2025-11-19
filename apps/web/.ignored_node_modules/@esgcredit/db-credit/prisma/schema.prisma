@@ -648,3 +648,11 @@ model fitch_upload_history {
   @@index([user_email])
   @@index([created_at])
 }
+
+model weekly_digest {
+  id         Int      @id @default(autoincrement())
+  week_start DateTime @db.Date
+  week_end   DateTime @db.Date
+  content    String   @db.Text
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+}

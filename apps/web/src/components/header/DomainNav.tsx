@@ -9,7 +9,7 @@ const itemsByDomain = {
     { href: "/esg/events", label: "Events" },
     { href: "/esg/tenders", label: "Tenders" },
     { href: "/esg/publications", label: "Publications" },
-    { href: "/esg/scores", label: "Scores Tool" },
+    { href: "/esg/tools", label: "All Tools" },
     { href: "/esg/pdf-translate", label: "PDF Translate" },
   ],
   credit: [
@@ -18,6 +18,7 @@ const itemsByDomain = {
     { href: "/credit/events", label: "Events" },
     { href: "/credit/tenders", label: "Tenders" },
     { href: "/credit/publications", label: "Publications" },
+    { href: "/credit/tools", label: "All Tools" },
     { href: "/credit/tools/fitch", label: "Fitch Tool" },
   ],
 } as const;
@@ -33,9 +34,8 @@ export default function DomainNav({ domain }: { domain: "esg" | "credit" }) {
           <Link
             key={it.href}
             href={it.href}
-            className={`rounded-lg px-3 py-1.5 text-sm border ${
-              active ? "bg-primary text-primary-foreground border-primary" : "hover:bg-accent/10 border-border"
-            }`}
+            className={`rounded-lg px-3 py-1.5 text-sm border ${active ? "bg-primary text-primary-foreground border-primary" : "hover:bg-accent/10 border-border"
+              }`}
           >
             {it.label}
           </Link>

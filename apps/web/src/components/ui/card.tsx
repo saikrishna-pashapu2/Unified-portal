@@ -1,14 +1,14 @@
 import { cn } from "@/lib/utils";
 import { ReactNode } from "react";
 
-interface CardProps {
+interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   children: ReactNode;
   className?: string;
 }
 
-export function Card({ children, className }: CardProps) {
+export function Card({ children, className, ...props }: CardProps) {
   return (
-    <div className={cn("rounded-lg border bg-card text-card-foreground shadow-sm", className)}>
+    <div className={cn("rounded-lg border bg-card text-card-foreground shadow-sm", className)} {...props}>
       {children}
     </div>
   );
@@ -22,6 +22,19 @@ interface CardHeaderProps {
 export function CardHeader({ children, className }: CardHeaderProps) {
   return (
     <div className={cn("flex flex-col space-y-1.5 p-6", className)}>
+      {children}
+    </div>
+  );
+}
+
+interface CardFooterProps {
+  children: ReactNode;
+  className?: string;
+}
+
+export function CardFooter({ children, className }: CardFooterProps) {
+  return (
+    <div className={cn("flex items-center p-6 pt-0", className)}>
       {children}
     </div>
   );

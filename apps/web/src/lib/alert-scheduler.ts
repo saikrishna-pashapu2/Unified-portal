@@ -21,6 +21,7 @@ declare global {
     isStarted: boolean;
     alertProcessingTask: any;
     emailQueueTask: any;
+    weeklyDigestTask: any;
   } | undefined;
 }
 
@@ -30,6 +31,7 @@ if (!globalThis.alertSchedulerState) {
     isStarted: false,
     alertProcessingTask: null,
     emailQueueTask: null,
+    weeklyDigestTask: null,
   };
 }
 
@@ -73,7 +75,7 @@ async function callEndpoint(path: string, name: string) {
 export function startAlertScheduler() {
   // Check if tasks are already running
   const state = getState();
-  const hasRunningTasks = state.alertProcessingTask !== null || state.emailQueueTask !== null;
+  const hasRunningTasks = state.alertProcessingTask !== null || state.emailQueueTask !== null || state.weeklyDigestTask !== null;
   
   // Prevent multiple starts
   if (state.isStarted || hasRunningTasks) {
@@ -105,6 +107,17 @@ export function startAlertScheduler() {
   setState({ emailQueueTask: emailTask });
   console.log('✅ Email Queue Processing scheduled: Every 5 minutes');
 
+  // Weekly Digest Generation - Every Monday at 9am GST
+  // Cron: "0 9 * * 1" = At 09:00 on Monday
+  const digestTask = cron.schedule('0 9 * * 1', async () => {
+    await callEndpoint('/api/cron/generate-digest', 'Weekly Digest Generation');
+  }, {
+    timezone: "Asia/Dubai",
+  });
+  
+  setState({ weeklyDigestTask: digestTask });
+  console.log('✅ Weekly Digest Generation scheduled: Every Monday at 9am GST');
+
   setState({ isStarted: true });
   console.log('🎉 Alert Scheduler started successfully!');
   console.log(`📍 Timezone: Asia/Dubai`);
@@ -116,7 +129,7 @@ export function startAlertScheduler() {
 export function stopAlertScheduler() {
   // Check if any tasks are actually running
   const state = getState();
-  const hasRunningTasks = state.alertProcessingTask !== null || state.emailQueueTask !== null;
+  const hasRunningTasks = state.alertProcessingTask !== null || state.emailQueueTask !== null || state.weeklyDigestTask !== null;
   
   if (!state.isStarted && !hasRunningTasks) {
     console.log('⚠️  Alert scheduler not running');
@@ -138,6 +151,12 @@ export function stopAlertScheduler() {
     console.log('✅ Email Queue Processing task stopped');
   }
   
+  if (state.weeklyDigestTask) {
+    state.weeklyDigestTask.stop();
+    setState({ weeklyDigestTask: null });
+    console.log('✅ Weekly Digest Generation task stopped');
+  }
+  
   setState({ isStarted: false });
   console.log('🛑 Alert Scheduler stopped successfully');
   
@@ -147,13 +166,14 @@ export function stopAlertScheduler() {
 export function getSchedulerStatus() {
   // Check actual task status, not just the flag
   const state = getState();
-  const hasRunningTasks = state.alertProcessingTask !== null || state.emailQueueTask !== null;
+  const hasRunningTasks = state.alertProcessingTask !== null || state.emailQueueTask !== null || state.weeklyDigestTask !== null;
   
   return {
     isRunning: state.isStarted || hasRunningTasks, // Running if flag is set OR tasks exist
     tasks: {
       alertProcessing: state.alertProcessingTask !== null,
       emailQueue: state.emailQueueTask !== null,
+      weeklyDigest: state.weeklyDigestTask !== null,
     },
   };
 }

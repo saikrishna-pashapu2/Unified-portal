@@ -25,6 +25,7 @@ export default function AdminLayout({
     { name: "Analytics", href: "/admin/analytics", icon: "📈" },
     { name: "System Health", href: "/admin/health", icon: "💚" },
     { name: "Test Alerts", href: "/admin/test-alerts", icon: "🧪" },
+    { name: "Weekly Digest", href: "/admin/weekly-digest", icon: "📰" },
   ];
 
   return (

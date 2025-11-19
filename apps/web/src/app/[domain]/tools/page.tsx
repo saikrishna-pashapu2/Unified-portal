@@ -1,235 +1,225 @@
-"use client";
-import { useState, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
-import { Search, FileSpreadsheet, TrendingUp, Users, Shield, Leaf, ArrowRight, BarChart3, Database, Zap, Brain } from "lucide-react";
 import Link from "next/link";
+import { 
+  Search, 
+  FileSpreadsheet, 
+  FileText, 
+  Building2, 
+  LayoutDashboard,
+  Menu,
+  X,
+  ChevronRight,
+  FileCheck
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+
+// Import Tool Components
 import EsgSearch from "./search";
 import EsgExcel from "./excel";
+import FitchTool from "@/app/credit/tools/fitch/ui";
+import PdfxHome from "@/app/[domain]/pdfx/page";
+import TendersTool from "./tenders-tool";
 
-export default function ToolsPage({ params }: { params: { domain: "esg" | "credit" } }) {
-  const searchParams = useSearchParams();
-  const [tab, setTab] = useState<"main" | "search" | "excel">("main");
+// Tool Configuration Types
+type ToolId = "overview" | "search" | "excel" | "pdfx" | "fitch" | "tenders";
 
-  // Set initial tab based on URL parameter
-  useEffect(() => {
-    const tabParam = searchParams.get("tab");
-    if (tabParam === "excel" || tabParam === "search") {
-      setTab(tabParam);
+interface ToolConfig {
+  id: ToolId;
+  label: string;
+  icon: any;
+  component: React.ComponentType<any>;
+  description?: string;
+}
+
+// Domain-specific Tool Configurations
+const TOOLS: Record<"esg" | "credit", ToolConfig[]> = {
+  esg: [
+    { 
+      id: "overview", 
+      label: "Overview", 
+      icon: LayoutDashboard, 
+      component: () => null, // Placeholder
+      description: "Dashboard of all available ESG tools"
+    },
+    { 
+      id: "search", 
+      label: "ESG Search", 
+      icon: Search, 
+      component: EsgSearch,
+      description: "Search for individual company ESG scores"
+    },
+    { 
+      id: "excel", 
+      label: "Excel Updater", 
+      icon: FileSpreadsheet, 
+      component: EsgExcel,
+      description: "Bulk update ESG data via Excel"
+    },
+    { 
+      id: "pdfx", 
+      label: "PDF Translator", 
+      icon: FileText, 
+      component: PdfxHome,
+      description: "Translate and analyze PDF documents"
+    },
+    {
+      id: "tenders",
+      label: "Tenders",
+      icon: FileCheck,
+      component: TendersTool,
+      description: "Browse government tenders related to ESG"
     }
-  }, [searchParams]);
+  ],
+  credit: [
+    { 
+      id: "overview", 
+      label: "Overview", 
+      icon: LayoutDashboard, 
+      component: () => null,
+      description: "Dashboard of all available Credit tools"
+    },
+    { 
+      id: "fitch", 
+      label: "Fitch Ratings", 
+      icon: Building2, 
+      component: FitchTool,
+      description: "Fitch ratings search and analysis"
+    },
+    {
+      id: "tenders",
+      label: "Tenders",
+      icon: FileCheck,
+      component: TendersTool,
+      description: "Explore credit-related tenders"
+    }
+  ]
+};
 
-  // Only show ESG tools for ESG domain for the specific ESG tools
-  const showESGTools = params.domain === "esg";
+export default async function ToolsPage({ 
+  params, 
+  searchParams 
+}: { 
+  params: { domain: "esg" | "credit" };
+  searchParams: { [key: string]: string | string[] | undefined };
+}) {
+  const domainTools = TOOLS[params.domain] || TOOLS.esg;
+  const activeToolId = (searchParams.tool as ToolId) || "overview";
+  
+  // Validate activeToolId
+  const activeTool = domainTools.find(t => t.id === activeToolId) || domainTools[0];
+  const ActiveComponent = activeTool.component;
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-green-50">
-      <div className="mx-auto max-w-7xl px-4 py-8">
-        {/* Hero Header */}
-        <div className="text-center mb-12">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-green-500 to-blue-600 rounded-2xl mb-6">
-            <BarChart3 className="w-8 h-8 text-white" />
+    <div className="flex min-h-[calc(100vh-65px)] bg-slate-50">
+      {/* Sidebar */}
+      <aside className="hidden lg:block w-64 bg-white border-r border-slate-200 overflow-y-auto sticky top-[65px] h-[calc(100vh-65px)]">
+        <div className="h-full flex flex-col">
+          <div className="p-6 border-b border-slate-100">
+            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+              <span className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center text-sm">
+                {params.domain === "esg" ? "ESG" : "CR"}
+              </span>
+              Tools
+            </h2>
           </div>
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            {params.domain === "esg" ? "ESG Tools" : "Credit Tools"}
-          </h1>
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
-            {params.domain === "esg" 
-              ? "Access comprehensive ESG data from multiple providers including S&P, ISS, and LSEG. Get instant insights into environmental, social, and governance performance."
-              : "Powerful tools for credit analysis, risk assessment, and intelligent insights powered by AI."
-            }
-          </p>
-        </div>
 
-        {/* Navigation Tabs - Only show for ESG */}
-        {showESGTools && (
-          <div className="flex justify-center mb-12">
-            <div className="inline-flex items-center bg-white rounded-xl p-1 shadow-lg border">
-              <button
-                onClick={() => setTab("main")}
-                className={`flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
-                  tab === "main"
-                    ? "bg-gradient-to-r from-green-500 to-blue-600 text-white shadow-md"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                }`}
-              >
-                <TrendingUp className="w-4 h-4" />
-                Overview
-              </button>
-              <button
-                onClick={() => setTab("search")}
-                className={`flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
-                  tab === "search"
-                    ? "bg-gradient-to-r from-green-500 to-blue-600 text-white shadow-md"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                }`}
-              >
-                <Search className="w-4 h-4" />
-                ESG Search
-              </button>
-              <button
-                onClick={() => setTab("excel")}
-                className={`flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
-                  tab === "excel"
-                    ? "bg-gradient-to-r from-green-500 to-blue-600 text-white shadow-md"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                }`}
-              >
-                <FileSpreadsheet className="w-4 h-4" />
-                Excel Updater
-              </button>
+          <nav className="flex-1 p-4 space-y-1">
+            {domainTools.map((tool) => {
+              const Icon = tool.icon;
+              const isActive = activeToolId === tool.id;
+              const href = tool.id === "overview" 
+                ? `/${params.domain}/tools` 
+                : `/${params.domain}/tools?tool=${tool.id}`;
+              
+              return (
+                <Link
+                  key={tool.id}
+                  href={href}
+                  className={cn(
+                    "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200",
+                    isActive 
+                      ? "bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-200" 
+                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                  )}
+                >
+                  <Icon className={cn("w-5 h-5", isActive ? "text-blue-600" : "text-slate-400")} />
+                  {tool.label}
+                  {isActive && <ChevronRight className="w-4 h-4 ml-auto text-blue-400" />}
+                </Link>
+              );
+            })}
+          </nav>
+
+          <div className="p-4 border-t border-slate-100">
+            <div className="bg-slate-50 rounded-xl p-4">
+              <p className="text-xs text-slate-500 text-center">
+                Need help? <a href="#" className="text-blue-600 hover:underline">Contact Support</a>
+              </p>
             </div>
           </div>
-        )}
-
-        {/* Content */}
-        <div className="space-y-8">
-          {tab === "main" && showESGTools && (
-            <div className="space-y-12">
-              {/* Key Features */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                <div className="bg-white rounded-2xl p-8 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-300 group">
-                  <div className="flex items-center justify-center w-12 h-12 bg-green-100 rounded-xl mb-6 group-hover:bg-green-200 transition-colors">
-                    <Leaf className="w-6 h-6 text-green-600" />
-                  </div>
-                  <h3 className="text-xl font-semibold text-gray-900 mb-3">Environmental</h3>
-                  <p className="text-gray-600 leading-relaxed">
-                    Track carbon footprint, resource usage, and environmental impact scores across your portfolio.
-                  </p>
-                </div>
-
-                <div className="bg-white rounded-2xl p-8 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-300 group">
-                  <div className="flex items-center justify-center w-12 h-12 bg-blue-100 rounded-xl mb-6 group-hover:bg-blue-200 transition-colors">
-                    <Users className="w-6 h-6 text-blue-600" />
-                  </div>
-                  <h3 className="text-xl font-semibold text-gray-900 mb-3">Social</h3>
-                  <p className="text-gray-600 leading-relaxed">
-                    Evaluate employee relations, community impact, and social responsibility metrics.
-                  </p>
-                </div>
-
-                <div className="bg-white rounded-2xl p-8 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-300 group">
-                  <div className="flex items-center justify-center w-12 h-12 bg-purple-100 rounded-xl mb-6 group-hover:bg-purple-200 transition-colors">
-                    <Shield className="w-6 h-6 text-purple-600" />
-                  </div>
-                  <h3 className="text-xl font-semibold text-gray-900 mb-3">Governance</h3>
-                  <p className="text-gray-600 leading-relaxed">
-                    Assess board composition, executive compensation, and corporate governance practices.
-                  </p>
-                </div>
-              </div>
-
-              {/* Main Tools */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-100 rounded-2xl p-8 border border-blue-200 hover:shadow-xl transition-all duration-300 group">
-                  <div className="flex items-center gap-4 mb-6">
-                    <div className="flex items-center justify-center w-14 h-14 bg-blue-600 rounded-xl group-hover:bg-blue-700 transition-colors">
-                      <Search className="w-7 h-7 text-white" />
-                    </div>
-                    <div>
-                      <h3 className="text-2xl font-bold text-gray-900">ESG Search</h3>
-                      <p className="text-blue-700">Individual company lookup</p>
-                    </div>
-                  </div>
-                  <p className="text-gray-700 mb-6 leading-relaxed">
-                    Search for individual companies and view their comprehensive ESG ratings from S&P Global, 
-                    ISS (oekom), and LSEG sources. Get detailed insights with real-time data.
-                  </p>
-                  <div className="flex items-center gap-4 mb-6">
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <Database className="w-4 h-4" />
-                      <span>3 Data Sources</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <Zap className="w-4 h-4" />
-                      <span>Real-time Results</span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setTab("search")}
-                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200 group-hover:translate-x-1"
-                  >
-                    Start Searching
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-                </div>
-
-                <div className="bg-gradient-to-br from-green-50 to-emerald-100 rounded-2xl p-8 border border-green-200 hover:shadow-xl transition-all duration-300 group">
-                  <div className="flex items-center gap-4 mb-6">
-                    <div className="flex items-center justify-center w-14 h-14 bg-green-600 rounded-xl group-hover:bg-green-700 transition-colors">
-                      <FileSpreadsheet className="w-7 h-7 text-white" />
-                    </div>
-                    <div>
-                      <h3 className="text-2xl font-bold text-gray-900">Excel Updater</h3>
-                      <p className="text-green-700">Bulk file processing</p>
-                    </div>
-                  </div>
-                  <p className="text-gray-700 mb-6 leading-relaxed">
-                    Upload Excel files with company names and automatically populate ESG ratings from all three sources. 
-                    Perfect for portfolio analysis and bulk processing.
-                  </p>
-                  <div className="flex items-center gap-4 mb-6">
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <FileSpreadsheet className="w-4 h-4" />
-                      <span>Bulk Processing</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <TrendingUp className="w-4 h-4" />
-                      <span>Progress Tracking</span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setTab("excel")}
-                    className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200 group-hover:translate-x-1"
-                  >
-                    Upload Excel
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Data Sources */}
-              <div className="bg-white rounded-2xl p-8 shadow-lg border border-gray-100">
-                <h3 className="text-2xl font-bold text-gray-900 mb-6 text-center">Trusted Data Sources</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                  <div className="text-center">
-                    <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl mx-auto mb-4 flex items-center justify-center">
-                      <span className="text-white font-bold text-lg">S&P</span>
-                    </div>
-                    <h4 className="font-semibold text-gray-900 mb-2">S&P Global</h4>
-                    <p className="text-gray-600 text-sm">Comprehensive ESG scores and sustainability ratings</p>
-                  </div>
-                  <div className="text-center">
-                    <div className="w-16 h-16 bg-gradient-to-r from-green-500 to-green-600 rounded-xl mx-auto mb-4 flex items-center justify-center">
-                      <span className="text-white font-bold text-lg">ISS</span>
-                    </div>
-                    <h4 className="font-semibold text-gray-900 mb-2">ISS (oekom)</h4>
-                    <p className="text-gray-600 text-sm">Environmental and social impact assessments</p>
-                  </div>
-                  <div className="text-center">
-                    <div className="w-16 h-16 bg-gradient-to-r from-purple-500 to-purple-600 rounded-xl mx-auto mb-4 flex items-center justify-center">
-                      <span className="text-white font-bold text-xs">LSEG</span>
-                    </div>
-                    <h4 className="font-semibold text-gray-900 mb-2">LSEG (Refinitiv)</h4>
-                    <p className="text-gray-600 text-sm">Global ESG data and transparency scores</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {tab === "search" && (
-            <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-              <EsgSearch />
-            </div>
-          )}
-          
-          {tab === "excel" && (
-            <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-              <EsgExcel />
-            </div>
-          )}
         </div>
-      </div>
-    </main>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col min-w-0">
+        {/* Mobile Header - Simplified for Server Component */}
+        <div className="lg:hidden flex items-center justify-between p-4 bg-white border-b border-slate-200">
+          <span className="font-semibold text-slate-800">
+            {activeTool.label}
+          </span>
+          {/* Mobile menu trigger would require client component wrapper or just simple links */}
+        </div>
+
+        <div className="p-4 lg:p-8">
+          <div className="max-w-7xl mx-auto">
+            {activeToolId === "overview" ? (
+              <div className="space-y-8">
+                <div className="text-center max-w-2xl mx-auto mb-12">
+                  <h1 className="text-3xl font-bold text-slate-900 mb-4">
+                    {params.domain === "esg" ? "ESG Intelligence Tools" : "Credit Analysis Tools"}
+                  </h1>
+                  <p className="text-lg text-slate-600">
+                    Select a tool from the sidebar to get started with your analysis and data processing.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {domainTools.filter(t => t.id !== "overview").map((tool) => {
+                    const Icon = tool.icon;
+                    const href = `/${params.domain}/tools?tool=${tool.id}`;
+                    return (
+                      <Link
+                        key={tool.id}
+                        href={href}
+                        className="flex flex-col items-start p-6 bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-200 transition-all duration-200 group text-left"
+                      >
+                        <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center mb-4 group-hover:bg-blue-100 transition-colors">
+                          <Icon className="w-6 h-6 text-blue-600" />
+                        </div>
+                        <h3 className="text-lg font-semibold text-slate-900 mb-2 group-hover:text-blue-700 transition-colors">
+                          {tool.label}
+                        </h3>
+                        <p className="text-sm text-slate-500">
+                          {tool.description}
+                        </p>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+                {/* Pass props to ActiveComponent if it's TendersTool */}
+                {activeToolId === 'tenders' ? (
+                   // @ts-ignore
+                   <ActiveComponent domain={params.domain} searchParams={searchParams} />
+                ) : (
+                   <ActiveComponent />
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </main>
+    </div>
   );
 }

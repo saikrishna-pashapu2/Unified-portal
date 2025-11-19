@@ -697,6 +697,14 @@ exports.Prisma.User_tender_alertsScalarFieldEnum = {
   updated_at: 'updated_at'
 };
 
+exports.Prisma.Weekly_digestScalarFieldEnum = {
+  id: 'id',
+  week_start: 'week_start',
+  week_end: 'week_end',
+  content: 'content',
+  created_at: 'created_at'
+};
+
 exports.Prisma.SortOrder = {
   asc: 'asc',
   desc: 'desc'
@@ -766,7 +774,8 @@ exports.Prisma.ModelName = {
   tenders: 'tenders',
   transcript_segments: 'transcript_segments',
   user_saved_tenders: 'user_saved_tenders',
-  user_tender_alerts: 'user_tender_alerts'
+  user_tender_alerts: 'user_tender_alerts',
+  weekly_digest: 'weekly_digest'
 };
 
 /**
