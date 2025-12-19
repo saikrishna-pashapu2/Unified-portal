@@ -1,9 +1,9 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import * as XLSX from "xlsx";
 
-export default function ViewUpdated() {
+function ViewUpdatedContent() {
   const searchParams = useSearchParams();
   const jobId = searchParams.get("jobId") || "";
   
@@ -235,5 +235,22 @@ export default function ViewUpdated() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ViewUpdated() {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-6xl px-4 py-8">
+          <div className="flex items-center justify-center min-h-64">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mr-3"></div>
+            <span className="text-gray-600">Loading...</span>
+          </div>
+        </div>
+      }
+    >
+      <ViewUpdatedContent />
+    </Suspense>
   );
 }

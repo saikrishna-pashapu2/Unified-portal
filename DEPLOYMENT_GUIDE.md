@@ -299,21 +299,21 @@ We use versioned deployments with symlinks for zero-downtime updates.
 ```bash
 # Commit your changes
 git add .
-git commit -m "Tools page and community page Updates"
+git commit -m "Design rework"
 git push origin main
 ```
 
 #### 2. On EC2 - Clone New Version
 ```bash
 cd /var/www
-sudo git clone https://github.com/bullhunter6/Unified-portal.git portal-v1.0.5
-sudo chown -R ubuntu:ubuntu portal-v1.0.5
-cd portal-v1.0.5
+sudo git clone https://github.com/bullhunter6/Unified-portal.git portal-v1.0.6
+sudo chown -R ubuntu:ubuntu portal-v1.0.6
+cd portal-v1.0.6
 ```
 
 #### 3. Copy Environment File
 ```bash
-cp /var/www/portal-v1.0.4/.env .env
+cp /var/www/portal-v1.0.5/.env .env
 cp .env apps/web/.env
 ```
 
