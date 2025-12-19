@@ -37,19 +37,23 @@ export default function DomainSwitch() {
 
   const isESG = pathname.startsWith("/esg");
   return (
-    <div className="inline-flex rounded-xl border bg-white p-1 shadow-sm">
+    <div className="inline-flex rounded-full bg-white/10 backdrop-blur-sm p-1">
       <button
         onClick={() => go("esg")}
-        className={`px-3 py-1.5 text-sm rounded-lg transition-all ${
-          isESG ? "bg-emerald-600 text-white" : "hover:bg-slate-50"
+        className={`px-4 py-1.5 text-sm font-medium rounded-full transition-all duration-200 ${
+          isESG 
+            ? "bg-white text-emerald-700 shadow-sm" 
+            : "text-white/70 hover:text-white hover:bg-white/10"
         }`}
       >
         ESG
       </button>
       <button
         onClick={() => go("credit")}
-        className={`px-3 py-1.5 text-sm rounded-lg transition-all ${
-          !isESG ? "bg-slate-800 text-white" : "hover:bg-slate-50"
+        className={`px-4 py-1.5 text-sm font-medium rounded-full transition-all duration-200 ${
+          !isESG 
+            ? "bg-white text-slate-700 shadow-sm" 
+            : "text-white/70 hover:text-white hover:bg-white/10"
         }`}
       >
         Credit

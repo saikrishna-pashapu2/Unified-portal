@@ -31,6 +31,8 @@ type SearchParams = {
   source?: string;
   page?: string;
   date?: string;
+  dateFrom?: string;
+  dateTo?: string;
 };
 
 type RegionItem = {
@@ -114,6 +116,8 @@ export default async function CreditArticlesPage({
       : undefined;
   const page = Math.max(1, Number(searchParams.page ?? "1") || 1);
   const date = searchParams.date;
+  const dateFrom = searchParams.dateFrom;
+  const dateTo = searchParams.dateTo;
 
   // Fetch sources filtered by region and sector
   const sources = await fetchCreditSources({
@@ -130,6 +134,8 @@ export default async function CreditArticlesPage({
     source: selectedSource,
     page,
     date,
+    dateFrom,
+    dateTo,
   });
 
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
@@ -147,8 +153,21 @@ export default async function CreditArticlesPage({
   ]);
   const today = new Date().toISOString().slice(0, 10);
   const selectedDateValue = date ?? today;
-  const selectedDateLabel =
-    formatDisplayDate(date ?? today) ?? formatDisplayDate(today) ?? today;
+  const selectedDateFrom = dateFrom ?? "";
+  const selectedDateTo = dateTo ?? "";
+  
+  // Create display label for the date(s)
+  let selectedDateLabel: string;
+  if (dateFrom && dateTo) {
+    selectedDateLabel = `${formatDisplayDate(dateFrom) ?? dateFrom} - ${formatDisplayDate(dateTo) ?? dateTo}`;
+  } else if (dateFrom) {
+    selectedDateLabel = formatDisplayDate(dateFrom) ?? dateFrom;
+  } else if (dateTo) {
+    selectedDateLabel = `Up to ${formatDisplayDate(dateTo) ?? dateTo}`;
+  } else {
+    selectedDateLabel = formatDisplayDate(today) ?? today;
+  }
+  
   const regionMeta = getRegionMeta(selectedRegion);
 
   const prevPage = page > 1 ? String(page - 1) : undefined;
@@ -160,19 +179,36 @@ export default async function CreditArticlesPage({
     <form
       method="get"
       action="/credit/articles"
-      className="grid w-full gap-3 md:grid-cols-[repeat(2,minmax(0,1fr))_auto_auto] md:items-end"
+      className="grid w-full gap-3 md:grid-cols-[repeat(3,minmax(0,1fr))_auto_auto] md:items-end"
     >
       {selectedRegion ? <input type="hidden" name="region" value={selectedRegion} /> : null}
       {selectedSector ? <input type="hidden" name="sector" value={selectedSector} /> : null}
       <input type="hidden" name="page" value="1" />
 
       <label className="flex flex-col text-sm font-medium text-card-foreground">
-        <span className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">Date</span>
+        <span className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">From Date</span>
         <div className="relative">
           <input
             type="date"
-            name="date"
-            defaultValue={selectedDateValue}
+            name="dateFrom"
+            defaultValue={selectedDateFrom}
+            placeholder="Select date"
+            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm transition-all duration-200 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 hover:border-primary/50 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:rounded [&::-webkit-calendar-picker-indicator]:p-1 [&::-webkit-calendar-picker-indicator]:opacity-60 [&::-webkit-calendar-picker-indicator]:transition-opacity [&::-webkit-calendar-picker-indicator]:hover:bg-primary/10 [&::-webkit-calendar-picker-indicator]:hover:opacity-100"
+            style={{
+              colorScheme: 'light dark'
+            }}
+          />
+        </div>
+      </label>
+
+      <label className="flex flex-col text-sm font-medium text-card-foreground">
+        <span className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">To Date</span>
+        <div className="relative">
+          <input
+            type="date"
+            name="dateTo"
+            defaultValue={selectedDateTo}
+            placeholder="Select date"
             className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm transition-all duration-200 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 hover:border-primary/50 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:rounded [&::-webkit-calendar-picker-indicator]:p-1 [&::-webkit-calendar-picker-indicator]:opacity-60 [&::-webkit-calendar-picker-indicator]:transition-opacity [&::-webkit-calendar-picker-indicator]:hover:bg-primary/10 [&::-webkit-calendar-picker-indicator]:hover:opacity-100"
             style={{
               colorScheme: 'light dark'
@@ -236,7 +272,8 @@ export default async function CreditArticlesPage({
                 }`}
                 href={href("/credit/articles", {
                   source: selectedSource,
-                  date,
+                  dateFrom,
+                  dateTo,
                 })}
               >
                 <Globe2 className="h-4 w-4" aria-hidden="true" />
@@ -255,7 +292,8 @@ export default async function CreditArticlesPage({
                       href={href("/credit/articles", {
                         region: region.key,
                         source: selectedSource,
-                        date,
+                        dateFrom,
+                        dateTo,
                       })}
                     >
                       {region.icon}
@@ -290,7 +328,8 @@ export default async function CreditArticlesPage({
                           href={href("/credit/articles", {
                             region: region.key,
                             source: selectedSource,
-                            date,
+                            dateFrom,
+                            dateTo,
                           })}
                         >
                           View all {region.label}
@@ -307,7 +346,8 @@ export default async function CreditArticlesPage({
                               region: region.key,
                               sector: sector.key,
                               source: selectedSource,
-                              date,
+                              dateFrom,
+                              dateTo,
                             })}
                           >
                             {sector.icon}
@@ -353,7 +393,8 @@ export default async function CreditArticlesPage({
                 if (selectedRegion) backParams.set('region', selectedRegion);
                 if (selectedSector) backParams.set('sector', selectedSector);
                 if (selectedSource) backParams.set('source', selectedSource);
-                if (date) backParams.set('date', date);
+                if (dateFrom) backParams.set('dateFrom', dateFrom);
+                if (dateTo) backParams.set('dateTo', dateTo);
                 if (page > 1) backParams.set('page', String(page));
                 const backQuery = backParams.toString();
                 const articleDetailHref = backQuery 
@@ -370,6 +411,7 @@ export default async function CreditArticlesPage({
                     dateLabel={dateLabel}
                     regionLabel={regionLabel}
                     sectorLabel={sectorLabel}
+                    matchedKeywords={article.matched_keywords}
                     articleId={isValidId ? articleId : undefined}
                     initialLiked={isValidId ? userLikedSet.has(articleId) : false}
                     initialLikeCount={isValidId ? likeCounts[articleId] ?? 0 : 0}
@@ -387,7 +429,8 @@ export default async function CreditArticlesPage({
                   sector: selectedSector,
                   source: selectedSource,
                   page: prevPage,
-                  date,
+                  dateFrom,
+                  dateTo,
                 })}
                 className={`flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm ${
                   prevDisabled
@@ -408,7 +451,8 @@ export default async function CreditArticlesPage({
                   sector: selectedSector,
                   source: selectedSource,
                   page: nextPage,
-                  date,
+                  dateFrom,
+                  dateTo,
                 })}
                 className={`flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm ${
                   nextDisabled

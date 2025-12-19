@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarDays, ExternalLink, MapPin, Newspaper } from "lucide-react";
+import { CalendarDays, ExternalLink, MapPin, Newspaper, Tag } from "lucide-react";
 import LikeButton from "@/components/LikeButton";
 
 type CreditArticleRowCardProps = {
@@ -10,6 +10,7 @@ type CreditArticleRowCardProps = {
   dateLabel: string;
   regionLabel: string;
   sectorLabel: string;
+  matchedKeywords?: string | null;
   // Like system props
   articleId?: number;
   initialLiked?: boolean;
@@ -24,10 +25,19 @@ export default function CreditArticleRowCard({
   dateLabel,
   regionLabel,
   sectorLabel,
+  matchedKeywords,
   articleId,
   initialLiked = false,
   initialLikeCount = 0,
 }: CreditArticleRowCardProps) {
+  const keywords = matchedKeywords
+    ? matchedKeywords
+        .replace(/^\{|\}$/g, "")
+        .split(",")
+        .map((k) => k.replace(/"/g, "").trim())
+        .filter((k) => k.length > 0)
+    : [];
+
   return (
     <article className="w-full rounded-2xl border border-border bg-card text-card-foreground shadow-sm transition-shadow hover:shadow-md">
       <div className="flex flex-col gap-6 px-5 py-6 md:flex-row md:items-center md:justify-between">
@@ -55,6 +65,12 @@ export default function CreditArticleRowCard({
               {regionLabel}
             </span>
             <span className="rounded-full bg-muted px-3 py-1">{sectorLabel}</span>
+            {keywords.map((keyword) => (
+              <span key={keyword} className="inline-flex items-center gap-2 rounded-full bg-muted px-3 py-1" title={keyword}>
+                <Tag className="h-3 w-3" aria-hidden="true" />
+                <span className="truncate max-w-[150px]">{keyword}</span>
+              </span>
+            ))}
           </div>
         </div>
 

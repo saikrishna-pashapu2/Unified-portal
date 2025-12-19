@@ -14,6 +14,7 @@ import {
     Zap
 } from "lucide-react";
 import CreditHero from "@/components/heroes/CreditHero";
+import SnowfallEffect from "@/components/home/SnowfallEffect";
 
 interface CreditHomeProps {
     articles: any[];
@@ -46,6 +47,7 @@ export default function CreditHome({
 
     return (
         <div className="min-h-screen bg-background">
+            <SnowfallEffect />
             <CreditHero />
 
             <main className="mx-auto max-w-[1200px] px-6 py-12 -mt-20 relative z-20">

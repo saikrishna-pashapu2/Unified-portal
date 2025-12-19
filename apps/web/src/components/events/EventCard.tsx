@@ -1,248 +1,187 @@
 "use client";
 import Link from "next/link";
-import { CalendarDays, MapPin, ExternalLink, Users, Clock, Bookmark, Share2 } from "lucide-react";
+import { CalendarDays, MapPin, ExternalLink, Users, Clock, Globe, ArrowUpRight } from "lucide-react";
 import type { EventListItem } from "@/lib/events";
 import { useParams } from "next/navigation";
-import { fmtDateRange, fmtTime, getRelativeTimeStatus } from "@/lib/date";
+import { fmtDateRange, fmtTime } from "@/lib/date";
+
+type EventVariant = 'live' | 'upcoming' | 'past';
 
 export default function EventCard({ 
-  e, 
+  event, 
+  variant = 'upcoming',
   viewMode = 'grid' 
 }: { 
-  e: EventListItem;
+  event: EventListItem;
+  variant?: EventVariant;
   viewMode?: 'grid' | 'list';
 }) {
   const { domain } = useParams() as { domain: "esg" | "credit" };
-  const dateText = fmtDateRange(e.start_date, e.end_date);
-  const dateStatus = getRelativeTimeStatus(e.start_date, e.end_date);
+  const dateText = fmtDateRange(event.start_date, event.end_date);
+  
+  // Determine location text
+  const locationText = event.location || 'Webinar';
+  const isWebinar = !event.location || event.location.toLowerCase().includes('webinar') || event.location.toLowerCase().includes('online');
 
-  // List view layout
+  // List view
   if (viewMode === 'list') {
     return (
-      <article className="group relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm hover:shadow-md transition-all duration-300">
-        <div className="flex gap-6 p-6">
-          {/* Event image - smaller in list view */}
-          {e.image_url && (
-            <div className="flex-shrink-0">
-              <img
-                src={e.image_url}
-                alt={e.title}
-                className="h-32 w-48 rounded-xl object-cover"
-              />
-            </div>
+      <Link 
+        href={`/${domain}/events/${event.id}`}
+        className={`group flex items-center gap-4 p-4 rounded-xl border transition-all duration-200 hover:shadow-md ${
+          variant === 'live' 
+            ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800/30' 
+            : 'bg-[var(--surface)] border-[var(--border)] hover:border-[var(--brand)]/30'
+        }`}
+      >
+        {/* Date badge */}
+        <div className={`flex-shrink-0 w-14 h-14 rounded-xl flex flex-col items-center justify-center ${
+          variant === 'live' 
+            ? 'bg-green-500 text-white' 
+            : variant === 'past'
+            ? 'bg-gray-100 dark:bg-gray-800 text-gray-500'
+            : 'bg-[var(--brand)]/10 text-[var(--brand)]'
+        }`}>
+          {event.start_date ? (
+            <>
+              <span className="text-xs font-medium uppercase">
+                {new Date(event.start_date).toLocaleDateString('en-US', { month: 'short' })}
+              </span>
+              <span className="text-lg font-bold leading-none">
+                {new Date(event.start_date).getDate()}
+              </span>
+            </>
+          ) : event.date ? (
+            <>
+              <span className="text-xs font-medium uppercase">
+                {new Date(event.date).toLocaleDateString('en-US', { month: 'short' })}
+              </span>
+              <span className="text-lg font-bold leading-none">
+                {new Date(event.date).getDate()}
+              </span>
+            </>
+          ) : (
+            <CalendarDays className="h-5 w-5" />
           )}
+        </div>
 
-          {/* Content */}
-          <div className="flex min-w-0 flex-1 flex-col">
-            {/* Header with badges */}
-            <div className="mb-3 flex items-start justify-between gap-4">
-              <div className="flex-1 min-w-0">
-                <h3 className="mb-2 text-lg font-semibold text-[var(--text)] line-clamp-1">
-                  <Link href={`/${domain}/events/${e.id}`} className="hover:text-[var(--brand)]">
-                    {e.title}
-                  </Link>
-                </h3>
-                
-                {/* Meta info row */}
-                <div className="flex flex-wrap items-center gap-4 text-sm text-[var(--text-muted)]">
-                  {dateText && (
-                    <div className="flex items-center gap-1.5">
-                      <CalendarDays size={14} />
-                      <span>{dateText}</span>
-                    </div>
-                  )}
-                  {e.location && (
-                    <div className="flex items-center gap-1.5">
-                      <MapPin size={14} />
-                      <span className="line-clamp-1">{e.location}</span>
-                    </div>
-                  )}
-                  {e.organizer && (
-                    <div className="flex items-center gap-1.5">
-                      <Users size={14} />
-                      <span>{e.organizer}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Status badge */}
-              <div className="flex items-center gap-2">
-                {dateStatus && (
-                  <span className={`
-                    whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium
-                    ${dateStatus.status === 'upcoming' ? 'bg-[var(--brand)]/10 text-[var(--brand)]' : ''}
-                    ${dateStatus.status === 'ongoing' ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400' : ''}
-                    ${dateStatus.status === 'past' ? 'bg-[var(--surface-2)] text-[var(--text-muted)]' : ''}
-                    ${dateStatus.status === 'future' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400' : ''}
-                  `}>
-                    {dateStatus.label}
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="font-semibold text-[var(--text)] line-clamp-1 group-hover:text-[var(--brand)] transition-colors">
+                {event.title}
+              </h3>
+              <div className="flex items-center gap-3 mt-1 text-sm text-[var(--text-muted)]">
+                <span className="flex items-center gap-1">
+                  {isWebinar ? <Globe size={12} /> : <MapPin size={12} />}
+                  <span className="line-clamp-1">{locationText}</span>
+                </span>
+                {event.source && (
+                  <span className="hidden sm:inline px-2 py-0.5 rounded-full bg-[var(--surface-2)] text-xs">
+                    {event.source}
                   </span>
                 )}
               </div>
             </div>
-
-            {/* Summary */}
-            {e.summary && (
-              <p className="mb-4 text-sm text-[var(--text-muted)] line-clamp-2 leading-relaxed">
-                {e.summary}
-              </p>
+            
+            {/* Live badge or arrow */}
+            {variant === 'live' ? (
+              <span className="flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-500 text-white text-xs font-semibold">
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
+                Live
+              </span>
+            ) : (
+              <ArrowUpRight className="flex-shrink-0 h-4 w-4 text-[var(--text-muted)] group-hover:text-[var(--brand)] transition-colors" />
             )}
-
-            {/* Footer with actions */}
-            <div className="mt-auto flex items-center justify-between pt-4 border-t border-[var(--border)]">
-              <div className="flex items-center gap-2">
-                {e.source && (
-                  <span className="rounded-full bg-[var(--surface-2)] px-3 py-1 text-xs font-medium text-[var(--text-muted)]">
-                    {e.source}
-                  </span>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2">
-                {e.tickets_url && (
-                  <Link
-                    href={e.tickets_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn btn-primary text-sm px-4 py-2"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    Get Tickets
-                  </Link>
-                )}
-                {e.url && (
-                  <Link 
-                    href={e.url} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="btn btn-secondary p-2"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <ExternalLink size={16} />
-                  </Link>
-                )}
-              </div>
-            </div>
           </div>
         </div>
-      </article>
+      </Link>
     );
   }
 
-  // Grid view layout (original design enhanced)
+  // Grid view (card)
   return (
-    <article className="group relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm hover:shadow-md transition-all duration-300">
-      {/* Status badge - positioned absolutely */}
-      <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
-        {dateStatus && (
-          <span className={`
-            rounded-full px-2.5 py-1 text-xs font-medium backdrop-blur-sm
-            ${dateStatus.status === 'upcoming' ? 'bg-[var(--brand)]/90 text-white' : ''}
-            ${dateStatus.status === 'ongoing' ? 'bg-green-500/90 text-white' : ''}
-            ${dateStatus.status === 'past' ? 'bg-gray-500/90 text-white' : ''}
-            ${dateStatus.status === 'future' ? 'bg-blue-500/90 text-white' : ''}
-          `}>
-            {dateStatus.label}
-          </span>
-        )}
-      </div>
-
-      {/* Event image */}
-      {e.image_url && (
-        <div className="relative overflow-hidden">
-          <Link href={`/${domain}/events/${e.id}`}>
-            <img
-              src={e.image_url}
-              alt={e.title}
-              className="h-48 w-full object-cover transition-transform duration-300 group-hover:scale-105"
-            />
-          </Link>
-          <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
+    <Link 
+      href={`/${domain}/events/${event.id}`}
+      className={`group relative flex flex-col rounded-xl border overflow-hidden transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 ${
+        variant === 'live' 
+          ? 'bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/20 border-green-200 dark:border-green-800/30' 
+          : 'bg-[var(--surface)] border-[var(--border)] hover:border-[var(--brand)]/30'
+      }`}
+    >
+      {/* Live indicator */}
+      {variant === 'live' && (
+        <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-500 text-white text-xs font-semibold shadow-lg">
+          <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
+          Live
         </div>
       )}
 
-      {/* Card content */}
-      <div className="p-6">
-        {/* Title */}
-        <h3 className="mb-3 line-clamp-2 text-lg font-semibold leading-tight text-[var(--text)]">
-          <Link href={`/${domain}/events/${e.id}`} className="hover:text-[var(--brand)] transition-colors">
-            {e.title}
-          </Link>
-        </h3>
-
-        {/* Meta information */}
-        <div className="mb-4 space-y-2.5">
-          {dateText && (
-            <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
-              <CalendarDays size={16} className="flex-shrink-0" />
-              <span className="line-clamp-1">{dateText}</span>
-              {e.start_time && (
-                <>
-                  <Clock size={14} className="ml-2 flex-shrink-0" />
-                  <span className="line-clamp-1">{fmtTime(e.start_time)}{e.timezone ? ` ${e.timezone}` : ''}</span>
-                </>
-              )}
-            </div>
-          )}
+      {/* Card body */}
+      <div className="flex-1 p-5">
+        {/* Date and location row */}
+        <div className="flex items-center gap-2 mb-3">
+          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium ${
+            variant === 'live' 
+              ? 'bg-green-500/10 text-green-700 dark:text-green-400' 
+              : variant === 'past'
+              ? 'bg-gray-100 dark:bg-gray-800 text-gray-500'
+              : 'bg-[var(--brand)]/10 text-[var(--brand)]'
+          }`}>
+            <CalendarDays size={12} />
+            <span>{dateText || 'TBA'}</span>
+          </div>
           
-          {e.location && (
-            <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
-              <MapPin size={16} className="flex-shrink-0" />
-              <span className="line-clamp-1">{e.location}</span>
-            </div>
-          )}
-          
-          {e.organizer && (
-            <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
-              <Users size={16} className="flex-shrink-0" />
-              <span className="line-clamp-1">{e.organizer}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Summary */}
-        {e.summary && (
-          <p className="mb-4 text-sm text-[var(--text-muted)] line-clamp-3 leading-relaxed">
-            {e.summary}
-          </p>
-        )}
-
-        {/* Footer */}
-        <div className="flex items-center justify-between gap-3 pt-4 border-t border-[var(--border)]">
-          {e.source && (
-            <span className="rounded-full bg-[var(--surface-2)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)]">
-              {e.source}
-            </span>
-          )}
-          
-          <div className="flex items-center gap-2">
-            {e.tickets_url && (
-              <Link
-                href={e.tickets_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-primary text-xs px-4 py-2"
-                onClick={(e) => e.stopPropagation()}
-              >
-                Get Tickets
-              </Link>
-            )}
-            {e.url && (
-              <Link 
-                href={e.url} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="btn btn-secondary p-2"
-                onClick={(e) => e.stopPropagation()}
-                title="View event details"
-              >
-                <ExternalLink size={14} />
-              </Link>
-            )}
+          <div className="flex items-center gap-1 text-xs text-[var(--text-muted)]">
+            {isWebinar ? <Globe size={12} /> : <MapPin size={12} />}
+            <span className="line-clamp-1">{locationText}</span>
           </div>
         </div>
+
+        {/* Title */}
+        <h3 className="font-semibold text-[var(--text)] line-clamp-2 mb-2 group-hover:text-[var(--brand)] transition-colors leading-snug">
+          {event.title}
+        </h3>
+
+        {/* Summary */}
+        {event.summary && (
+          <p className="text-sm text-[var(--text-muted)] line-clamp-2 mb-3 leading-relaxed">
+            {event.summary}
+          </p>
+        )}
       </div>
-    </article>
+
+      {/* Footer */}
+      <div className="px-5 py-3 border-t border-[var(--border)] bg-[var(--surface-2)]/30 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {event.source && (
+            <span className="text-xs font-medium text-[var(--text-muted)] px-2 py-1 rounded-md bg-[var(--surface)]">
+              {event.source}
+            </span>
+          )}
+        </div>
+        
+        <div className="flex items-center gap-2">
+          {event.url && (
+            <span 
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                window.open(event.url!, '_blank');
+              }}
+              className="p-1.5 rounded-lg hover:bg-[var(--surface)] text-[var(--text-muted)] hover:text-[var(--brand)] transition-colors cursor-pointer"
+              title="Visit website"
+            >
+              <ExternalLink size={14} />
+            </span>
+          )}
+          <span className="text-xs text-[var(--brand)] font-medium group-hover:underline flex items-center gap-1">
+            Details
+            <ArrowUpRight size={12} />
+          </span>
+        </div>
+      </div>
+    </Link>
   );
 }

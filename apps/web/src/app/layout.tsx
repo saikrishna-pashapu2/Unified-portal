@@ -5,7 +5,7 @@ import DomainTheme from "@/components/providers/DomainTheme";
 import { DomainSwitchProvider } from "@/components/providers/DomainSwitchAnimation";
 
 export const metadata: Metadata = {
-  title: "ESG Credit Portal",
+  title: "ESG Credit Rating",
   description: "Article portal for ESG and Credit content",
 };
 

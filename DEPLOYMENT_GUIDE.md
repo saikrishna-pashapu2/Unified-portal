@@ -299,7 +299,7 @@ We use versioned deployments with symlinks for zero-downtime updates.
 ```bash
 # Commit your changes
 git add .
-git commit -m "Ai assistant improvements"
+git commit -m "Tools page and community page Updates"
 git push origin main
 ```
 

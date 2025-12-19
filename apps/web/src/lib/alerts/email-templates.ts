@@ -178,13 +178,13 @@ function emailWrapper(content: string, domain: "esg" | "credit"): string {
   <div class="container">
     ${content}
     <div class="footer">
-      <p>You're receiving this email because you subscribed to ${domain.toUpperCase()} Portal alerts.</p>
+      <p>You're receiving this email because you subscribed to ${domain === 'esg' ? 'ESG' : 'CREDIT RATING'} alerts.</p>
       <p>
         <a href="{{PREFERENCES_URL}}">Manage Preferences</a> |
         <a href="{{UNSUBSCRIBE_URL}}">Unsubscribe</a>
       </p>
       <p style="margin-top: 20px; font-size: 12px;">
-        © 2025 ESG Credit Portal. All rights reserved.
+        © 2025 ESG Credit Rating. All rights reserved.
       </p>
     </div>
   </div>

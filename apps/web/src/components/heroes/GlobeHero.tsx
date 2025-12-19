@@ -1,90 +1,155 @@
 "use client";
-import { useEffect, useRef } from "react";
-import { Leaf, Sparkles } from "lucide-react";
+import { motion } from "framer-motion";
+import { Leaf, Globe, TreePine, Droplets, Wind, Sun } from "lucide-react";
 
 export default function GlobeHero() {
-  const starsRef = useRef<HTMLDivElement>(null);
-  
-  useEffect(() => {
-    const createStars = () => {
-      const starsContainer = starsRef.current;
-      if (!starsContainer) return;
-      
-      // Clear existing stars
-      starsContainer.innerHTML = '';
-      
-      // Create subtle star field
-      for (let i = 0; i < 50; i++) {
-        const star = document.createElement('div');
-        star.className = 'absolute rounded-full bg-white opacity-20';
-        star.style.left = Math.random() * 100 + '%';
-        star.style.top = Math.random() * 100 + '%';
-        star.style.width = Math.random() * 2 + 1 + 'px';
-        star.style.height = star.style.width;
-        star.style.animationDelay = Math.random() * 3 + 's';
-        star.style.animation = 'pulse 3s infinite';
-        starsContainer.appendChild(star);
-      }
-    };
-    
-    createStars();
-  }, []);
-
   return (
-    <div className="relative h-[60vh] w-full overflow-hidden">
-      {/* Gradient Background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-emerald-50 via-green-50 to-teal-50"></div>
+    <div className="relative h-[70vh] w-full overflow-hidden bg-gradient-to-br from-emerald-900 via-green-800 to-teal-900">
       
-      {/* Subtle grain texture */}
-      <div className="absolute inset-0 opacity-[0.015]" style={{
-        backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
-      }}></div>
-      
-      {/* Floating particles */}
-      <div ref={starsRef} className="absolute inset-0"></div>
-      
-      {/* Radial gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-radial from-transparent via-transparent to-green-100/20"></div>
-      
-      {/* Content */}
-      <div className="relative z-10 flex h-full items-center justify-center px-6">
-        <div className="text-center">
-          {/* What's New Chip */}
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full bg-white/80 backdrop-blur-sm px-4 py-2 text-sm font-medium text-green-700 shadow-sm border border-green-200">
-            <Sparkles size={14} />
-            New: PDF Translation Tool
-          </div>
-          
-          {/* Icon */}
-          <div className="mb-6 inline-flex h-20 w-20 items-center justify-center rounded-full bg-green-500/10 backdrop-blur-sm border border-green-200/50">
-            <Leaf className="h-10 w-10 text-green-600" />
-          </div>
-          
-          {/* Headline */}
-          <h1 className="mb-4 text-5xl font-bold leading-tight text-slate-900 md:text-7xl">
-            ESG Portal
-          </h1>
-          <p className="mx-auto max-w-2xl text-xl leading-relaxed text-slate-600">
-            Environmental, Social, and Governance insights for sustainable investing
-          </p>
-        </div>
+      {/* Animated gradient orbs */}
+      <div className="absolute inset-0 overflow-hidden">
+        <motion.div
+          className="absolute -top-40 -left-40 w-96 h-96 bg-emerald-500/30 rounded-full blur-3xl"
+          animate={{
+            scale: [1, 1.2, 1],
+            opacity: [0.3, 0.5, 0.3],
+          }}
+          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.div
+          className="absolute top-1/2 -right-20 w-80 h-80 bg-teal-400/25 rounded-full blur-3xl"
+          animate={{
+            scale: [1.2, 1, 1.2],
+            opacity: [0.4, 0.2, 0.4],
+          }}
+          transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.div
+          className="absolute -bottom-20 left-1/3 w-72 h-72 bg-green-400/20 rounded-full blur-3xl"
+          animate={{
+            scale: [1, 1.3, 1],
+            x: [0, 30, 0],
+          }}
+          transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
+        />
       </div>
-      
-      {/* Subtle parallax dots */}
-      <div className="absolute inset-0 opacity-5">
-        {Array.from({ length: 20 }).map((_, i) => (
-          <div
+
+      {/* Floating nature icons */}
+      <div className="absolute inset-0 overflow-hidden">
+        {[
+          { Icon: TreePine, left: "10%", top: "20%", delay: 0 },
+          { Icon: Droplets, left: "85%", top: "30%", delay: 1 },
+          { Icon: Wind, left: "75%", top: "70%", delay: 2 },
+          { Icon: Sun, left: "15%", top: "75%", delay: 1.5 },
+          { Icon: Leaf, left: "90%", top: "15%", delay: 0.5 },
+          { Icon: Globe, left: "5%", top: "50%", delay: 2.5 },
+        ].map(({ Icon, left, top, delay }, i) => (
+          <motion.div
             key={i}
-            className="absolute h-1 w-1 rounded-full bg-green-600"
-            style={{
-              left: Math.random() * 100 + '%',
-              top: Math.random() * 100 + '%',
-              animationDelay: `${i * 0.1}s`,
-              animation: `float 6s infinite ease-in-out`,
+            className="absolute text-white/10"
+            style={{ left, top }}
+            animate={{
+              y: [0, -15, 0],
+              rotate: [0, 5, -5, 0],
+              opacity: [0.1, 0.2, 0.1],
             }}
-          />
+            transition={{
+              duration: 6 + i,
+              repeat: Infinity,
+              ease: "easeInOut",
+              delay,
+            }}
+          >
+            <Icon size={40 + i * 5} />
+          </motion.div>
         ))}
       </div>
+
+      {/* Animated grid lines */}
+      <div className="absolute inset-0 opacity-[0.07]">
+        <div className="absolute inset-0" style={{
+          backgroundImage: `
+            linear-gradient(to right, rgba(255,255,255,0.1) 1px, transparent 1px),
+            linear-gradient(to bottom, rgba(255,255,255,0.1) 1px, transparent 1px)
+          `,
+          backgroundSize: '60px 60px',
+        }} />
+      </div>
+
+      {/* Glowing ring decoration */}
+      <motion.div 
+        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full border border-emerald-400/20"
+        animate={{ rotate: 360 }}
+        transition={{ duration: 60, repeat: Infinity, ease: "linear" }}
+      />
+      <motion.div 
+        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full border border-teal-400/10"
+        animate={{ rotate: -360 }}
+        transition={{ duration: 80, repeat: Infinity, ease: "linear" }}
+      />
+
+      {/* Main content */}
+      <div className="relative z-10 flex h-full items-center justify-center px-6">
+        <div className="text-center max-w-4xl mx-auto">
+          
+          {/* Glowing icon */}
+          <motion.div 
+            className="mb-8 inline-flex h-24 w-24 items-center justify-center rounded-3xl bg-gradient-to-br from-emerald-400 to-teal-500 shadow-2xl shadow-emerald-500/30"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.6 }}
+          >
+            <Leaf className="h-12 w-12 text-white" />
+          </motion.div>
+          
+          {/* Title */}
+          <motion.h1 
+            className="mb-6 text-5xl font-bold leading-tight text-white md:text-6xl lg:text-7xl"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+          >
+            <span className="bg-gradient-to-r from-emerald-200 via-green-100 to-teal-200 bg-clip-text text-transparent">
+              ESG
+            </span>
+          </motion.h1>
+          
+          {/* Subtitle */}
+          <motion.p 
+            className="mx-auto max-w-2xl text-xl leading-relaxed text-emerald-100/80"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.4 }}
+          >
+            Environmental, Social, and Governance insights for sustainable investing
+          </motion.p>
+          
+          {/* Feature tags */}
+          <motion.div 
+            className="mt-10 flex flex-wrap justify-center gap-3"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.6 }}
+          >
+            {[
+              { icon: Globe, label: "Global Coverage" },
+              { icon: TreePine, label: "Sustainability" },
+              { icon: Droplets, label: "Clean Energy" }
+            ].map((item) => (
+              <div
+                key={item.label}
+                className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-sm px-5 py-2.5 text-sm font-medium text-white/90 border border-white/20 hover:bg-white/20 transition-colors"
+              >
+                <item.icon className="h-4 w-4" />
+                {item.label}
+              </div>
+            ))}
+          </motion.div>
+        </div>
+      </div>
+
+      {/* Bottom fade */}
+      <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-background to-transparent" />
     </div>
   );
 }

@@ -17,10 +17,13 @@ export type CreditArticle = {
   link: string | null;
   region: CreditRegion;
   sector: CreditSector;
+  matched_keywords: string | null;
 };
 
 type ListCreditArticlesOpts = {
   date?: string;
+  dateFrom?: string;
+  dateTo?: string;
   region?: CreditRegion | null;
   sector?: CreditSector | null;
   source?: string | null;
@@ -36,10 +39,38 @@ export async function listCreditArticles(opts: ListCreditArticlesOpts) {
   const params: any[] = [];
   let where = `WHERE 1=1`;
 
-  // today-only by default
-  const date = opts.date ?? new Date().toISOString().slice(0, 10);
-  params.push(date);
-  where += ` AND date::date = $${params.length}::date`;
+  // Date filtering logic:
+  // - Both dateFrom and dateTo: date range
+  // - Only dateFrom: single date filter
+  // - Only dateTo: all articles up to that date
+  // - Legacy 'date' param: single date filter
+  // - Nothing: today only
+  if (opts.dateFrom && opts.dateTo) {
+    // Date range mode
+    params.push(opts.dateFrom);
+    where += ` AND date::date >= $${params.length}::date`;
+    params.push(opts.dateTo);
+    where += ` AND date::date <= $${params.length}::date`;
+  } else if (opts.dateFrom) {
+    // Single date mode (from date only)
+    params.push(opts.dateFrom);
+    where += ` AND date::date = $${params.length}::date`;
+  } else if (opts.dateTo) {
+    // Up to date mode (to date only)
+    params.push(opts.dateTo);
+    where += ` AND date::date <= $${params.length}::date`;
+  } else if (opts.date) {
+    // Single date mode (legacy)
+    params.push(opts.date);
+    where += ` AND date::date = $${params.length}::date`;
+  } else {
+    // Default: today only, unless source is specified (then show all history for that source)
+    if (!opts.source) {
+      const today = new Date().toISOString().slice(0, 10);
+      params.push(today);
+      where += ` AND date::date = $${params.length}::date`;
+    }
+  }
 
   if (opts.region) {
     params.push(opts.region);
@@ -63,7 +94,7 @@ export async function listCreditArticles(opts: ListCreditArticlesOpts) {
   `;
 
   const dataQuery = `
-    SELECT id, title, source, date, link, region, sector
+    SELECT id, title, source, date, link, region, sector, matched_keywords
     FROM credit_articles
     ${where}
     ORDER BY date DESC, id DESC
