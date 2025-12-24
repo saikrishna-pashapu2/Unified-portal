@@ -567,51 +567,6 @@ exports.Prisma.Weekly_digestScalarFieldEnum = {
   created_at: 'created_at'
 };
 
-exports.Prisma.Company_research_sessionsScalarFieldEnum = {
-  id: 'id',
-  session_id: 'session_id',
-  user_id: 'user_id',
-  company_name: 'company_name',
-  status: 'status',
-  total_tokens_used: 'total_tokens_used',
-  total_cost_usd: 'total_cost_usd',
-  research_summary: 'research_summary',
-  final_report: 'final_report',
-  error_message: 'error_message',
-  created_at: 'created_at',
-  updated_at: 'updated_at',
-  completed_at: 'completed_at'
-};
-
-exports.Prisma.Research_findingsScalarFieldEnum = {
-  id: 'id',
-  session_id: 'session_id',
-  finding_type: 'finding_type',
-  title: 'title',
-  content: 'content',
-  source_url: 'source_url',
-  source_name: 'source_name',
-  confidence_score: 'confidence_score',
-  metadata: 'metadata',
-  created_at: 'created_at'
-};
-
-exports.Prisma.Company_contactsScalarFieldEnum = {
-  id: 'id',
-  session_id: 'session_id',
-  company_name: 'company_name',
-  full_name: 'full_name',
-  job_title: 'job_title',
-  department: 'department',
-  email: 'email',
-  phone: 'phone',
-  linkedin_url: 'linkedin_url',
-  source_url: 'source_url',
-  relevance_score: 'relevance_score',
-  metadata: 'metadata',
-  created_at: 'created_at'
-};
-
 exports.Prisma.SortOrder = {
   asc: 'asc',
   desc: 'desc'
@@ -707,10 +662,7 @@ exports.Prisma.ModelName = {
   users: 'users',
   usersession: 'usersession',
   fitch_upload_history: 'fitch_upload_history',
-  weekly_digest: 'weekly_digest',
-  company_research_sessions: 'company_research_sessions',
-  research_findings: 'research_findings',
-  company_contacts: 'company_contacts'
+  weekly_digest: 'weekly_digest'
 };
 
 /**

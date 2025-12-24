@@ -580,7 +580,6 @@ model users {
   newsletter_subscriptions newsletter_subscriptions[]
   user_activity            user_activity[]
   user_article_stars       user_article_stars[]
-  company_research_sessions company_research_sessions[]
 
   @@index([email], map: "idx_users_email")
   @@index([is_active], map: "idx_users_is_active")
@@ -656,66 +655,4 @@ model weekly_digest {
   week_end   DateTime @db.Date
   content    String   @db.Text
   created_at DateTime @default(now()) @db.Timestamptz(6)
-}
-
-// Company Research Agent Models
-model company_research_sessions {
-  id                  Int                     @id @default(autoincrement())
-  session_id          String                  @unique @db.VarChar(255)
-  user_id             Int
-  company_name        String                  @db.VarChar(500)
-  status              String                  @default("in_progress") @db.VarChar(50) // in_progress, completed, failed
-  total_tokens_used   Int                     @default(0)
-  total_cost_usd      Decimal                 @default(0) @db.Decimal(10, 4)
-  research_summary    String?                 @db.Text
-  final_report        Json?                   @db.Json
-  error_message       String?                 @db.Text
-  created_at          DateTime                @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime                @default(now()) @db.Timestamptz(6)
-  completed_at        DateTime?               @db.Timestamptz(6)
-  users               users                   @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  research_findings   research_findings[]
-  company_contacts    company_contacts[]
-
-  @@index([user_id, created_at(sort: Desc)])
-  @@index([session_id])
-  @@index([status])
-}
-
-model research_findings {
-  id                        Int                        @id @default(autoincrement())
-  session_id                String                     @db.VarChar(255)
-  finding_type              String                     @db.VarChar(100) // company_overview, financial_data, esg_reports, sustainability_reports, news, industry_analysis
-  title                     String                     @db.VarChar(500)
-  content                   String                     @db.Text
-  source_url                String?                    @db.VarChar(1000)
-  source_name               String?                    @db.VarChar(255)
-  confidence_score          Decimal?                   @default(0.5) @db.Decimal(3, 2) // 0.0 to 1.0
-  metadata                  Json?                      @db.Json // Additional structured data
-  created_at                DateTime                   @default(now()) @db.Timestamptz(6)
-  company_research_sessions company_research_sessions  @relation(fields: [session_id], references: [session_id], onDelete: Cascade)
-
-  @@index([session_id, finding_type])
-  @@index([finding_type])
-}
-
-model company_contacts {
-  id                        Int                        @id @default(autoincrement())
-  session_id                String                     @db.VarChar(255)
-  company_name              String                     @db.VarChar(500)
-  full_name                 String                     @db.VarChar(255)
-  job_title                 String?                    @db.VarChar(255)
-  department                String?                    @db.VarChar(255) // ESG, Sustainability, Investor Relations, Finance, etc.
-  email                     String?                    @db.VarChar(255)
-  phone                     String?                    @db.VarChar(100)
-  linkedin_url              String?                    @db.VarChar(1000)
-  source_url                String?                    @db.VarChar(1000)
-  relevance_score           Decimal?                   @default(0.5) @db.Decimal(3, 2) // How relevant to ESG/credit rating
-  metadata                  Json?                      @db.Json
-  created_at                DateTime                   @default(now()) @db.Timestamptz(6)
-  company_research_sessions company_research_sessions  @relation(fields: [session_id], references: [session_id], onDelete: Cascade)
-
-  @@index([session_id])
-  @@index([company_name])
-  @@index([department])
 }

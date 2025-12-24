@@ -3,20 +3,16 @@ import {
   Building2, 
   LayoutDashboard,
   ChevronRight,
-  FileCheck,
-  Sparkles
+  FileCheck
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/nextauth-options";
 
 // Import Tool Components
 import FitchTool from "./fitch/ui";
 import TendersTool from "./tenders-tool";
-import CompanyResearchTool from "./company-research";
 
 // Tool Configuration Types
-type ToolId = "overview" | "fitch" | "tenders" | "research";
+type ToolId = "overview" | "fitch" | "tenders";
 
 interface ToolConfig {
   id: ToolId;
@@ -48,13 +44,6 @@ const CREDIT_TOOLS: ToolConfig[] = [
     icon: FileCheck,
     component: TendersTool,
     description: "Explore credit-related tenders"
-  },
-  {
-    id: "research",
-    label: "Company Research",
-    icon: Sparkles,
-    component: CompanyResearchTool,
-    description: "AI-powered comprehensive company research with financials and contacts"
   }
 ];
 
@@ -63,16 +52,10 @@ export default async function CreditToolsPage({
 }: { 
   searchParams: { [key: string]: string | string[] | undefined };
 }) {
-  const session = await getServerSession(authOptions);
-  const isAdmin = (session as any)?.is_admin === true || (session as any)?.role === 'admin';
-
   const domain = "credit";
   
-  // Filter tools based on admin status
-  const domainTools = CREDIT_TOOLS.filter(tool => {
-    if (tool.id === "research" && !isAdmin) return false;
-    return true;
-  });
+  // All tools available
+  const domainTools = CREDIT_TOOLS;
 
   const activeToolId = (searchParams.tool as ToolId) || "overview";
   
@@ -181,9 +164,6 @@ export default async function CreditToolsPage({
               <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
                 {/* Pass props to ActiveComponent if it's TendersTool */}
                 {activeToolId === 'tenders' ? (
-                   // @ts-ignore
-                   <ActiveComponent domain={domain} searchParams={searchParams} />
-                ) : activeToolId === 'research' ? (
                    // @ts-ignore
                    <ActiveComponent domain={domain} searchParams={searchParams} />
                 ) : (

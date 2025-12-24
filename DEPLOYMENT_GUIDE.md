@@ -344,7 +344,7 @@ mkdir -p logs
 cat > ecosystem.config.js << 'EOF'
 module.exports = {
   apps: [{
-    name: 'portal-v1.0.5',
+    name: 'portal-v1.0.6',
     cwd: '/var/www/current/apps/web',
     script: 'node_modules/next/dist/bin/next',
     args: 'start -p 3000',
@@ -376,7 +376,7 @@ pm2 delete all
 #### 10. Update Symlink
 ```bash
 cd /var/www
-sudo ln -sfn /var/www/portal-v1.0.5 /var/www/current
+sudo ln -sfn /var/www/portal-v1.0.6 /var/www/current
 ```
 
 #### 11. Start New Version
@@ -398,7 +398,7 @@ Visit `http://YOUR_EC2_IP:3000` and verify everything works.
 #### 14. (Optional) Clean Up Old Version
 After confirming the new version works for a few days:
 ```bash
-sudo rm -rf /var/www/portal-v1.0.4
+sudo rm -rf /var/www/portal-v1.0.5
 ```
 
 ---
@@ -412,7 +412,7 @@ pm2 status
 
 ### View Logs (Live)
 ```bash
-pm2 logs portal-v1.0.4
+pm2 logs portal-v1.0.6
 ```
 
 ### View Last 50 Lines

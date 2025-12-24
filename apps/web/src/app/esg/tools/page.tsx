@@ -5,22 +5,18 @@ import {
   FileText, 
   LayoutDashboard,
   ChevronRight,
-  FileCheck,
-  Sparkles
+  FileCheck
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/nextauth-options";
 
 // Import Tool Components
 import EsgSearch from "./search";
 import EsgExcel from "./excel";
 import PdfxHome from "@/app/esg/pdfx/page";
 import TendersTool from "./tenders-tool";
-import CompanyResearchTool from "./company-research";
 
 // Tool Configuration Types
-type ToolId = "overview" | "search" | "excel" | "pdfx" | "tenders" | "research";
+type ToolId = "overview" | "search" | "excel" | "pdfx" | "tenders";
 
 interface ToolConfig {
   id: ToolId;
@@ -66,13 +62,6 @@ const TOOLS: ToolConfig[] = [
     icon: FileCheck,
     component: TendersTool,
     description: "Browse government tenders related to ESG"
-  },
-  {
-    id: "research",
-    label: "Company Research",
-    icon: Sparkles,
-    component: CompanyResearchTool,
-    description: "AI-powered comprehensive company research with ESG, financials, and contacts"
   }
 ];
 
@@ -81,16 +70,10 @@ export default async function ToolsPage({
 }: { 
   searchParams: { [key: string]: string | string[] | undefined };
 }) {
-  const session = await getServerSession(authOptions);
-  const isAdmin = (session as any)?.is_admin === true || (session as any)?.role === 'admin';
-
   const domain = "esg";
   
-  // Filter tools based on admin status
-  const domainTools = TOOLS.filter(tool => {
-    if (tool.id === "research" && !isAdmin) return false;
-    return true;
-  });
+  // All tools available
+  const domainTools = TOOLS;
 
   const activeToolId = (searchParams.tool as ToolId) || "overview";
   
