@@ -67,10 +67,10 @@ export default function EventsPaginator({
             <button
               key={p}
               onClick={() => setPage(p)}
-              className={`min-w-[36px] h-9 rounded-lg text-sm font-medium transition-colors ${
+              className={`min-w-[36px] h-9 rounded-lg text-sm font-medium transition-all ${
                 p === page
-                  ? 'bg-[var(--brand)] text-white'
-                  : 'hover:bg-[var(--surface-2)] text-[var(--text)]'
+                  ? 'bg-[var(--brand)] text-[var(--brand-text)] shadow-md shadow-[var(--brand)]/25'
+                  : 'hover:bg-[var(--surface-2)] text-[var(--text)] border border-transparent hover:border-[var(--border)]'
               }`}
             >
               {p}

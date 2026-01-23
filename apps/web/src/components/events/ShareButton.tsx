@@ -1,13 +1,14 @@
 "use client";
 
-import { ExternalLink } from "lucide-react";
+import { Share2 } from "lucide-react";
 
 interface ShareButtonProps {
   title: string;
   text: string;
+  className?: string;
 }
 
-export default function ShareButton({ title, text }: ShareButtonProps) {
+export default function ShareButton({ title, text, className }: ShareButtonProps) {
   const handleShare = async () => {
     try {
       if (navigator.share) {
@@ -29,9 +30,9 @@ export default function ShareButton({ title, text }: ShareButtonProps) {
   return (
     <button
       onClick={handleShare}
-      className="btn btn-secondary w-full justify-center"
+      className={className || "btn btn-secondary w-full justify-center"}
     >
-      <ExternalLink size={16} />
+      <Share2 size={16} />
       Share Event
     </button>
   );
