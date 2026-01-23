@@ -803,6 +803,13 @@ export function eventRowToListItem(row: EventRow): EventListItem {
     return String(date); // Fallback to string conversion
   };
 
+  // Fix malformed Fitch event URLs (remove duplicate /events/ path)
+  const fixEventUrl = (url: string | null | undefined): string | null => {
+    if (!url) return null;
+    // Fix: events.fitchratings.com/events/xxx → events.fitchratings.com/xxx
+    return url.replace('events.fitchratings.com/events/', 'events.fitchratings.com/');
+  };
+
   return {
     id: Number(row.id),
     title: row.event_name || row.title || 'Untitled Event',
@@ -815,7 +822,7 @@ export function eventRowToListItem(row: EventRow): EventListItem {
     location: row.venue_address || row.location || null,
     organizer: row.organizer_name || null,
     summary: row.summary || row.details || null,
-    url: row.event_url || row.link || null,
+    url: fixEventUrl(row.event_url || row.link),
     tickets_url: row.tickets_url || null,
     image_url: row.image_url || null,
   };
@@ -827,6 +834,12 @@ export async function getEventById(
 ): Promise<EventListItem | null> {
   const numericId = Number(id);
   const prisma = getPrisma(domain);
+
+  // Fix malformed Fitch event URLs (remove duplicate /events/ path)
+  const fixEventUrl = (url: string | null | undefined): string | null => {
+    if (!url) return null;
+    return url.replace('events.fitchratings.com/events/', 'events.fitchratings.com/');
+  };
 
   if (domain === "esg") {
     const rows = await prisma.$queryRaw<EventListItem[]>`
@@ -850,7 +863,11 @@ export async function getEventById(
       LIMIT 1
     `;
     
-    return rows[0] || null;
+    const event = rows[0] || null;
+    if (event) {
+      event.url = fixEventUrl(event.url);
+    }
+    return event;
   } else {
     const rows = await prisma.$queryRaw<EventListItem[]>`
       SELECT 
@@ -873,6 +890,10 @@ export async function getEventById(
       LIMIT 1
     `;
     
-    return rows[0] || null;
+    const event = rows[0] || null;
+    if (event) {
+      event.url = fixEventUrl(event.url);
+    }
+    return event;
   }
 }
