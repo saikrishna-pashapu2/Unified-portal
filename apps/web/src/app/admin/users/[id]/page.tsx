@@ -517,8 +517,8 @@ export default function UserDetailPage() {
                                                         {kw}
                                                     </span>
                                                 ))}
-                                                {alert.keywords?.length > 3 && (
-                                                    <span className="text-xs text-gray-500">+{alert.keywords.length - 3} more</span>
+                                                {(alert.keywords?.length ?? 0) > 3 && (
+                                                    <span className="text-xs text-gray-500">+{(alert.keywords?.length ?? 0) - 3} more</span>
                                                 )}
                                             </div>
                                         </td>
