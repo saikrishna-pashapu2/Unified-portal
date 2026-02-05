@@ -208,6 +208,11 @@ export type user_tender_alerts = $Result.DefaultSelection<Prisma.$user_tender_al
  * 
  */
 export type weekly_digest = $Result.DefaultSelection<Prisma.$weekly_digestPayload>
+/**
+ * Model user_activity
+ * 
+ */
+export type user_activity = $Result.DefaultSelection<Prisma.$user_activityPayload>
 
 /**
  * ##  Prisma Client ʲˢ
@@ -721,6 +726,16 @@ export class PrismaClient<
     * ```
     */
   get weekly_digest(): Prisma.weekly_digestDelegate<ExtArgs>;
+
+  /**
+   * `prisma.user_activity`: Exposes CRUD operations for the **user_activity** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more User_activities
+    * const user_activities = await prisma.user_activity.findMany()
+    * ```
+    */
+  get user_activity(): Prisma.user_activityDelegate<ExtArgs>;
 }
 
 export namespace Prisma {
@@ -1200,7 +1215,8 @@ export namespace Prisma {
     transcript_segments: 'transcript_segments',
     user_saved_tenders: 'user_saved_tenders',
     user_tender_alerts: 'user_tender_alerts',
-    weekly_digest: 'weekly_digest'
+    weekly_digest: 'weekly_digest',
+    user_activity: 'user_activity'
   };
 
   export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -1216,7 +1232,7 @@ export namespace Prisma {
 
   export type TypeMap<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, ClientOptions = {}> = {
     meta: {
-      modelProps: "alembic_version" | "esg_articles" | "events" | "file_uploads" | "likes" | "pdf_translation_jobs" | "pdf_translations" | "publications" | "translation_history" | "translation_pages" | "user_preferences" | "users" | "alert_preferences" | "alert_history" | "email_queue" | "alert_content_sent" | "action_items" | "article_ai_sessions" | "article_conversations" | "article_messages" | "article_tool_calls" | "decisions" | "domain_keywords" | "email_drafts" | "meeting_participants" | "meeting_summaries" | "meetings" | "questions" | "risks" | "speaker_mappings" | "tender_classifications" | "tender_scrape_logs" | "tender_sources" | "tender_translations" | "tenders" | "transcript_segments" | "user_saved_tenders" | "user_tender_alerts" | "weekly_digest"
+      modelProps: "alembic_version" | "esg_articles" | "events" | "file_uploads" | "likes" | "pdf_translation_jobs" | "pdf_translations" | "publications" | "translation_history" | "translation_pages" | "user_preferences" | "users" | "alert_preferences" | "alert_history" | "email_queue" | "alert_content_sent" | "action_items" | "article_ai_sessions" | "article_conversations" | "article_messages" | "article_tool_calls" | "decisions" | "domain_keywords" | "email_drafts" | "meeting_participants" | "meeting_summaries" | "meetings" | "questions" | "risks" | "speaker_mappings" | "tender_classifications" | "tender_scrape_logs" | "tender_sources" | "tender_translations" | "tenders" | "transcript_segments" | "user_saved_tenders" | "user_tender_alerts" | "weekly_digest" | "user_activity"
       txIsolationLevel: Prisma.TransactionIsolationLevel
     }
     model: {
@@ -3950,6 +3966,76 @@ export namespace Prisma {
           }
         }
       }
+      user_activity: {
+        payload: Prisma.$user_activityPayload<ExtArgs>
+        fields: Prisma.user_activityFieldRefs
+        operations: {
+          findUnique: {
+            args: Prisma.user_activityFindUniqueArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$user_activityPayload> | null
+          }
+          findUniqueOrThrow: {
+            args: Prisma.user_activityFindUniqueOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$user_activityPayload>
+          }
+          findFirst: {
+            args: Prisma.user_activityFindFirstArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$user_activityPayload> | null
+          }
+          findFirstOrThrow: {
+            args: Prisma.user_activityFindFirstOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$user_activityPayload>
+          }
+          findMany: {
+            args: Prisma.user_activityFindManyArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$user_activityPayload>[]
+          }
+          create: {
+            args: Prisma.user_activityCreateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$user_activityPayload>
+          }
+          createMany: {
+            args: Prisma.user_activityCreateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          createManyAndReturn: {
+            args: Prisma.user_activityCreateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$user_activityPayload>[]
+          }
+          delete: {
+            args: Prisma.user_activityDeleteArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$user_activityPayload>
+          }
+          update: {
+            args: Prisma.user_activityUpdateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$user_activityPayload>
+          }
+          deleteMany: {
+            args: Prisma.user_activityDeleteManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateMany: {
+            args: Prisma.user_activityUpdateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          upsert: {
+            args: Prisma.user_activityUpsertArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$user_activityPayload>
+          }
+          aggregate: {
+            args: Prisma.User_activityAggregateArgs<ExtArgs>
+            result: $Utils.Optional<AggregateUser_activity>
+          }
+          groupBy: {
+            args: Prisma.user_activityGroupByArgs<ExtArgs>
+            result: $Utils.Optional<User_activityGroupByOutputType>[]
+          }
+          count: {
+            args: Prisma.user_activityCountArgs<ExtArgs>
+            result: $Utils.Optional<User_activityCountAggregateOutputType> | number
+          }
+        }
+      }
     }
   } & {
     other: {
@@ -4162,6 +4248,7 @@ export namespace Prisma {
     transcript_segments: number
     translation_history: number
     user_preferences: number
+    user_activity: number
   }
 
   export type UsersCountOutputTypeSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
@@ -4185,6 +4272,7 @@ export namespace Prisma {
     transcript_segments?: boolean | UsersCountOutputTypeCountTranscript_segmentsArgs
     translation_history?: boolean | UsersCountOutputTypeCountTranslation_historyArgs
     user_preferences?: boolean | UsersCountOutputTypeCountUser_preferencesArgs
+    user_activity?: boolean | UsersCountOutputTypeCountUser_activityArgs
   }
 
   // Custom InputTypes
@@ -4336,6 +4424,13 @@ export namespace Prisma {
    */
   export type UsersCountOutputTypeCountUser_preferencesArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     where?: user_preferencesWhereInput
+  }
+
+  /**
+   * UsersCountOutputType without action
+   */
+  export type UsersCountOutputTypeCountUser_activityArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: user_activityWhereInput
   }
 
 
@@ -16135,6 +16230,7 @@ export namespace Prisma {
     transcript_segments?: boolean | users$transcript_segmentsArgs<ExtArgs>
     translation_history?: boolean | users$translation_historyArgs<ExtArgs>
     user_preferences?: boolean | users$user_preferencesArgs<ExtArgs>
+    user_activity?: boolean | users$user_activityArgs<ExtArgs>
     _count?: boolean | UsersCountOutputTypeDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["users"]>
 
@@ -16193,6 +16289,7 @@ export namespace Prisma {
     transcript_segments?: boolean | users$transcript_segmentsArgs<ExtArgs>
     translation_history?: boolean | users$translation_historyArgs<ExtArgs>
     user_preferences?: boolean | users$user_preferencesArgs<ExtArgs>
+    user_activity?: boolean | users$user_activityArgs<ExtArgs>
     _count?: boolean | UsersCountOutputTypeDefaultArgs<ExtArgs>
   }
   export type usersIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {}
@@ -16220,6 +16317,7 @@ export namespace Prisma {
       transcript_segments: Prisma.$transcript_segmentsPayload<ExtArgs>[]
       translation_history: Prisma.$translation_historyPayload<ExtArgs>[]
       user_preferences: Prisma.$user_preferencesPayload<ExtArgs>[]
+      user_activity: Prisma.$user_activityPayload<ExtArgs>[]
     }
     scalars: $Extensions.GetPayloadResult<{
       id: number
@@ -16620,6 +16718,7 @@ export namespace Prisma {
     transcript_segments<T extends users$transcript_segmentsArgs<ExtArgs> = {}>(args?: Subset<T, users$transcript_segmentsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$transcript_segmentsPayload<ExtArgs>, T, "findMany"> | Null>
     translation_history<T extends users$translation_historyArgs<ExtArgs> = {}>(args?: Subset<T, users$translation_historyArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$translation_historyPayload<ExtArgs>, T, "findMany"> | Null>
     user_preferences<T extends users$user_preferencesArgs<ExtArgs> = {}>(args?: Subset<T, users$user_preferencesArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$user_preferencesPayload<ExtArgs>, T, "findMany"> | Null>
+    user_activity<T extends users$user_activityArgs<ExtArgs> = {}>(args?: Subset<T, users$user_activityArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$user_activityPayload<ExtArgs>, T, "findMany"> | Null>
     /**
      * Attaches callbacks for the resolution and/or rejection of the Promise.
      * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -17374,6 +17473,26 @@ export namespace Prisma {
     take?: number
     skip?: number
     distinct?: User_preferencesScalarFieldEnum | User_preferencesScalarFieldEnum[]
+  }
+
+  /**
+   * users.user_activity
+   */
+  export type users$user_activityArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the user_activity
+     */
+    select?: user_activitySelect<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: user_activityInclude<ExtArgs> | null
+    where?: user_activityWhereInput
+    orderBy?: user_activityOrderByWithRelationInput | user_activityOrderByWithRelationInput[]
+    cursor?: user_activityWhereUniqueInput
+    take?: number
+    skip?: number
+    distinct?: User_activityScalarFieldEnum | User_activityScalarFieldEnum[]
   }
 
   /**
@@ -46615,6 +46734,1041 @@ export namespace Prisma {
 
 
   /**
+   * Model user_activity
+   */
+
+  export type AggregateUser_activity = {
+    _count: User_activityCountAggregateOutputType | null
+    _avg: User_activityAvgAggregateOutputType | null
+    _sum: User_activitySumAggregateOutputType | null
+    _min: User_activityMinAggregateOutputType | null
+    _max: User_activityMaxAggregateOutputType | null
+  }
+
+  export type User_activityAvgAggregateOutputType = {
+    id: number | null
+    user_id: number | null
+    resource_id: number | null
+  }
+
+  export type User_activitySumAggregateOutputType = {
+    id: number | null
+    user_id: number | null
+    resource_id: number | null
+  }
+
+  export type User_activityMinAggregateOutputType = {
+    id: number | null
+    user_id: number | null
+    action: string | null
+    resource_type: string | null
+    resource_id: number | null
+    details: string | null
+    ip_address: string | null
+    user_agent: string | null
+    timestamp: Date | null
+    created_at: Date | null
+  }
+
+  export type User_activityMaxAggregateOutputType = {
+    id: number | null
+    user_id: number | null
+    action: string | null
+    resource_type: string | null
+    resource_id: number | null
+    details: string | null
+    ip_address: string | null
+    user_agent: string | null
+    timestamp: Date | null
+    created_at: Date | null
+  }
+
+  export type User_activityCountAggregateOutputType = {
+    id: number
+    user_id: number
+    action: number
+    resource_type: number
+    resource_id: number
+    details: number
+    ip_address: number
+    user_agent: number
+    timestamp: number
+    created_at: number
+    _all: number
+  }
+
+
+  export type User_activityAvgAggregateInputType = {
+    id?: true
+    user_id?: true
+    resource_id?: true
+  }
+
+  export type User_activitySumAggregateInputType = {
+    id?: true
+    user_id?: true
+    resource_id?: true
+  }
+
+  export type User_activityMinAggregateInputType = {
+    id?: true
+    user_id?: true
+    action?: true
+    resource_type?: true
+    resource_id?: true
+    details?: true
+    ip_address?: true
+    user_agent?: true
+    timestamp?: true
+    created_at?: true
+  }
+
+  export type User_activityMaxAggregateInputType = {
+    id?: true
+    user_id?: true
+    action?: true
+    resource_type?: true
+    resource_id?: true
+    details?: true
+    ip_address?: true
+    user_agent?: true
+    timestamp?: true
+    created_at?: true
+  }
+
+  export type User_activityCountAggregateInputType = {
+    id?: true
+    user_id?: true
+    action?: true
+    resource_type?: true
+    resource_id?: true
+    details?: true
+    ip_address?: true
+    user_agent?: true
+    timestamp?: true
+    created_at?: true
+    _all?: true
+  }
+
+  export type User_activityAggregateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which user_activity to aggregate.
+     */
+    where?: user_activityWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of user_activities to fetch.
+     */
+    orderBy?: user_activityOrderByWithRelationInput | user_activityOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the start position
+     */
+    cursor?: user_activityWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` user_activities from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` user_activities.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Count returned user_activities
+    **/
+    _count?: true | User_activityCountAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to average
+    **/
+    _avg?: User_activityAvgAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to sum
+    **/
+    _sum?: User_activitySumAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the minimum value
+    **/
+    _min?: User_activityMinAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the maximum value
+    **/
+    _max?: User_activityMaxAggregateInputType
+  }
+
+  export type GetUser_activityAggregateType<T extends User_activityAggregateArgs> = {
+        [P in keyof T & keyof AggregateUser_activity]: P extends '_count' | 'count'
+      ? T[P] extends true
+        ? number
+        : GetScalarType<T[P], AggregateUser_activity[P]>
+      : GetScalarType<T[P], AggregateUser_activity[P]>
+  }
+
+
+
+
+  export type user_activityGroupByArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: user_activityWhereInput
+    orderBy?: user_activityOrderByWithAggregationInput | user_activityOrderByWithAggregationInput[]
+    by: User_activityScalarFieldEnum[] | User_activityScalarFieldEnum
+    having?: user_activityScalarWhereWithAggregatesInput
+    take?: number
+    skip?: number
+    _count?: User_activityCountAggregateInputType | true
+    _avg?: User_activityAvgAggregateInputType
+    _sum?: User_activitySumAggregateInputType
+    _min?: User_activityMinAggregateInputType
+    _max?: User_activityMaxAggregateInputType
+  }
+
+  export type User_activityGroupByOutputType = {
+    id: number
+    user_id: number
+    action: string
+    resource_type: string | null
+    resource_id: number | null
+    details: string | null
+    ip_address: string | null
+    user_agent: string | null
+    timestamp: Date | null
+    created_at: Date | null
+    _count: User_activityCountAggregateOutputType | null
+    _avg: User_activityAvgAggregateOutputType | null
+    _sum: User_activitySumAggregateOutputType | null
+    _min: User_activityMinAggregateOutputType | null
+    _max: User_activityMaxAggregateOutputType | null
+  }
+
+  type GetUser_activityGroupByPayload<T extends user_activityGroupByArgs> = Prisma.PrismaPromise<
+    Array<
+      PickEnumerable<User_activityGroupByOutputType, T['by']> &
+        {
+          [P in ((keyof T) & (keyof User_activityGroupByOutputType))]: P extends '_count'
+            ? T[P] extends boolean
+              ? number
+              : GetScalarType<T[P], User_activityGroupByOutputType[P]>
+            : GetScalarType<T[P], User_activityGroupByOutputType[P]>
+        }
+      >
+    >
+
+
+  export type user_activitySelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    user_id?: boolean
+    action?: boolean
+    resource_type?: boolean
+    resource_id?: boolean
+    details?: boolean
+    ip_address?: boolean
+    user_agent?: boolean
+    timestamp?: boolean
+    created_at?: boolean
+    users?: boolean | usersDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["user_activity"]>
+
+  export type user_activitySelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    user_id?: boolean
+    action?: boolean
+    resource_type?: boolean
+    resource_id?: boolean
+    details?: boolean
+    ip_address?: boolean
+    user_agent?: boolean
+    timestamp?: boolean
+    created_at?: boolean
+    users?: boolean | usersDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["user_activity"]>
+
+  export type user_activitySelectScalar = {
+    id?: boolean
+    user_id?: boolean
+    action?: boolean
+    resource_type?: boolean
+    resource_id?: boolean
+    details?: boolean
+    ip_address?: boolean
+    user_agent?: boolean
+    timestamp?: boolean
+    created_at?: boolean
+  }
+
+  export type user_activityInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    users?: boolean | usersDefaultArgs<ExtArgs>
+  }
+  export type user_activityIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    users?: boolean | usersDefaultArgs<ExtArgs>
+  }
+
+  export type $user_activityPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    name: "user_activity"
+    objects: {
+      users: Prisma.$usersPayload<ExtArgs>
+    }
+    scalars: $Extensions.GetPayloadResult<{
+      id: number
+      user_id: number
+      action: string
+      resource_type: string | null
+      resource_id: number | null
+      details: string | null
+      ip_address: string | null
+      user_agent: string | null
+      timestamp: Date | null
+      created_at: Date | null
+    }, ExtArgs["result"]["user_activity"]>
+    composites: {}
+  }
+
+  type user_activityGetPayload<S extends boolean | null | undefined | user_activityDefaultArgs> = $Result.GetResult<Prisma.$user_activityPayload, S>
+
+  type user_activityCountArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = 
+    Omit<user_activityFindManyArgs, 'select' | 'include' | 'distinct'> & {
+      select?: User_activityCountAggregateInputType | true
+    }
+
+  export interface user_activityDelegate<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> {
+    [K: symbol]: { types: Prisma.TypeMap<ExtArgs>['model']['user_activity'], meta: { name: 'user_activity' } }
+    /**
+     * Find zero or one User_activity that matches the filter.
+     * @param {user_activityFindUniqueArgs} args - Arguments to find a User_activity
+     * @example
+     * // Get one User_activity
+     * const user_activity = await prisma.user_activity.findUnique({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUnique<T extends user_activityFindUniqueArgs>(args: SelectSubset<T, user_activityFindUniqueArgs<ExtArgs>>): Prisma__user_activityClient<$Result.GetResult<Prisma.$user_activityPayload<ExtArgs>, T, "findUnique"> | null, null, ExtArgs>
+
+    /**
+     * Find one User_activity that matches the filter or throw an error with `error.code='P2025'` 
+     * if no matches were found.
+     * @param {user_activityFindUniqueOrThrowArgs} args - Arguments to find a User_activity
+     * @example
+     * // Get one User_activity
+     * const user_activity = await prisma.user_activity.findUniqueOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUniqueOrThrow<T extends user_activityFindUniqueOrThrowArgs>(args: SelectSubset<T, user_activityFindUniqueOrThrowArgs<ExtArgs>>): Prisma__user_activityClient<$Result.GetResult<Prisma.$user_activityPayload<ExtArgs>, T, "findUniqueOrThrow">, never, ExtArgs>
+
+    /**
+     * Find the first User_activity that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {user_activityFindFirstArgs} args - Arguments to find a User_activity
+     * @example
+     * // Get one User_activity
+     * const user_activity = await prisma.user_activity.findFirst({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirst<T extends user_activityFindFirstArgs>(args?: SelectSubset<T, user_activityFindFirstArgs<ExtArgs>>): Prisma__user_activityClient<$Result.GetResult<Prisma.$user_activityPayload<ExtArgs>, T, "findFirst"> | null, null, ExtArgs>
+
+    /**
+     * Find the first User_activity that matches the filter or
+     * throw `PrismaKnownClientError` with `P2025` code if no matches were found.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {user_activityFindFirstOrThrowArgs} args - Arguments to find a User_activity
+     * @example
+     * // Get one User_activity
+     * const user_activity = await prisma.user_activity.findFirstOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirstOrThrow<T extends user_activityFindFirstOrThrowArgs>(args?: SelectSubset<T, user_activityFindFirstOrThrowArgs<ExtArgs>>): Prisma__user_activityClient<$Result.GetResult<Prisma.$user_activityPayload<ExtArgs>, T, "findFirstOrThrow">, never, ExtArgs>
+
+    /**
+     * Find zero or more User_activities that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {user_activityFindManyArgs} args - Arguments to filter and select certain fields only.
+     * @example
+     * // Get all User_activities
+     * const user_activities = await prisma.user_activity.findMany()
+     * 
+     * // Get first 10 User_activities
+     * const user_activities = await prisma.user_activity.findMany({ take: 10 })
+     * 
+     * // Only select the `id`
+     * const user_activityWithIdOnly = await prisma.user_activity.findMany({ select: { id: true } })
+     * 
+     */
+    findMany<T extends user_activityFindManyArgs>(args?: SelectSubset<T, user_activityFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$user_activityPayload<ExtArgs>, T, "findMany">>
+
+    /**
+     * Create a User_activity.
+     * @param {user_activityCreateArgs} args - Arguments to create a User_activity.
+     * @example
+     * // Create one User_activity
+     * const User_activity = await prisma.user_activity.create({
+     *   data: {
+     *     // ... data to create a User_activity
+     *   }
+     * })
+     * 
+     */
+    create<T extends user_activityCreateArgs>(args: SelectSubset<T, user_activityCreateArgs<ExtArgs>>): Prisma__user_activityClient<$Result.GetResult<Prisma.$user_activityPayload<ExtArgs>, T, "create">, never, ExtArgs>
+
+    /**
+     * Create many User_activities.
+     * @param {user_activityCreateManyArgs} args - Arguments to create many User_activities.
+     * @example
+     * // Create many User_activities
+     * const user_activity = await prisma.user_activity.createMany({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     *     
+     */
+    createMany<T extends user_activityCreateManyArgs>(args?: SelectSubset<T, user_activityCreateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Create many User_activities and returns the data saved in the database.
+     * @param {user_activityCreateManyAndReturnArgs} args - Arguments to create many User_activities.
+     * @example
+     * // Create many User_activities
+     * const user_activity = await prisma.user_activity.createManyAndReturn({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Create many User_activities and only return the `id`
+     * const user_activityWithIdOnly = await prisma.user_activity.createManyAndReturn({ 
+     *   select: { id: true },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    createManyAndReturn<T extends user_activityCreateManyAndReturnArgs>(args?: SelectSubset<T, user_activityCreateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$user_activityPayload<ExtArgs>, T, "createManyAndReturn">>
+
+    /**
+     * Delete a User_activity.
+     * @param {user_activityDeleteArgs} args - Arguments to delete one User_activity.
+     * @example
+     * // Delete one User_activity
+     * const User_activity = await prisma.user_activity.delete({
+     *   where: {
+     *     // ... filter to delete one User_activity
+     *   }
+     * })
+     * 
+     */
+    delete<T extends user_activityDeleteArgs>(args: SelectSubset<T, user_activityDeleteArgs<ExtArgs>>): Prisma__user_activityClient<$Result.GetResult<Prisma.$user_activityPayload<ExtArgs>, T, "delete">, never, ExtArgs>
+
+    /**
+     * Update one User_activity.
+     * @param {user_activityUpdateArgs} args - Arguments to update one User_activity.
+     * @example
+     * // Update one User_activity
+     * const user_activity = await prisma.user_activity.update({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    update<T extends user_activityUpdateArgs>(args: SelectSubset<T, user_activityUpdateArgs<ExtArgs>>): Prisma__user_activityClient<$Result.GetResult<Prisma.$user_activityPayload<ExtArgs>, T, "update">, never, ExtArgs>
+
+    /**
+     * Delete zero or more User_activities.
+     * @param {user_activityDeleteManyArgs} args - Arguments to filter User_activities to delete.
+     * @example
+     * // Delete a few User_activities
+     * const { count } = await prisma.user_activity.deleteMany({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     * 
+     */
+    deleteMany<T extends user_activityDeleteManyArgs>(args?: SelectSubset<T, user_activityDeleteManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more User_activities.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {user_activityUpdateManyArgs} args - Arguments to update one or more rows.
+     * @example
+     * // Update many User_activities
+     * const user_activity = await prisma.user_activity.updateMany({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    updateMany<T extends user_activityUpdateManyArgs>(args: SelectSubset<T, user_activityUpdateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Create or update one User_activity.
+     * @param {user_activityUpsertArgs} args - Arguments to update or create a User_activity.
+     * @example
+     * // Update or create a User_activity
+     * const user_activity = await prisma.user_activity.upsert({
+     *   create: {
+     *     // ... data to create a User_activity
+     *   },
+     *   update: {
+     *     // ... in case it already exists, update
+     *   },
+     *   where: {
+     *     // ... the filter for the User_activity we want to update
+     *   }
+     * })
+     */
+    upsert<T extends user_activityUpsertArgs>(args: SelectSubset<T, user_activityUpsertArgs<ExtArgs>>): Prisma__user_activityClient<$Result.GetResult<Prisma.$user_activityPayload<ExtArgs>, T, "upsert">, never, ExtArgs>
+
+
+    /**
+     * Count the number of User_activities.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {user_activityCountArgs} args - Arguments to filter User_activities to count.
+     * @example
+     * // Count the number of User_activities
+     * const count = await prisma.user_activity.count({
+     *   where: {
+     *     // ... the filter for the User_activities we want to count
+     *   }
+     * })
+    **/
+    count<T extends user_activityCountArgs>(
+      args?: Subset<T, user_activityCountArgs>,
+    ): Prisma.PrismaPromise<
+      T extends $Utils.Record<'select', any>
+        ? T['select'] extends true
+          ? number
+          : GetScalarType<T['select'], User_activityCountAggregateOutputType>
+        : number
+    >
+
+    /**
+     * Allows you to perform aggregations operations on a User_activity.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {User_activityAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @example
+     * // Ordered by age ascending
+     * // Where email contains prisma.io
+     * // Limited to the 10 users
+     * const aggregations = await prisma.user.aggregate({
+     *   _avg: {
+     *     age: true,
+     *   },
+     *   where: {
+     *     email: {
+     *       contains: "prisma.io",
+     *     },
+     *   },
+     *   orderBy: {
+     *     age: "asc",
+     *   },
+     *   take: 10,
+     * })
+    **/
+    aggregate<T extends User_activityAggregateArgs>(args: Subset<T, User_activityAggregateArgs>): Prisma.PrismaPromise<GetUser_activityAggregateType<T>>
+
+    /**
+     * Group by User_activity.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {user_activityGroupByArgs} args - Group by arguments.
+     * @example
+     * // Group by city, order by createdAt, get count
+     * const result = await prisma.user.groupBy({
+     *   by: ['city', 'createdAt'],
+     *   orderBy: {
+     *     createdAt: true
+     *   },
+     *   _count: {
+     *     _all: true
+     *   },
+     * })
+     * 
+    **/
+    groupBy<
+      T extends user_activityGroupByArgs,
+      HasSelectOrTake extends Or<
+        Extends<'skip', Keys<T>>,
+        Extends<'take', Keys<T>>
+      >,
+      OrderByArg extends True extends HasSelectOrTake
+        ? { orderBy: user_activityGroupByArgs['orderBy'] }
+        : { orderBy?: user_activityGroupByArgs['orderBy'] },
+      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
+      ByFields extends MaybeTupleToUnion<T['by']>,
+      ByValid extends Has<ByFields, OrderFields>,
+      HavingFields extends GetHavingFields<T['having']>,
+      HavingValid extends Has<ByFields, HavingFields>,
+      ByEmpty extends T['by'] extends never[] ? True : False,
+      InputErrors extends ByEmpty extends True
+      ? `Error: "by" must not be empty.`
+      : HavingValid extends False
+      ? {
+          [P in HavingFields]: P extends ByFields
+            ? never
+            : P extends string
+            ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
+            : [
+                Error,
+                'Field ',
+                P,
+                ` in "having" needs to be provided in "by"`,
+              ]
+        }[HavingFields]
+      : 'take' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "take", you also need to provide "orderBy"'
+      : 'skip' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "skip", you also need to provide "orderBy"'
+      : ByValid extends True
+      ? {}
+      : {
+          [P in OrderFields]: P extends ByFields
+            ? never
+            : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+        }[OrderFields]
+    >(args: SubsetIntersection<T, user_activityGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetUser_activityGroupByPayload<T> : Prisma.PrismaPromise<InputErrors>
+  /**
+   * Fields of the user_activity model
+   */
+  readonly fields: user_activityFieldRefs;
+  }
+
+  /**
+   * The delegate class that acts as a "Promise-like" for user_activity.
+   * Why is this prefixed with `Prisma__`?
+   * Because we want to prevent naming conflicts as mentioned in
+   * https://github.com/prisma/prisma-client-js/issues/707
+   */
+  export interface Prisma__user_activityClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> extends Prisma.PrismaPromise<T> {
+    readonly [Symbol.toStringTag]: "PrismaPromise"
+    users<T extends usersDefaultArgs<ExtArgs> = {}>(args?: Subset<T, usersDefaultArgs<ExtArgs>>): Prisma__usersClient<$Result.GetResult<Prisma.$usersPayload<ExtArgs>, T, "findUniqueOrThrow"> | Null, Null, ExtArgs>
+    /**
+     * Attaches callbacks for the resolution and/or rejection of the Promise.
+     * @param onfulfilled The callback to execute when the Promise is resolved.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of which ever callback is executed.
+     */
+    then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): $Utils.JsPromise<TResult1 | TResult2>
+    /**
+     * Attaches a callback for only the rejection of the Promise.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of the callback.
+     */
+    catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null): $Utils.JsPromise<T | TResult>
+    /**
+     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
+     * resolved value cannot be modified from the callback.
+     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
+     * @returns A Promise for the completion of the callback.
+     */
+    finally(onfinally?: (() => void) | undefined | null): $Utils.JsPromise<T>
+  }
+
+
+
+
+  /**
+   * Fields of the user_activity model
+   */ 
+  interface user_activityFieldRefs {
+    readonly id: FieldRef<"user_activity", 'Int'>
+    readonly user_id: FieldRef<"user_activity", 'Int'>
+    readonly action: FieldRef<"user_activity", 'String'>
+    readonly resource_type: FieldRef<"user_activity", 'String'>
+    readonly resource_id: FieldRef<"user_activity", 'Int'>
+    readonly details: FieldRef<"user_activity", 'String'>
+    readonly ip_address: FieldRef<"user_activity", 'String'>
+    readonly user_agent: FieldRef<"user_activity", 'String'>
+    readonly timestamp: FieldRef<"user_activity", 'DateTime'>
+    readonly created_at: FieldRef<"user_activity", 'DateTime'>
+  }
+    
+
+  // Custom InputTypes
+  /**
+   * user_activity findUnique
+   */
+  export type user_activityFindUniqueArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the user_activity
+     */
+    select?: user_activitySelect<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: user_activityInclude<ExtArgs> | null
+    /**
+     * Filter, which user_activity to fetch.
+     */
+    where: user_activityWhereUniqueInput
+  }
+
+  /**
+   * user_activity findUniqueOrThrow
+   */
+  export type user_activityFindUniqueOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the user_activity
+     */
+    select?: user_activitySelect<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: user_activityInclude<ExtArgs> | null
+    /**
+     * Filter, which user_activity to fetch.
+     */
+    where: user_activityWhereUniqueInput
+  }
+
+  /**
+   * user_activity findFirst
+   */
+  export type user_activityFindFirstArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the user_activity
+     */
+    select?: user_activitySelect<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: user_activityInclude<ExtArgs> | null
+    /**
+     * Filter, which user_activity to fetch.
+     */
+    where?: user_activityWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of user_activities to fetch.
+     */
+    orderBy?: user_activityOrderByWithRelationInput | user_activityOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for user_activities.
+     */
+    cursor?: user_activityWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` user_activities from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` user_activities.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of user_activities.
+     */
+    distinct?: User_activityScalarFieldEnum | User_activityScalarFieldEnum[]
+  }
+
+  /**
+   * user_activity findFirstOrThrow
+   */
+  export type user_activityFindFirstOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the user_activity
+     */
+    select?: user_activitySelect<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: user_activityInclude<ExtArgs> | null
+    /**
+     * Filter, which user_activity to fetch.
+     */
+    where?: user_activityWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of user_activities to fetch.
+     */
+    orderBy?: user_activityOrderByWithRelationInput | user_activityOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for user_activities.
+     */
+    cursor?: user_activityWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` user_activities from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` user_activities.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of user_activities.
+     */
+    distinct?: User_activityScalarFieldEnum | User_activityScalarFieldEnum[]
+  }
+
+  /**
+   * user_activity findMany
+   */
+  export type user_activityFindManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the user_activity
+     */
+    select?: user_activitySelect<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: user_activityInclude<ExtArgs> | null
+    /**
+     * Filter, which user_activities to fetch.
+     */
+    where?: user_activityWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of user_activities to fetch.
+     */
+    orderBy?: user_activityOrderByWithRelationInput | user_activityOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for listing user_activities.
+     */
+    cursor?: user_activityWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` user_activities from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` user_activities.
+     */
+    skip?: number
+    distinct?: User_activityScalarFieldEnum | User_activityScalarFieldEnum[]
+  }
+
+  /**
+   * user_activity create
+   */
+  export type user_activityCreateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the user_activity
+     */
+    select?: user_activitySelect<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: user_activityInclude<ExtArgs> | null
+    /**
+     * The data needed to create a user_activity.
+     */
+    data: XOR<user_activityCreateInput, user_activityUncheckedCreateInput>
+  }
+
+  /**
+   * user_activity createMany
+   */
+  export type user_activityCreateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to create many user_activities.
+     */
+    data: user_activityCreateManyInput | user_activityCreateManyInput[]
+    skipDuplicates?: boolean
+  }
+
+  /**
+   * user_activity createManyAndReturn
+   */
+  export type user_activityCreateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the user_activity
+     */
+    select?: user_activitySelectCreateManyAndReturn<ExtArgs> | null
+    /**
+     * The data used to create many user_activities.
+     */
+    data: user_activityCreateManyInput | user_activityCreateManyInput[]
+    skipDuplicates?: boolean
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: user_activityIncludeCreateManyAndReturn<ExtArgs> | null
+  }
+
+  /**
+   * user_activity update
+   */
+  export type user_activityUpdateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the user_activity
+     */
+    select?: user_activitySelect<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: user_activityInclude<ExtArgs> | null
+    /**
+     * The data needed to update a user_activity.
+     */
+    data: XOR<user_activityUpdateInput, user_activityUncheckedUpdateInput>
+    /**
+     * Choose, which user_activity to update.
+     */
+    where: user_activityWhereUniqueInput
+  }
+
+  /**
+   * user_activity updateMany
+   */
+  export type user_activityUpdateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to update user_activities.
+     */
+    data: XOR<user_activityUpdateManyMutationInput, user_activityUncheckedUpdateManyInput>
+    /**
+     * Filter which user_activities to update
+     */
+    where?: user_activityWhereInput
+  }
+
+  /**
+   * user_activity upsert
+   */
+  export type user_activityUpsertArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the user_activity
+     */
+    select?: user_activitySelect<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: user_activityInclude<ExtArgs> | null
+    /**
+     * The filter to search for the user_activity to update in case it exists.
+     */
+    where: user_activityWhereUniqueInput
+    /**
+     * In case the user_activity found by the `where` argument doesn't exist, create a new user_activity with this data.
+     */
+    create: XOR<user_activityCreateInput, user_activityUncheckedCreateInput>
+    /**
+     * In case the user_activity was found with the provided `where` argument, update it with this data.
+     */
+    update: XOR<user_activityUpdateInput, user_activityUncheckedUpdateInput>
+  }
+
+  /**
+   * user_activity delete
+   */
+  export type user_activityDeleteArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the user_activity
+     */
+    select?: user_activitySelect<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: user_activityInclude<ExtArgs> | null
+    /**
+     * Filter which user_activity to delete.
+     */
+    where: user_activityWhereUniqueInput
+  }
+
+  /**
+   * user_activity deleteMany
+   */
+  export type user_activityDeleteManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which user_activities to delete
+     */
+    where?: user_activityWhereInput
+  }
+
+  /**
+   * user_activity without action
+   */
+  export type user_activityDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the user_activity
+     */
+    select?: user_activitySelect<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: user_activityInclude<ExtArgs> | null
+  }
+
+
+  /**
    * Enums
    */
 
@@ -47326,6 +48480,22 @@ export namespace Prisma {
   };
 
   export type Weekly_digestScalarFieldEnum = (typeof Weekly_digestScalarFieldEnum)[keyof typeof Weekly_digestScalarFieldEnum]
+
+
+  export const User_activityScalarFieldEnum: {
+    id: 'id',
+    user_id: 'user_id',
+    action: 'action',
+    resource_type: 'resource_type',
+    resource_id: 'resource_id',
+    details: 'details',
+    ip_address: 'ip_address',
+    user_agent: 'user_agent',
+    timestamp: 'timestamp',
+    created_at: 'created_at'
+  };
+
+  export type User_activityScalarFieldEnum = (typeof User_activityScalarFieldEnum)[keyof typeof User_activityScalarFieldEnum]
 
 
   export const SortOrder: {
@@ -48453,6 +49623,7 @@ export namespace Prisma {
     transcript_segments?: Transcript_segmentsListRelationFilter
     translation_history?: Translation_historyListRelationFilter
     user_preferences?: User_preferencesListRelationFilter
+    user_activity?: User_activityListRelationFilter
   }
 
   export type usersOrderByWithRelationInput = {
@@ -48490,6 +49661,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsOrderByRelationAggregateInput
     translation_history?: translation_historyOrderByRelationAggregateInput
     user_preferences?: user_preferencesOrderByRelationAggregateInput
+    user_activity?: user_activityOrderByRelationAggregateInput
   }
 
   export type usersWhereUniqueInput = Prisma.AtLeast<{
@@ -48530,6 +49702,7 @@ export namespace Prisma {
     transcript_segments?: Transcript_segmentsListRelationFilter
     translation_history?: Translation_historyListRelationFilter
     user_preferences?: User_preferencesListRelationFilter
+    user_activity?: User_activityListRelationFilter
   }, "id" | "username" | "email">
 
   export type usersOrderByWithAggregationInput = {
@@ -51174,6 +52347,88 @@ export namespace Prisma {
     created_at?: DateTimeWithAggregatesFilter<"weekly_digest"> | Date | string
   }
 
+  export type user_activityWhereInput = {
+    AND?: user_activityWhereInput | user_activityWhereInput[]
+    OR?: user_activityWhereInput[]
+    NOT?: user_activityWhereInput | user_activityWhereInput[]
+    id?: IntFilter<"user_activity"> | number
+    user_id?: IntFilter<"user_activity"> | number
+    action?: StringFilter<"user_activity"> | string
+    resource_type?: StringNullableFilter<"user_activity"> | string | null
+    resource_id?: IntNullableFilter<"user_activity"> | number | null
+    details?: StringNullableFilter<"user_activity"> | string | null
+    ip_address?: StringNullableFilter<"user_activity"> | string | null
+    user_agent?: StringNullableFilter<"user_activity"> | string | null
+    timestamp?: DateTimeNullableFilter<"user_activity"> | Date | string | null
+    created_at?: DateTimeNullableFilter<"user_activity"> | Date | string | null
+    users?: XOR<UsersRelationFilter, usersWhereInput>
+  }
+
+  export type user_activityOrderByWithRelationInput = {
+    id?: SortOrder
+    user_id?: SortOrder
+    action?: SortOrder
+    resource_type?: SortOrderInput | SortOrder
+    resource_id?: SortOrderInput | SortOrder
+    details?: SortOrderInput | SortOrder
+    ip_address?: SortOrderInput | SortOrder
+    user_agent?: SortOrderInput | SortOrder
+    timestamp?: SortOrderInput | SortOrder
+    created_at?: SortOrderInput | SortOrder
+    users?: usersOrderByWithRelationInput
+  }
+
+  export type user_activityWhereUniqueInput = Prisma.AtLeast<{
+    id?: number
+    AND?: user_activityWhereInput | user_activityWhereInput[]
+    OR?: user_activityWhereInput[]
+    NOT?: user_activityWhereInput | user_activityWhereInput[]
+    user_id?: IntFilter<"user_activity"> | number
+    action?: StringFilter<"user_activity"> | string
+    resource_type?: StringNullableFilter<"user_activity"> | string | null
+    resource_id?: IntNullableFilter<"user_activity"> | number | null
+    details?: StringNullableFilter<"user_activity"> | string | null
+    ip_address?: StringNullableFilter<"user_activity"> | string | null
+    user_agent?: StringNullableFilter<"user_activity"> | string | null
+    timestamp?: DateTimeNullableFilter<"user_activity"> | Date | string | null
+    created_at?: DateTimeNullableFilter<"user_activity"> | Date | string | null
+    users?: XOR<UsersRelationFilter, usersWhereInput>
+  }, "id">
+
+  export type user_activityOrderByWithAggregationInput = {
+    id?: SortOrder
+    user_id?: SortOrder
+    action?: SortOrder
+    resource_type?: SortOrderInput | SortOrder
+    resource_id?: SortOrderInput | SortOrder
+    details?: SortOrderInput | SortOrder
+    ip_address?: SortOrderInput | SortOrder
+    user_agent?: SortOrderInput | SortOrder
+    timestamp?: SortOrderInput | SortOrder
+    created_at?: SortOrderInput | SortOrder
+    _count?: user_activityCountOrderByAggregateInput
+    _avg?: user_activityAvgOrderByAggregateInput
+    _max?: user_activityMaxOrderByAggregateInput
+    _min?: user_activityMinOrderByAggregateInput
+    _sum?: user_activitySumOrderByAggregateInput
+  }
+
+  export type user_activityScalarWhereWithAggregatesInput = {
+    AND?: user_activityScalarWhereWithAggregatesInput | user_activityScalarWhereWithAggregatesInput[]
+    OR?: user_activityScalarWhereWithAggregatesInput[]
+    NOT?: user_activityScalarWhereWithAggregatesInput | user_activityScalarWhereWithAggregatesInput[]
+    id?: IntWithAggregatesFilter<"user_activity"> | number
+    user_id?: IntWithAggregatesFilter<"user_activity"> | number
+    action?: StringWithAggregatesFilter<"user_activity"> | string
+    resource_type?: StringNullableWithAggregatesFilter<"user_activity"> | string | null
+    resource_id?: IntNullableWithAggregatesFilter<"user_activity"> | number | null
+    details?: StringNullableWithAggregatesFilter<"user_activity"> | string | null
+    ip_address?: StringNullableWithAggregatesFilter<"user_activity"> | string | null
+    user_agent?: StringNullableWithAggregatesFilter<"user_activity"> | string | null
+    timestamp?: DateTimeNullableWithAggregatesFilter<"user_activity"> | Date | string | null
+    created_at?: DateTimeNullableWithAggregatesFilter<"user_activity"> | Date | string | null
+  }
+
   export type alembic_versionCreateInput = {
     version_num: string
   }
@@ -52235,6 +53490,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityCreateNestedManyWithoutUsersInput
   }
 
   export type usersUncheckedCreateInput = {
@@ -52272,6 +53528,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyUncheckedCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesUncheckedCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityUncheckedCreateNestedManyWithoutUsersInput
   }
 
   export type usersUpdateInput = {
@@ -52308,6 +53565,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUpdateManyWithoutUsersNestedInput
   }
 
   export type usersUncheckedUpdateInput = {
@@ -52345,6 +53603,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUncheckedUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUncheckedUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUncheckedUpdateManyWithoutUsersNestedInput
   }
 
   export type usersCreateManyInput = {
@@ -55291,6 +56550,93 @@ export namespace Prisma {
     created_at?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
+  export type user_activityCreateInput = {
+    action: string
+    resource_type?: string | null
+    resource_id?: number | null
+    details?: string | null
+    ip_address?: string | null
+    user_agent?: string | null
+    timestamp?: Date | string | null
+    created_at?: Date | string | null
+    users: usersCreateNestedOneWithoutUser_activityInput
+  }
+
+  export type user_activityUncheckedCreateInput = {
+    id?: number
+    user_id: number
+    action: string
+    resource_type?: string | null
+    resource_id?: number | null
+    details?: string | null
+    ip_address?: string | null
+    user_agent?: string | null
+    timestamp?: Date | string | null
+    created_at?: Date | string | null
+  }
+
+  export type user_activityUpdateInput = {
+    action?: StringFieldUpdateOperationsInput | string
+    resource_type?: NullableStringFieldUpdateOperationsInput | string | null
+    resource_id?: NullableIntFieldUpdateOperationsInput | number | null
+    details?: NullableStringFieldUpdateOperationsInput | string | null
+    ip_address?: NullableStringFieldUpdateOperationsInput | string | null
+    user_agent?: NullableStringFieldUpdateOperationsInput | string | null
+    timestamp?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    users?: usersUpdateOneRequiredWithoutUser_activityNestedInput
+  }
+
+  export type user_activityUncheckedUpdateInput = {
+    id?: IntFieldUpdateOperationsInput | number
+    user_id?: IntFieldUpdateOperationsInput | number
+    action?: StringFieldUpdateOperationsInput | string
+    resource_type?: NullableStringFieldUpdateOperationsInput | string | null
+    resource_id?: NullableIntFieldUpdateOperationsInput | number | null
+    details?: NullableStringFieldUpdateOperationsInput | string | null
+    ip_address?: NullableStringFieldUpdateOperationsInput | string | null
+    user_agent?: NullableStringFieldUpdateOperationsInput | string | null
+    timestamp?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  }
+
+  export type user_activityCreateManyInput = {
+    id?: number
+    user_id: number
+    action: string
+    resource_type?: string | null
+    resource_id?: number | null
+    details?: string | null
+    ip_address?: string | null
+    user_agent?: string | null
+    timestamp?: Date | string | null
+    created_at?: Date | string | null
+  }
+
+  export type user_activityUpdateManyMutationInput = {
+    action?: StringFieldUpdateOperationsInput | string
+    resource_type?: NullableStringFieldUpdateOperationsInput | string | null
+    resource_id?: NullableIntFieldUpdateOperationsInput | number | null
+    details?: NullableStringFieldUpdateOperationsInput | string | null
+    ip_address?: NullableStringFieldUpdateOperationsInput | string | null
+    user_agent?: NullableStringFieldUpdateOperationsInput | string | null
+    timestamp?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  }
+
+  export type user_activityUncheckedUpdateManyInput = {
+    id?: IntFieldUpdateOperationsInput | number
+    user_id?: IntFieldUpdateOperationsInput | number
+    action?: StringFieldUpdateOperationsInput | string
+    resource_type?: NullableStringFieldUpdateOperationsInput | string | null
+    resource_id?: NullableIntFieldUpdateOperationsInput | number | null
+    details?: NullableStringFieldUpdateOperationsInput | string | null
+    ip_address?: NullableStringFieldUpdateOperationsInput | string | null
+    user_agent?: NullableStringFieldUpdateOperationsInput | string | null
+    timestamp?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  }
+
   export type StringFilter<$PrismaModel = never> = {
     equals?: string | StringFieldRefInput<$PrismaModel>
     in?: string[] | ListStringFieldRefInput<$PrismaModel>
@@ -56326,6 +57672,12 @@ export namespace Prisma {
     none?: user_preferencesWhereInput
   }
 
+  export type User_activityListRelationFilter = {
+    every?: user_activityWhereInput
+    some?: user_activityWhereInput
+    none?: user_activityWhereInput
+  }
+
   export type action_itemsOrderByRelationAggregateInput = {
     _count?: SortOrder
   }
@@ -56399,6 +57751,10 @@ export namespace Prisma {
   }
 
   export type user_preferencesOrderByRelationAggregateInput = {
+    _count?: SortOrder
+  }
+
+  export type user_activityOrderByRelationAggregateInput = {
     _count?: SortOrder
   }
 
@@ -58284,6 +59640,57 @@ export namespace Prisma {
     id?: SortOrder
   }
 
+  export type user_activityCountOrderByAggregateInput = {
+    id?: SortOrder
+    user_id?: SortOrder
+    action?: SortOrder
+    resource_type?: SortOrder
+    resource_id?: SortOrder
+    details?: SortOrder
+    ip_address?: SortOrder
+    user_agent?: SortOrder
+    timestamp?: SortOrder
+    created_at?: SortOrder
+  }
+
+  export type user_activityAvgOrderByAggregateInput = {
+    id?: SortOrder
+    user_id?: SortOrder
+    resource_id?: SortOrder
+  }
+
+  export type user_activityMaxOrderByAggregateInput = {
+    id?: SortOrder
+    user_id?: SortOrder
+    action?: SortOrder
+    resource_type?: SortOrder
+    resource_id?: SortOrder
+    details?: SortOrder
+    ip_address?: SortOrder
+    user_agent?: SortOrder
+    timestamp?: SortOrder
+    created_at?: SortOrder
+  }
+
+  export type user_activityMinOrderByAggregateInput = {
+    id?: SortOrder
+    user_id?: SortOrder
+    action?: SortOrder
+    resource_type?: SortOrder
+    resource_id?: SortOrder
+    details?: SortOrder
+    ip_address?: SortOrder
+    user_agent?: SortOrder
+    timestamp?: SortOrder
+    created_at?: SortOrder
+  }
+
+  export type user_activitySumOrderByAggregateInput = {
+    id?: SortOrder
+    user_id?: SortOrder
+    resource_id?: SortOrder
+  }
+
   export type StringFieldUpdateOperationsInput = {
     set?: string
   }
@@ -58630,6 +60037,13 @@ export namespace Prisma {
     connect?: user_preferencesWhereUniqueInput | user_preferencesWhereUniqueInput[]
   }
 
+  export type user_activityCreateNestedManyWithoutUsersInput = {
+    create?: XOR<user_activityCreateWithoutUsersInput, user_activityUncheckedCreateWithoutUsersInput> | user_activityCreateWithoutUsersInput[] | user_activityUncheckedCreateWithoutUsersInput[]
+    connectOrCreate?: user_activityCreateOrConnectWithoutUsersInput | user_activityCreateOrConnectWithoutUsersInput[]
+    createMany?: user_activityCreateManyUsersInputEnvelope
+    connect?: user_activityWhereUniqueInput | user_activityWhereUniqueInput[]
+  }
+
   export type action_itemsUncheckedCreateNestedManyWithoutUsersInput = {
     create?: XOR<action_itemsCreateWithoutUsersInput, action_itemsUncheckedCreateWithoutUsersInput> | action_itemsCreateWithoutUsersInput[] | action_itemsUncheckedCreateWithoutUsersInput[]
     connectOrCreate?: action_itemsCreateOrConnectWithoutUsersInput | action_itemsCreateOrConnectWithoutUsersInput[]
@@ -58768,6 +60182,13 @@ export namespace Prisma {
     connectOrCreate?: user_preferencesCreateOrConnectWithoutUsersInput | user_preferencesCreateOrConnectWithoutUsersInput[]
     createMany?: user_preferencesCreateManyUsersInputEnvelope
     connect?: user_preferencesWhereUniqueInput | user_preferencesWhereUniqueInput[]
+  }
+
+  export type user_activityUncheckedCreateNestedManyWithoutUsersInput = {
+    create?: XOR<user_activityCreateWithoutUsersInput, user_activityUncheckedCreateWithoutUsersInput> | user_activityCreateWithoutUsersInput[] | user_activityUncheckedCreateWithoutUsersInput[]
+    connectOrCreate?: user_activityCreateOrConnectWithoutUsersInput | user_activityCreateOrConnectWithoutUsersInput[]
+    createMany?: user_activityCreateManyUsersInputEnvelope
+    connect?: user_activityWhereUniqueInput | user_activityWhereUniqueInput[]
   }
 
   export type NullableBoolFieldUpdateOperationsInput = {
@@ -59058,6 +60479,20 @@ export namespace Prisma {
     deleteMany?: user_preferencesScalarWhereInput | user_preferencesScalarWhereInput[]
   }
 
+  export type user_activityUpdateManyWithoutUsersNestedInput = {
+    create?: XOR<user_activityCreateWithoutUsersInput, user_activityUncheckedCreateWithoutUsersInput> | user_activityCreateWithoutUsersInput[] | user_activityUncheckedCreateWithoutUsersInput[]
+    connectOrCreate?: user_activityCreateOrConnectWithoutUsersInput | user_activityCreateOrConnectWithoutUsersInput[]
+    upsert?: user_activityUpsertWithWhereUniqueWithoutUsersInput | user_activityUpsertWithWhereUniqueWithoutUsersInput[]
+    createMany?: user_activityCreateManyUsersInputEnvelope
+    set?: user_activityWhereUniqueInput | user_activityWhereUniqueInput[]
+    disconnect?: user_activityWhereUniqueInput | user_activityWhereUniqueInput[]
+    delete?: user_activityWhereUniqueInput | user_activityWhereUniqueInput[]
+    connect?: user_activityWhereUniqueInput | user_activityWhereUniqueInput[]
+    update?: user_activityUpdateWithWhereUniqueWithoutUsersInput | user_activityUpdateWithWhereUniqueWithoutUsersInput[]
+    updateMany?: user_activityUpdateManyWithWhereWithoutUsersInput | user_activityUpdateManyWithWhereWithoutUsersInput[]
+    deleteMany?: user_activityScalarWhereInput | user_activityScalarWhereInput[]
+  }
+
   export type action_itemsUncheckedUpdateManyWithoutUsersNestedInput = {
     create?: XOR<action_itemsCreateWithoutUsersInput, action_itemsUncheckedCreateWithoutUsersInput> | action_itemsCreateWithoutUsersInput[] | action_itemsUncheckedCreateWithoutUsersInput[]
     connectOrCreate?: action_itemsCreateOrConnectWithoutUsersInput | action_itemsCreateOrConnectWithoutUsersInput[]
@@ -59336,6 +60771,20 @@ export namespace Prisma {
     update?: user_preferencesUpdateWithWhereUniqueWithoutUsersInput | user_preferencesUpdateWithWhereUniqueWithoutUsersInput[]
     updateMany?: user_preferencesUpdateManyWithWhereWithoutUsersInput | user_preferencesUpdateManyWithWhereWithoutUsersInput[]
     deleteMany?: user_preferencesScalarWhereInput | user_preferencesScalarWhereInput[]
+  }
+
+  export type user_activityUncheckedUpdateManyWithoutUsersNestedInput = {
+    create?: XOR<user_activityCreateWithoutUsersInput, user_activityUncheckedCreateWithoutUsersInput> | user_activityCreateWithoutUsersInput[] | user_activityUncheckedCreateWithoutUsersInput[]
+    connectOrCreate?: user_activityCreateOrConnectWithoutUsersInput | user_activityCreateOrConnectWithoutUsersInput[]
+    upsert?: user_activityUpsertWithWhereUniqueWithoutUsersInput | user_activityUpsertWithWhereUniqueWithoutUsersInput[]
+    createMany?: user_activityCreateManyUsersInputEnvelope
+    set?: user_activityWhereUniqueInput | user_activityWhereUniqueInput[]
+    disconnect?: user_activityWhereUniqueInput | user_activityWhereUniqueInput[]
+    delete?: user_activityWhereUniqueInput | user_activityWhereUniqueInput[]
+    connect?: user_activityWhereUniqueInput | user_activityWhereUniqueInput[]
+    update?: user_activityUpdateWithWhereUniqueWithoutUsersInput | user_activityUpdateWithWhereUniqueWithoutUsersInput[]
+    updateMany?: user_activityUpdateManyWithWhereWithoutUsersInput | user_activityUpdateManyWithWhereWithoutUsersInput[]
+    deleteMany?: user_activityScalarWhereInput | user_activityScalarWhereInput[]
   }
 
   export type alert_preferencesCreatesourcesInput = {
@@ -60636,6 +62085,20 @@ export namespace Prisma {
     push?: string | string[]
   }
 
+  export type usersCreateNestedOneWithoutUser_activityInput = {
+    create?: XOR<usersCreateWithoutUser_activityInput, usersUncheckedCreateWithoutUser_activityInput>
+    connectOrCreate?: usersCreateOrConnectWithoutUser_activityInput
+    connect?: usersWhereUniqueInput
+  }
+
+  export type usersUpdateOneRequiredWithoutUser_activityNestedInput = {
+    create?: XOR<usersCreateWithoutUser_activityInput, usersUncheckedCreateWithoutUser_activityInput>
+    connectOrCreate?: usersCreateOrConnectWithoutUser_activityInput
+    upsert?: usersUpsertWithoutUser_activityInput
+    connect?: usersWhereUniqueInput
+    update?: XOR<XOR<usersUpdateToOneWithWhereWithoutUser_activityInput, usersUpdateWithoutUser_activityInput>, usersUncheckedUpdateWithoutUser_activityInput>
+  }
+
   export type NestedStringFilter<$PrismaModel = never> = {
     equals?: string | StringFieldRefInput<$PrismaModel>
     in?: string[] | ListStringFieldRefInput<$PrismaModel>
@@ -61064,6 +62527,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityCreateNestedManyWithoutUsersInput
   }
 
   export type usersUncheckedCreateWithoutFile_uploadsInput = {
@@ -61100,6 +62564,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyUncheckedCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesUncheckedCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityUncheckedCreateNestedManyWithoutUsersInput
   }
 
   export type usersCreateOrConnectWithoutFile_uploadsInput = {
@@ -61151,6 +62616,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUpdateManyWithoutUsersNestedInput
   }
 
   export type usersUncheckedUpdateWithoutFile_uploadsInput = {
@@ -61187,6 +62653,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUncheckedUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUncheckedUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUncheckedUpdateManyWithoutUsersNestedInput
   }
 
   export type usersCreateWithoutLikesInput = {
@@ -61222,6 +62689,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityCreateNestedManyWithoutUsersInput
   }
 
   export type usersUncheckedCreateWithoutLikesInput = {
@@ -61258,6 +62726,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyUncheckedCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesUncheckedCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityUncheckedCreateNestedManyWithoutUsersInput
   }
 
   export type usersCreateOrConnectWithoutLikesInput = {
@@ -61309,6 +62778,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUpdateManyWithoutUsersNestedInput
   }
 
   export type usersUncheckedUpdateWithoutLikesInput = {
@@ -61345,6 +62815,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUncheckedUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUncheckedUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUncheckedUpdateManyWithoutUsersNestedInput
   }
 
   export type usersCreateWithoutPdf_translation_jobsInput = {
@@ -61380,6 +62851,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityCreateNestedManyWithoutUsersInput
   }
 
   export type usersUncheckedCreateWithoutPdf_translation_jobsInput = {
@@ -61416,6 +62888,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyUncheckedCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesUncheckedCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityUncheckedCreateNestedManyWithoutUsersInput
   }
 
   export type usersCreateOrConnectWithoutPdf_translation_jobsInput = {
@@ -61467,6 +62940,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUpdateManyWithoutUsersNestedInput
   }
 
   export type usersUncheckedUpdateWithoutPdf_translation_jobsInput = {
@@ -61503,6 +62977,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUncheckedUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUncheckedUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUncheckedUpdateManyWithoutUsersNestedInput
   }
 
   export type usersCreateWithoutPdf_translationsInput = {
@@ -61538,6 +63013,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityCreateNestedManyWithoutUsersInput
   }
 
   export type usersUncheckedCreateWithoutPdf_translationsInput = {
@@ -61574,6 +63050,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyUncheckedCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesUncheckedCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityUncheckedCreateNestedManyWithoutUsersInput
   }
 
   export type usersCreateOrConnectWithoutPdf_translationsInput = {
@@ -61662,6 +63139,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUpdateManyWithoutUsersNestedInput
   }
 
   export type usersUncheckedUpdateWithoutPdf_translationsInput = {
@@ -61698,6 +63176,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUncheckedUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUncheckedUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUncheckedUpdateManyWithoutUsersNestedInput
   }
 
   export type translation_pagesUpsertWithWhereUniqueWithoutPdf_translationsInput = {
@@ -61767,6 +63246,7 @@ export namespace Prisma {
     speaker_mappings?: speaker_mappingsCreateNestedManyWithoutUsersInput
     transcript_segments?: transcript_segmentsCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityCreateNestedManyWithoutUsersInput
   }
 
   export type usersUncheckedCreateWithoutTranslation_historyInput = {
@@ -61803,6 +63283,7 @@ export namespace Prisma {
     speaker_mappings?: speaker_mappingsUncheckedCreateNestedManyWithoutUsersInput
     transcript_segments?: transcript_segmentsUncheckedCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesUncheckedCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityUncheckedCreateNestedManyWithoutUsersInput
   }
 
   export type usersCreateOrConnectWithoutTranslation_historyInput = {
@@ -61854,6 +63335,7 @@ export namespace Prisma {
     speaker_mappings?: speaker_mappingsUpdateManyWithoutUsersNestedInput
     transcript_segments?: transcript_segmentsUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUpdateManyWithoutUsersNestedInput
   }
 
   export type usersUncheckedUpdateWithoutTranslation_historyInput = {
@@ -61890,6 +63372,7 @@ export namespace Prisma {
     speaker_mappings?: speaker_mappingsUncheckedUpdateManyWithoutUsersNestedInput
     transcript_segments?: transcript_segmentsUncheckedUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUncheckedUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUncheckedUpdateManyWithoutUsersNestedInput
   }
 
   export type pdf_translationsCreateWithoutTranslation_pagesInput = {
@@ -62027,6 +63510,7 @@ export namespace Prisma {
     speaker_mappings?: speaker_mappingsCreateNestedManyWithoutUsersInput
     transcript_segments?: transcript_segmentsCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityCreateNestedManyWithoutUsersInput
   }
 
   export type usersUncheckedCreateWithoutUser_preferencesInput = {
@@ -62063,6 +63547,7 @@ export namespace Prisma {
     speaker_mappings?: speaker_mappingsUncheckedCreateNestedManyWithoutUsersInput
     transcript_segments?: transcript_segmentsUncheckedCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyUncheckedCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityUncheckedCreateNestedManyWithoutUsersInput
   }
 
   export type usersCreateOrConnectWithoutUser_preferencesInput = {
@@ -62114,6 +63599,7 @@ export namespace Prisma {
     speaker_mappings?: speaker_mappingsUpdateManyWithoutUsersNestedInput
     transcript_segments?: transcript_segmentsUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUpdateManyWithoutUsersNestedInput
   }
 
   export type usersUncheckedUpdateWithoutUser_preferencesInput = {
@@ -62150,6 +63636,7 @@ export namespace Prisma {
     speaker_mappings?: speaker_mappingsUncheckedUpdateManyWithoutUsersNestedInput
     transcript_segments?: transcript_segmentsUncheckedUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUncheckedUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUncheckedUpdateManyWithoutUsersNestedInput
   }
 
   export type action_itemsCreateWithoutUsersInput = {
@@ -62915,6 +64402,39 @@ export namespace Prisma {
     skipDuplicates?: boolean
   }
 
+  export type user_activityCreateWithoutUsersInput = {
+    action: string
+    resource_type?: string | null
+    resource_id?: number | null
+    details?: string | null
+    ip_address?: string | null
+    user_agent?: string | null
+    timestamp?: Date | string | null
+    created_at?: Date | string | null
+  }
+
+  export type user_activityUncheckedCreateWithoutUsersInput = {
+    id?: number
+    action: string
+    resource_type?: string | null
+    resource_id?: number | null
+    details?: string | null
+    ip_address?: string | null
+    user_agent?: string | null
+    timestamp?: Date | string | null
+    created_at?: Date | string | null
+  }
+
+  export type user_activityCreateOrConnectWithoutUsersInput = {
+    where: user_activityWhereUniqueInput
+    create: XOR<user_activityCreateWithoutUsersInput, user_activityUncheckedCreateWithoutUsersInput>
+  }
+
+  export type user_activityCreateManyUsersInputEnvelope = {
+    data: user_activityCreateManyUsersInput | user_activityCreateManyUsersInput[]
+    skipDuplicates?: boolean
+  }
+
   export type action_itemsUpsertWithWhereUniqueWithoutUsersInput = {
     where: action_itemsWhereUniqueInput
     update: XOR<action_itemsUpdateWithoutUsersInput, action_itemsUncheckedUpdateWithoutUsersInput>
@@ -63572,6 +65092,38 @@ export namespace Prisma {
     preferred_topics?: StringNullableListFilter<"user_preferences">
   }
 
+  export type user_activityUpsertWithWhereUniqueWithoutUsersInput = {
+    where: user_activityWhereUniqueInput
+    update: XOR<user_activityUpdateWithoutUsersInput, user_activityUncheckedUpdateWithoutUsersInput>
+    create: XOR<user_activityCreateWithoutUsersInput, user_activityUncheckedCreateWithoutUsersInput>
+  }
+
+  export type user_activityUpdateWithWhereUniqueWithoutUsersInput = {
+    where: user_activityWhereUniqueInput
+    data: XOR<user_activityUpdateWithoutUsersInput, user_activityUncheckedUpdateWithoutUsersInput>
+  }
+
+  export type user_activityUpdateManyWithWhereWithoutUsersInput = {
+    where: user_activityScalarWhereInput
+    data: XOR<user_activityUpdateManyMutationInput, user_activityUncheckedUpdateManyWithoutUsersInput>
+  }
+
+  export type user_activityScalarWhereInput = {
+    AND?: user_activityScalarWhereInput | user_activityScalarWhereInput[]
+    OR?: user_activityScalarWhereInput[]
+    NOT?: user_activityScalarWhereInput | user_activityScalarWhereInput[]
+    id?: IntFilter<"user_activity"> | number
+    user_id?: IntFilter<"user_activity"> | number
+    action?: StringFilter<"user_activity"> | string
+    resource_type?: StringNullableFilter<"user_activity"> | string | null
+    resource_id?: IntNullableFilter<"user_activity"> | number | null
+    details?: StringNullableFilter<"user_activity"> | string | null
+    ip_address?: StringNullableFilter<"user_activity"> | string | null
+    user_agent?: StringNullableFilter<"user_activity"> | string | null
+    timestamp?: DateTimeNullableFilter<"user_activity"> | Date | string | null
+    created_at?: DateTimeNullableFilter<"user_activity"> | Date | string | null
+  }
+
   export type alert_content_sentCreateWithoutAlert_preferencesInput = {
     domain: string
     content_type: string
@@ -63632,6 +65184,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityCreateNestedManyWithoutUsersInput
   }
 
   export type usersUncheckedCreateWithoutAlert_preferencesInput = {
@@ -63668,6 +65221,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyUncheckedCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesUncheckedCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityUncheckedCreateNestedManyWithoutUsersInput
   }
 
   export type usersCreateOrConnectWithoutAlert_preferencesInput = {
@@ -63748,6 +65302,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUpdateManyWithoutUsersNestedInput
   }
 
   export type usersUncheckedUpdateWithoutAlert_preferencesInput = {
@@ -63784,6 +65339,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUncheckedUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUncheckedUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUncheckedUpdateManyWithoutUsersNestedInput
   }
 
   export type usersCreateWithoutAlert_historyInput = {
@@ -63819,6 +65375,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityCreateNestedManyWithoutUsersInput
   }
 
   export type usersUncheckedCreateWithoutAlert_historyInput = {
@@ -63855,6 +65412,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyUncheckedCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesUncheckedCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityUncheckedCreateNestedManyWithoutUsersInput
   }
 
   export type usersCreateOrConnectWithoutAlert_historyInput = {
@@ -63906,6 +65464,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUpdateManyWithoutUsersNestedInput
   }
 
   export type usersUncheckedUpdateWithoutAlert_historyInput = {
@@ -63942,6 +65501,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUncheckedUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUncheckedUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUncheckedUpdateManyWithoutUsersNestedInput
   }
 
   export type usersCreateWithoutEmail_queueInput = {
@@ -63977,6 +65537,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityCreateNestedManyWithoutUsersInput
   }
 
   export type usersUncheckedCreateWithoutEmail_queueInput = {
@@ -64013,6 +65574,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyUncheckedCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesUncheckedCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityUncheckedCreateNestedManyWithoutUsersInput
   }
 
   export type usersCreateOrConnectWithoutEmail_queueInput = {
@@ -64064,6 +65626,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUpdateManyWithoutUsersNestedInput
   }
 
   export type usersUncheckedUpdateWithoutEmail_queueInput = {
@@ -64100,6 +65663,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUncheckedUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUncheckedUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUncheckedUpdateManyWithoutUsersNestedInput
   }
 
   export type alert_preferencesCreateWithoutAlert_content_sentInput = {
@@ -64273,6 +65837,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityCreateNestedManyWithoutUsersInput
   }
 
   export type usersUncheckedCreateWithoutAction_itemsInput = {
@@ -64309,6 +65874,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyUncheckedCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesUncheckedCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityUncheckedCreateNestedManyWithoutUsersInput
   }
 
   export type usersCreateOrConnectWithoutAction_itemsInput = {
@@ -64405,6 +65971,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUpdateManyWithoutUsersNestedInput
   }
 
   export type usersUncheckedUpdateWithoutAction_itemsInput = {
@@ -64441,6 +66008,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUncheckedUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUncheckedUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUncheckedUpdateManyWithoutUsersNestedInput
   }
 
   export type meetingsUpsertWithoutAction_itemsInput = {
@@ -64527,6 +66095,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityCreateNestedManyWithoutUsersInput
   }
 
   export type usersUncheckedCreateWithoutArticle_ai_sessionsInput = {
@@ -64563,6 +66132,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyUncheckedCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesUncheckedCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityUncheckedCreateNestedManyWithoutUsersInput
   }
 
   export type usersCreateOrConnectWithoutArticle_ai_sessionsInput = {
@@ -64614,6 +66184,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUpdateManyWithoutUsersNestedInput
   }
 
   export type usersUncheckedUpdateWithoutArticle_ai_sessionsInput = {
@@ -64650,6 +66221,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUncheckedUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUncheckedUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUncheckedUpdateManyWithoutUsersNestedInput
   }
 
   export type usersCreateWithoutArticle_conversationsInput = {
@@ -64685,6 +66257,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityCreateNestedManyWithoutUsersInput
   }
 
   export type usersUncheckedCreateWithoutArticle_conversationsInput = {
@@ -64721,6 +66294,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyUncheckedCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesUncheckedCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityUncheckedCreateNestedManyWithoutUsersInput
   }
 
   export type usersCreateOrConnectWithoutArticle_conversationsInput = {
@@ -64836,6 +66410,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUpdateManyWithoutUsersNestedInput
   }
 
   export type usersUncheckedUpdateWithoutArticle_conversationsInput = {
@@ -64872,6 +66447,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUncheckedUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUncheckedUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUncheckedUpdateManyWithoutUsersNestedInput
   }
 
   export type article_messagesUpsertWithWhereUniqueWithoutArticle_conversationsInput = {
@@ -65158,6 +66734,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityCreateNestedManyWithoutUsersInput
   }
 
   export type usersUncheckedCreateWithoutDecisionsInput = {
@@ -65194,6 +66771,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyUncheckedCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesUncheckedCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityUncheckedCreateNestedManyWithoutUsersInput
   }
 
   export type usersCreateOrConnectWithoutDecisionsInput = {
@@ -65290,6 +66868,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUpdateManyWithoutUsersNestedInput
   }
 
   export type usersUncheckedUpdateWithoutDecisionsInput = {
@@ -65326,6 +66905,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUncheckedUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUncheckedUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUncheckedUpdateManyWithoutUsersNestedInput
   }
 
   export type meetingsUpsertWithoutDecisionsInput = {
@@ -65553,6 +67133,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityCreateNestedManyWithoutUsersInput
   }
 
   export type usersUncheckedCreateWithoutMeeting_participantsInput = {
@@ -65589,6 +67170,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyUncheckedCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesUncheckedCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityUncheckedCreateNestedManyWithoutUsersInput
   }
 
   export type usersCreateOrConnectWithoutMeeting_participantsInput = {
@@ -65691,6 +67273,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUpdateManyWithoutUsersNestedInput
   }
 
   export type usersUncheckedUpdateWithoutMeeting_participantsInput = {
@@ -65727,6 +67310,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUncheckedUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUncheckedUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUncheckedUpdateManyWithoutUsersNestedInput
   }
 
   export type meetingsCreateWithoutMeeting_summariesInput = {
@@ -65986,6 +67570,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityCreateNestedManyWithoutUsersInput
   }
 
   export type usersUncheckedCreateWithoutMeetingsInput = {
@@ -66022,6 +67607,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyUncheckedCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesUncheckedCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityUncheckedCreateNestedManyWithoutUsersInput
   }
 
   export type usersCreateOrConnectWithoutMeetingsInput = {
@@ -66301,6 +67887,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUpdateManyWithoutUsersNestedInput
   }
 
   export type usersUncheckedUpdateWithoutMeetingsInput = {
@@ -66337,6 +67924,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUncheckedUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUncheckedUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUncheckedUpdateManyWithoutUsersNestedInput
   }
 
   export type questionsUpsertWithWhereUniqueWithoutMeetingsInput = {
@@ -66436,6 +68024,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityCreateNestedManyWithoutUsersInput
   }
 
   export type usersUncheckedCreateWithoutQuestions_questions_asked_by_user_idTousersInput = {
@@ -66472,6 +68061,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyUncheckedCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesUncheckedCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityUncheckedCreateNestedManyWithoutUsersInput
   }
 
   export type usersCreateOrConnectWithoutQuestions_questions_asked_by_user_idTousersInput = {
@@ -66557,6 +68147,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityCreateNestedManyWithoutUsersInput
   }
 
   export type usersUncheckedCreateWithoutQuestions_questions_resolved_by_user_idTousersInput = {
@@ -66593,6 +68184,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyUncheckedCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesUncheckedCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityUncheckedCreateNestedManyWithoutUsersInput
   }
 
   export type usersCreateOrConnectWithoutQuestions_questions_resolved_by_user_idTousersInput = {
@@ -66644,6 +68236,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUpdateManyWithoutUsersNestedInput
   }
 
   export type usersUncheckedUpdateWithoutQuestions_questions_asked_by_user_idTousersInput = {
@@ -66680,6 +68273,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUncheckedUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUncheckedUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUncheckedUpdateManyWithoutUsersNestedInput
   }
 
   export type meetingsUpsertWithoutQuestionsInput = {
@@ -66777,6 +68371,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUpdateManyWithoutUsersNestedInput
   }
 
   export type usersUncheckedUpdateWithoutQuestions_questions_resolved_by_user_idTousersInput = {
@@ -66813,6 +68408,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUncheckedUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUncheckedUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUncheckedUpdateManyWithoutUsersNestedInput
   }
 
   export type meetingsCreateWithoutRisksInput = {
@@ -66893,6 +68489,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityCreateNestedManyWithoutUsersInput
   }
 
   export type usersUncheckedCreateWithoutRisksInput = {
@@ -66929,6 +68526,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyUncheckedCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesUncheckedCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityUncheckedCreateNestedManyWithoutUsersInput
   }
 
   export type usersCreateOrConnectWithoutRisksInput = {
@@ -67031,6 +68629,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUpdateManyWithoutUsersNestedInput
   }
 
   export type usersUncheckedUpdateWithoutRisksInput = {
@@ -67067,6 +68666,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUncheckedUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUncheckedUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUncheckedUpdateManyWithoutUsersNestedInput
   }
 
   export type meetingsCreateWithoutSpeaker_mappingsInput = {
@@ -67147,6 +68747,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityCreateNestedManyWithoutUsersInput
   }
 
   export type usersUncheckedCreateWithoutSpeaker_mappingsInput = {
@@ -67183,6 +68784,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyUncheckedCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesUncheckedCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityUncheckedCreateNestedManyWithoutUsersInput
   }
 
   export type usersCreateOrConnectWithoutSpeaker_mappingsInput = {
@@ -67285,6 +68887,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUpdateManyWithoutUsersNestedInput
   }
 
   export type usersUncheckedUpdateWithoutSpeaker_mappingsInput = {
@@ -67321,6 +68924,7 @@ export namespace Prisma {
     transcript_segments?: transcript_segmentsUncheckedUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUncheckedUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUncheckedUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUncheckedUpdateManyWithoutUsersNestedInput
   }
 
   export type tendersCreateWithoutTender_classificationsInput = {
@@ -68503,6 +70107,7 @@ export namespace Prisma {
     speaker_mappings?: speaker_mappingsCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityCreateNestedManyWithoutUsersInput
   }
 
   export type usersUncheckedCreateWithoutTranscript_segmentsInput = {
@@ -68539,6 +70144,7 @@ export namespace Prisma {
     speaker_mappings?: speaker_mappingsUncheckedCreateNestedManyWithoutUsersInput
     translation_history?: translation_historyUncheckedCreateNestedManyWithoutUsersInput
     user_preferences?: user_preferencesUncheckedCreateNestedManyWithoutUsersInput
+    user_activity?: user_activityUncheckedCreateNestedManyWithoutUsersInput
   }
 
   export type usersCreateOrConnectWithoutTranscript_segmentsInput = {
@@ -68641,6 +70247,7 @@ export namespace Prisma {
     speaker_mappings?: speaker_mappingsUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUpdateManyWithoutUsersNestedInput
   }
 
   export type usersUncheckedUpdateWithoutTranscript_segmentsInput = {
@@ -68677,6 +70284,7 @@ export namespace Prisma {
     speaker_mappings?: speaker_mappingsUncheckedUpdateManyWithoutUsersNestedInput
     translation_history?: translation_historyUncheckedUpdateManyWithoutUsersNestedInput
     user_preferences?: user_preferencesUncheckedUpdateManyWithoutUsersNestedInput
+    user_activity?: user_activityUncheckedUpdateManyWithoutUsersNestedInput
   }
 
   export type tendersCreateWithoutUser_saved_tendersInput = {
@@ -68895,6 +70503,168 @@ export namespace Prisma {
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     tender_classifications?: tender_classificationsUncheckedUpdateOneWithoutTendersNestedInput
     tender_translations?: tender_translationsUncheckedUpdateOneWithoutTendersNestedInput
+  }
+
+  export type usersCreateWithoutUser_activityInput = {
+    username: string
+    email?: string | null
+    password?: string | null
+    password_hash: string
+    first_name?: string | null
+    last_name?: string | null
+    is_admin?: boolean | null
+    created_at?: Date | string | null
+    last_login?: Date | string | null
+    preferred_categories?: string | null
+    email_notifications?: boolean | null
+    is_active_db?: boolean
+    team?: string | null
+    action_items?: action_itemsCreateNestedManyWithoutUsersInput
+    alert_history?: alert_historyCreateNestedManyWithoutUsersInput
+    alert_preferences?: alert_preferencesCreateNestedManyWithoutUsersInput
+    article_ai_sessions?: article_ai_sessionsCreateNestedManyWithoutUsersInput
+    article_conversations?: article_conversationsCreateNestedManyWithoutUsersInput
+    decisions?: decisionsCreateNestedManyWithoutUsersInput
+    email_queue?: email_queueCreateNestedManyWithoutUsersInput
+    file_uploads?: file_uploadsCreateNestedManyWithoutUsersInput
+    likes?: likesCreateNestedManyWithoutUsersInput
+    meeting_participants?: meeting_participantsCreateNestedManyWithoutUsersInput
+    meetings?: meetingsCreateNestedManyWithoutUsersInput
+    pdf_translation_jobs?: pdf_translation_jobsCreateNestedManyWithoutUserInput
+    pdf_translations?: pdf_translationsCreateNestedManyWithoutUsersInput
+    questions_questions_asked_by_user_idTousers?: questionsCreateNestedManyWithoutUsers_questions_asked_by_user_idTousersInput
+    questions_questions_resolved_by_user_idTousers?: questionsCreateNestedManyWithoutUsers_questions_resolved_by_user_idTousersInput
+    risks?: risksCreateNestedManyWithoutUsersInput
+    speaker_mappings?: speaker_mappingsCreateNestedManyWithoutUsersInput
+    transcript_segments?: transcript_segmentsCreateNestedManyWithoutUsersInput
+    translation_history?: translation_historyCreateNestedManyWithoutUsersInput
+    user_preferences?: user_preferencesCreateNestedManyWithoutUsersInput
+  }
+
+  export type usersUncheckedCreateWithoutUser_activityInput = {
+    id?: number
+    username: string
+    email?: string | null
+    password?: string | null
+    password_hash: string
+    first_name?: string | null
+    last_name?: string | null
+    is_admin?: boolean | null
+    created_at?: Date | string | null
+    last_login?: Date | string | null
+    preferred_categories?: string | null
+    email_notifications?: boolean | null
+    is_active_db?: boolean
+    team?: string | null
+    action_items?: action_itemsUncheckedCreateNestedManyWithoutUsersInput
+    alert_history?: alert_historyUncheckedCreateNestedManyWithoutUsersInput
+    alert_preferences?: alert_preferencesUncheckedCreateNestedManyWithoutUsersInput
+    article_ai_sessions?: article_ai_sessionsUncheckedCreateNestedManyWithoutUsersInput
+    article_conversations?: article_conversationsUncheckedCreateNestedManyWithoutUsersInput
+    decisions?: decisionsUncheckedCreateNestedManyWithoutUsersInput
+    email_queue?: email_queueUncheckedCreateNestedManyWithoutUsersInput
+    file_uploads?: file_uploadsUncheckedCreateNestedManyWithoutUsersInput
+    likes?: likesUncheckedCreateNestedManyWithoutUsersInput
+    meeting_participants?: meeting_participantsUncheckedCreateNestedManyWithoutUsersInput
+    meetings?: meetingsUncheckedCreateNestedManyWithoutUsersInput
+    pdf_translation_jobs?: pdf_translation_jobsUncheckedCreateNestedManyWithoutUserInput
+    pdf_translations?: pdf_translationsUncheckedCreateNestedManyWithoutUsersInput
+    questions_questions_asked_by_user_idTousers?: questionsUncheckedCreateNestedManyWithoutUsers_questions_asked_by_user_idTousersInput
+    questions_questions_resolved_by_user_idTousers?: questionsUncheckedCreateNestedManyWithoutUsers_questions_resolved_by_user_idTousersInput
+    risks?: risksUncheckedCreateNestedManyWithoutUsersInput
+    speaker_mappings?: speaker_mappingsUncheckedCreateNestedManyWithoutUsersInput
+    transcript_segments?: transcript_segmentsUncheckedCreateNestedManyWithoutUsersInput
+    translation_history?: translation_historyUncheckedCreateNestedManyWithoutUsersInput
+    user_preferences?: user_preferencesUncheckedCreateNestedManyWithoutUsersInput
+  }
+
+  export type usersCreateOrConnectWithoutUser_activityInput = {
+    where: usersWhereUniqueInput
+    create: XOR<usersCreateWithoutUser_activityInput, usersUncheckedCreateWithoutUser_activityInput>
+  }
+
+  export type usersUpsertWithoutUser_activityInput = {
+    update: XOR<usersUpdateWithoutUser_activityInput, usersUncheckedUpdateWithoutUser_activityInput>
+    create: XOR<usersCreateWithoutUser_activityInput, usersUncheckedCreateWithoutUser_activityInput>
+    where?: usersWhereInput
+  }
+
+  export type usersUpdateToOneWithWhereWithoutUser_activityInput = {
+    where?: usersWhereInput
+    data: XOR<usersUpdateWithoutUser_activityInput, usersUncheckedUpdateWithoutUser_activityInput>
+  }
+
+  export type usersUpdateWithoutUser_activityInput = {
+    username?: StringFieldUpdateOperationsInput | string
+    email?: NullableStringFieldUpdateOperationsInput | string | null
+    password?: NullableStringFieldUpdateOperationsInput | string | null
+    password_hash?: StringFieldUpdateOperationsInput | string
+    first_name?: NullableStringFieldUpdateOperationsInput | string | null
+    last_name?: NullableStringFieldUpdateOperationsInput | string | null
+    is_admin?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    last_login?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    preferred_categories?: NullableStringFieldUpdateOperationsInput | string | null
+    email_notifications?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    is_active_db?: BoolFieldUpdateOperationsInput | boolean
+    team?: NullableStringFieldUpdateOperationsInput | string | null
+    action_items?: action_itemsUpdateManyWithoutUsersNestedInput
+    alert_history?: alert_historyUpdateManyWithoutUsersNestedInput
+    alert_preferences?: alert_preferencesUpdateManyWithoutUsersNestedInput
+    article_ai_sessions?: article_ai_sessionsUpdateManyWithoutUsersNestedInput
+    article_conversations?: article_conversationsUpdateManyWithoutUsersNestedInput
+    decisions?: decisionsUpdateManyWithoutUsersNestedInput
+    email_queue?: email_queueUpdateManyWithoutUsersNestedInput
+    file_uploads?: file_uploadsUpdateManyWithoutUsersNestedInput
+    likes?: likesUpdateManyWithoutUsersNestedInput
+    meeting_participants?: meeting_participantsUpdateManyWithoutUsersNestedInput
+    meetings?: meetingsUpdateManyWithoutUsersNestedInput
+    pdf_translation_jobs?: pdf_translation_jobsUpdateManyWithoutUserNestedInput
+    pdf_translations?: pdf_translationsUpdateManyWithoutUsersNestedInput
+    questions_questions_asked_by_user_idTousers?: questionsUpdateManyWithoutUsers_questions_asked_by_user_idTousersNestedInput
+    questions_questions_resolved_by_user_idTousers?: questionsUpdateManyWithoutUsers_questions_resolved_by_user_idTousersNestedInput
+    risks?: risksUpdateManyWithoutUsersNestedInput
+    speaker_mappings?: speaker_mappingsUpdateManyWithoutUsersNestedInput
+    transcript_segments?: transcript_segmentsUpdateManyWithoutUsersNestedInput
+    translation_history?: translation_historyUpdateManyWithoutUsersNestedInput
+    user_preferences?: user_preferencesUpdateManyWithoutUsersNestedInput
+  }
+
+  export type usersUncheckedUpdateWithoutUser_activityInput = {
+    id?: IntFieldUpdateOperationsInput | number
+    username?: StringFieldUpdateOperationsInput | string
+    email?: NullableStringFieldUpdateOperationsInput | string | null
+    password?: NullableStringFieldUpdateOperationsInput | string | null
+    password_hash?: StringFieldUpdateOperationsInput | string
+    first_name?: NullableStringFieldUpdateOperationsInput | string | null
+    last_name?: NullableStringFieldUpdateOperationsInput | string | null
+    is_admin?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    last_login?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    preferred_categories?: NullableStringFieldUpdateOperationsInput | string | null
+    email_notifications?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    is_active_db?: BoolFieldUpdateOperationsInput | boolean
+    team?: NullableStringFieldUpdateOperationsInput | string | null
+    action_items?: action_itemsUncheckedUpdateManyWithoutUsersNestedInput
+    alert_history?: alert_historyUncheckedUpdateManyWithoutUsersNestedInput
+    alert_preferences?: alert_preferencesUncheckedUpdateManyWithoutUsersNestedInput
+    article_ai_sessions?: article_ai_sessionsUncheckedUpdateManyWithoutUsersNestedInput
+    article_conversations?: article_conversationsUncheckedUpdateManyWithoutUsersNestedInput
+    decisions?: decisionsUncheckedUpdateManyWithoutUsersNestedInput
+    email_queue?: email_queueUncheckedUpdateManyWithoutUsersNestedInput
+    file_uploads?: file_uploadsUncheckedUpdateManyWithoutUsersNestedInput
+    likes?: likesUncheckedUpdateManyWithoutUsersNestedInput
+    meeting_participants?: meeting_participantsUncheckedUpdateManyWithoutUsersNestedInput
+    meetings?: meetingsUncheckedUpdateManyWithoutUsersNestedInput
+    pdf_translation_jobs?: pdf_translation_jobsUncheckedUpdateManyWithoutUserNestedInput
+    pdf_translations?: pdf_translationsUncheckedUpdateManyWithoutUsersNestedInput
+    questions_questions_asked_by_user_idTousers?: questionsUncheckedUpdateManyWithoutUsers_questions_asked_by_user_idTousersNestedInput
+    questions_questions_resolved_by_user_idTousers?: questionsUncheckedUpdateManyWithoutUsers_questions_resolved_by_user_idTousersNestedInput
+    risks?: risksUncheckedUpdateManyWithoutUsersNestedInput
+    speaker_mappings?: speaker_mappingsUncheckedUpdateManyWithoutUsersNestedInput
+    transcript_segments?: transcript_segmentsUncheckedUpdateManyWithoutUsersNestedInput
+    translation_history?: translation_historyUncheckedUpdateManyWithoutUsersNestedInput
+    user_preferences?: user_preferencesUncheckedUpdateManyWithoutUsersNestedInput
   }
 
   export type translation_pagesCreateManyPdf_translationsInput = {
@@ -69223,6 +70993,18 @@ export namespace Prisma {
     id?: number
     preferred_sources?: user_preferencesCreatepreferred_sourcesInput | string[]
     preferred_topics?: user_preferencesCreatepreferred_topicsInput | string[]
+  }
+
+  export type user_activityCreateManyUsersInput = {
+    id?: number
+    action: string
+    resource_type?: string | null
+    resource_id?: number | null
+    details?: string | null
+    ip_address?: string | null
+    user_agent?: string | null
+    timestamp?: Date | string | null
+    created_at?: Date | string | null
   }
 
   export type action_itemsUpdateWithoutUsersInput = {
@@ -70059,6 +71841,41 @@ export namespace Prisma {
     id?: IntFieldUpdateOperationsInput | number
     preferred_sources?: user_preferencesUpdatepreferred_sourcesInput | string[]
     preferred_topics?: user_preferencesUpdatepreferred_topicsInput | string[]
+  }
+
+  export type user_activityUpdateWithoutUsersInput = {
+    action?: StringFieldUpdateOperationsInput | string
+    resource_type?: NullableStringFieldUpdateOperationsInput | string | null
+    resource_id?: NullableIntFieldUpdateOperationsInput | number | null
+    details?: NullableStringFieldUpdateOperationsInput | string | null
+    ip_address?: NullableStringFieldUpdateOperationsInput | string | null
+    user_agent?: NullableStringFieldUpdateOperationsInput | string | null
+    timestamp?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  }
+
+  export type user_activityUncheckedUpdateWithoutUsersInput = {
+    id?: IntFieldUpdateOperationsInput | number
+    action?: StringFieldUpdateOperationsInput | string
+    resource_type?: NullableStringFieldUpdateOperationsInput | string | null
+    resource_id?: NullableIntFieldUpdateOperationsInput | number | null
+    details?: NullableStringFieldUpdateOperationsInput | string | null
+    ip_address?: NullableStringFieldUpdateOperationsInput | string | null
+    user_agent?: NullableStringFieldUpdateOperationsInput | string | null
+    timestamp?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  }
+
+  export type user_activityUncheckedUpdateManyWithoutUsersInput = {
+    id?: IntFieldUpdateOperationsInput | number
+    action?: StringFieldUpdateOperationsInput | string
+    resource_type?: NullableStringFieldUpdateOperationsInput | string | null
+    resource_id?: NullableIntFieldUpdateOperationsInput | number | null
+    details?: NullableStringFieldUpdateOperationsInput | string | null
+    ip_address?: NullableStringFieldUpdateOperationsInput | string | null
+    user_agent?: NullableStringFieldUpdateOperationsInput | string | null
+    timestamp?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type alert_content_sentCreateManyAlert_preferencesInput = {
@@ -70946,6 +72763,10 @@ export namespace Prisma {
      * @deprecated Use weekly_digestDefaultArgs instead
      */
     export type weekly_digestArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = weekly_digestDefaultArgs<ExtArgs>
+    /**
+     * @deprecated Use user_activityDefaultArgs instead
+     */
+    export type user_activityArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = user_activityDefaultArgs<ExtArgs>
 
   /**
    * Batch Payload for updateMany & deleteMany & createMany

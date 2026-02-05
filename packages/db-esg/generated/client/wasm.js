@@ -705,6 +705,19 @@ exports.Prisma.Weekly_digestScalarFieldEnum = {
   created_at: 'created_at'
 };
 
+exports.Prisma.User_activityScalarFieldEnum = {
+  id: 'id',
+  user_id: 'user_id',
+  action: 'action',
+  resource_type: 'resource_type',
+  resource_id: 'resource_id',
+  details: 'details',
+  ip_address: 'ip_address',
+  user_agent: 'user_agent',
+  timestamp: 'timestamp',
+  created_at: 'created_at'
+};
+
 exports.Prisma.SortOrder = {
   asc: 'asc',
   desc: 'desc'
@@ -775,7 +788,8 @@ exports.Prisma.ModelName = {
   transcript_segments: 'transcript_segments',
   user_saved_tenders: 'user_saved_tenders',
   user_tender_alerts: 'user_tender_alerts',
-  weekly_digest: 'weekly_digest'
+  weekly_digest: 'weekly_digest',
+  user_activity: 'user_activity'
 };
 
 /**
