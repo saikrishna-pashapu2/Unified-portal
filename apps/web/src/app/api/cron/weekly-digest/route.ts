@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { queueWeeklyDigests } from "@/lib/alerts/digest";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 /**
  * Cron endpoint to queue weekly digests
  * Triggered: Every Monday at 9:00 AM Dubai time

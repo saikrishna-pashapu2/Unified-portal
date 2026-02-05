@@ -5,6 +5,7 @@ import { esgPrisma } from '@esgcredit/db-esg';
 import { ensureUserId } from '@/lib/auth-db';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
   try {

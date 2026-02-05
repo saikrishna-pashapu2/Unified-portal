@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { cleanupEmailQueue } from "@/lib/alerts/email-queue";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 /**
  * Cron endpoint to cleanup old emails from queue
  * Triggered: Daily at 2:00 AM Dubai time

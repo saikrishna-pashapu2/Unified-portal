@@ -3,6 +3,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/nextauth-options";
 import { esgPrisma } from "@esgcredit/db-esg";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 // GET /api/admin/stats - Get dashboard statistics
 export async function GET(req: NextRequest) {
   try {

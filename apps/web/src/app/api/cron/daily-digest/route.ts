@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { queueDailyDigests } from "@/lib/alerts/digest";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 /**
  * Cron endpoint to queue daily digests
  * Triggered: Every hour (checks which users need digests at current hour)

@@ -6,6 +6,8 @@ import { processEmailQueue } from "@/lib/alerts/email-queue";
  * Triggered: Every 5 minutes
  * Security: Requires CRON_SECRET in Authorization header
  */
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   try {
     // Verify cron secret for security
