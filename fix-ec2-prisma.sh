@@ -4,8 +4,8 @@
 
 echo "🔧 Fixing Prisma client on EC2..."
 
-# Navigate to project directory
-cd /home/ubuntu/Portal_v3 || cd ~/Portal_v3 || exit 1
+# Navigate to project directory (uses symlink)
+cd /var/www/current || exit 1
 
 echo "📦 Installing dependencies..."
 pnpm install
