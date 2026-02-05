@@ -460,7 +460,7 @@ export default function UserDetailPage() {
                                                 </a>
                                             )}
                                         </td>
-                                        <td className="px-6 py-4 text-sm text-gray-600 max-w-md truncate" title={act.details}>
+                                                                                <td className="px-6 py-4 text-sm text-gray-600 max-w-md truncate" title={act.details || undefined}>
                                             {act.details || '-'}
                                         </td>
                                         <td className="px-6 py-4 text-sm text-gray-500">
