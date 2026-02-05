@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 interface User {
   id: number;
@@ -303,13 +304,16 @@ export default function UserManagementPage() {
                               .toUpperCase()}
                           </div>
                           <div>
-                            <p className="text-sm font-medium text-gray-900">
+                            <Link
+                              href={`/admin/users/${user.id}`}
+                              className="text-sm font-medium text-gray-900 hover:text-blue-700"
+                            >
                               {user.first_name || user.last_name
                                 ? `${user.first_name || ""} ${
                                     user.last_name || ""
                                   }`.trim()
                                 : "—"}
-                            </p>
+                            </Link>
                           </div>
                         </div>
                       </td>
@@ -353,6 +357,12 @@ export default function UserManagementPage() {
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center justify-end gap-2">
+                          <Link
+                            href={`/admin/users/${user.id}`}
+                            className="px-3 py-1 text-sm text-gray-700 hover:bg-gray-50 rounded"
+                          >
+                            View
+                          </Link>
                           <button
                             onClick={() => handleEditUser(user)}
                             className="px-3 py-1 text-sm text-blue-700 hover:bg-blue-50 rounded"

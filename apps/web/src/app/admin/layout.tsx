@@ -21,7 +21,6 @@ export default function AdminLayout({
     { name: "AI Assistant Stats", href: "/admin/ai-assistant", icon: "🤖" },
     { name: "Alert Management", href: "/admin/alerts", icon: "🔔" },
     { name: "Email Queue", href: "/admin/email-queue", icon: "📧" },
-    { name: "Content Moderation", href: "/admin/content", icon: "🛡️" },
     { name: "Analytics", href: "/admin/analytics", icon: "📈" },
     { name: "System Health", href: "/admin/health", icon: "💚" },
     { name: "Test Alerts", href: "/admin/test-alerts", icon: "🧪" },

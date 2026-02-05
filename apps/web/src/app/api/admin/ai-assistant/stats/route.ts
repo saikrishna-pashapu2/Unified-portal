@@ -134,7 +134,7 @@ export async function GET(req: NextRequest) {
     const tokenStatsQuery = domain !== 'all'
       ? esgPrisma.$queryRaw<Array<{ total_tokens: bigint; total_cost: number }>>`
           SELECT 
-            COALESCE(SUM(total_tokens_used), 0)::bigint as total_tokens,
+            COALESCE(SUM(total_tokens_used), 0)::bigint + COALESCE(SUM(summary_tokens), 0)::bigint as total_tokens,
             COALESCE(SUM(total_cost_usd), 0) as total_cost
           FROM article_conversations
           WHERE created_at >= ${startDate}
@@ -142,7 +142,7 @@ export async function GET(req: NextRequest) {
         `
       : esgPrisma.$queryRaw<Array<{ total_tokens: bigint; total_cost: number }>>`
           SELECT 
-            COALESCE(SUM(total_tokens_used), 0)::bigint as total_tokens,
+            COALESCE(SUM(total_tokens_used), 0)::bigint + COALESCE(SUM(summary_tokens), 0)::bigint as total_tokens,
             COALESCE(SUM(total_cost_usd), 0) as total_cost
           FROM article_conversations
           WHERE created_at >= ${startDate}
@@ -165,7 +165,7 @@ export async function GET(req: NextRequest) {
         ac.article_source as domain,
         COUNT(DISTINCT ac.id)::bigint as sessions,
         COUNT(am.id)::bigint as messages,
-        COALESCE(SUM(ac.total_tokens_used), 0)::bigint as tokens,
+        COALESCE(SUM(ac.total_tokens_used), 0)::bigint + COALESCE(SUM(ac.summary_tokens), 0)::bigint as tokens,
         COALESCE(SUM(ac.total_cost_usd), 0) as cost
       FROM article_conversations ac
       LEFT JOIN article_messages am ON am.conversation_id = ac.id
@@ -192,7 +192,9 @@ export async function GET(req: NextRequest) {
           SELECT 
             DATE(ac.created_at) as date,
             COUNT(DISTINCT ac.id)::bigint as sessions,
-            COUNT(am.id)::bigint as messages
+            COUNT(am.id)::bigint as messages,
+            COALESCE(SUM(ac.total_tokens_used), 0)::bigint + COALESCE(SUM(ac.summary_tokens), 0)::bigint as tokens,
+            COALESCE(SUM(ac.total_cost_usd), 0) as cost
           FROM article_conversations ac
           LEFT JOIN article_messages am ON am.conversation_id = ac.id
           WHERE ac.created_at >= ${startDate}
@@ -205,11 +207,15 @@ export async function GET(req: NextRequest) {
           date: Date;
           sessions: bigint;
           messages: bigint;
+          tokens: bigint;
+          cost: number;
         }>>`
           SELECT 
             DATE(ac.created_at) as date,
             COUNT(DISTINCT ac.id)::bigint as sessions,
-            COUNT(am.id)::bigint as messages
+            COUNT(am.id)::bigint as messages,
+            COALESCE(SUM(ac.total_tokens_used), 0)::bigint + COALESCE(SUM(ac.summary_tokens), 0)::bigint as tokens,
+            COALESCE(SUM(ac.total_cost_usd), 0) as cost
           FROM article_conversations ac
           LEFT JOIN article_messages am ON am.conversation_id = ac.id
           WHERE ac.created_at >= ${startDate}
@@ -239,7 +245,7 @@ export async function GET(req: NextRequest) {
             ac.user_id,
             COUNT(DISTINCT ac.id)::bigint as sessions,
             COUNT(am.id)::bigint as messages,
-            COALESCE(SUM(ac.total_tokens_used), 0)::bigint as tokens,
+            COALESCE(SUM(ac.total_tokens_used), 0)::bigint + COALESCE(SUM(ac.summary_tokens), 0)::bigint as tokens,
             COALESCE(SUM(ac.total_cost_usd), 0) as cost
           FROM article_conversations ac
           LEFT JOIN article_messages am ON am.conversation_id = ac.id
@@ -261,7 +267,7 @@ export async function GET(req: NextRequest) {
             ac.user_id,
             COUNT(DISTINCT ac.id)::bigint as sessions,
             COUNT(am.id)::bigint as messages,
-            COALESCE(SUM(ac.total_tokens_used), 0)::bigint as tokens,
+            COALESCE(SUM(ac.total_tokens_used), 0)::bigint + COALESCE(SUM(ac.summary_tokens), 0)::bigint as tokens,
             COALESCE(SUM(ac.total_cost_usd), 0) as cost
           FROM article_conversations ac
           LEFT JOIN article_messages am ON am.conversation_id = ac.id
@@ -298,12 +304,16 @@ export async function GET(req: NextRequest) {
           article_source: string;
           sessions: bigint;
           messages: bigint;
+          tokens: bigint;
+          cost: number;
         }>>`
           SELECT 
             ac.article_id,
             ac.article_source,
             COUNT(DISTINCT ac.id)::bigint as sessions,
-            COUNT(am.id)::bigint as messages
+            COUNT(am.id)::bigint as messages,
+            COALESCE(SUM(ac.total_tokens_used), 0)::bigint + COALESCE(SUM(ac.summary_tokens), 0)::bigint as tokens,
+            COALESCE(SUM(ac.total_cost_usd), 0) as cost
           FROM article_conversations ac
           LEFT JOIN article_messages am ON am.conversation_id = ac.id
           WHERE ac.created_at >= ${startDate}
@@ -317,12 +327,16 @@ export async function GET(req: NextRequest) {
           article_source: string;
           sessions: bigint;
           messages: bigint;
+          tokens: bigint;
+          cost: number;
         }>>`
           SELECT 
             ac.article_id,
             ac.article_source,
             COUNT(DISTINCT ac.id)::bigint as sessions,
-            COUNT(am.id)::bigint as messages
+            COUNT(am.id)::bigint as messages,
+            COALESCE(SUM(ac.total_tokens_used), 0)::bigint + COALESCE(SUM(ac.summary_tokens), 0)::bigint as tokens,
+            COALESCE(SUM(ac.total_cost_usd), 0) as cost
           FROM article_conversations ac
           LEFT JOIN article_messages am ON am.conversation_id = ac.id
           WHERE ac.created_at >= ${startDate}
@@ -336,6 +350,8 @@ export async function GET(req: NextRequest) {
       article_source: r.article_source,
       sessions: Number(r.sessions),
       messages: Number(r.messages),
+      tokens: Number((r as any).tokens || 0),
+      cost: Number((r as any).cost || 0),
     })));
 
     // Recent activity
@@ -347,6 +363,9 @@ export async function GET(req: NextRequest) {
           article_id: number;
           article_source: string;
           total_messages: number;
+          total_tokens_used: number;
+          summary_tokens: number;
+          total_cost_usd: number;
           created_at: Date;
           last_message_at: Date | null;
         }>>`
@@ -357,6 +376,9 @@ export async function GET(req: NextRequest) {
             article_id,
             article_source,
             total_messages,
+            total_tokens_used,
+            summary_tokens,
+            total_cost_usd,
             created_at,
             last_message_at
           FROM article_conversations
@@ -372,6 +394,9 @@ export async function GET(req: NextRequest) {
           article_id: number;
           article_source: string;
           total_messages: number;
+          total_tokens_used: number;
+          summary_tokens: number;
+          total_cost_usd: number;
           created_at: Date;
           last_message_at: Date | null;
         }>>`
@@ -382,6 +407,9 @@ export async function GET(req: NextRequest) {
             article_id,
             article_source,
             total_messages,
+            total_tokens_used,
+            summary_tokens,
+            total_cost_usd,
             created_at,
             last_message_at
           FROM article_conversations
@@ -414,8 +442,8 @@ export async function GET(req: NextRequest) {
           userEmail: user?.email || 'N/A',
           createdAt: activity.created_at.toISOString(),
           messageCount: activity.total_messages,
-          tokens: 0, // Not tracked per conversation yet
-          cost: 0, // Not tracked per conversation yet
+          tokens: Number(activity.total_tokens_used || 0) + Number(activity.summary_tokens || 0),
+          cost: Number(activity.total_cost_usd || 0),
         };
       })
     );
@@ -451,8 +479,8 @@ export async function GET(req: NextRequest) {
       dailyTrend: dailyTrend.map(day => ({
         date: day.date.toISOString().split('T')[0],
         sessions: day.sessions,
-        tokens: 0, // Not tracked in daily aggregation yet
-        cost: 0, // Not tracked in daily aggregation yet
+        tokens: Number((day as any).tokens || 0),
+        cost: Number((day as any).cost || 0),
         messages: day.messages,
       })),
       topUsers: topUsersWithDetails.map(user => ({
@@ -461,13 +489,14 @@ export async function GET(req: NextRequest) {
         email: user.email || 'N/A',
         sessions: user.sessions,
         tokens: user.tokens,
-        cost: 0, // Cost not tracked yet
+        cost: user.cost,
       })),
       topArticles: topArticles.map(article => ({
         articleId: article.article_id,
         domain: article.article_source,
         sessions: article.sessions,
-        tokens: 0, // Not tracked per article yet
+        tokens: article.tokens,
+        cost: article.cost,
         messages: article.messages,
       })),
       recentActivity: recentActivityWithUsers,

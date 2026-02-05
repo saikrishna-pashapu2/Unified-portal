@@ -1,19 +1,86 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+type TabId = "overview" | "teams";
+
+interface UserEngagementData {
+  overview: {
+    totalUsers: number;
+    activeUsers: number;
+    totalLikes: number;
+    totalActivity: number;
+    inactiveUsers: number;
+  };
+  usersByTeam: Array<{ team: string; count: number }>
+  newUsers: Array<{ date: string; count: number }>;
+  likesOverTime: Array<{ date: string; count: number }>;
+  activityOverTime: Array<{ date: string; count: number }>;
+  likesByType: Array<{ content_type: string; count: number }>;
+  topPages: Array<{ page: string; count: number }>;
+  topSources: Array<{ source: string; like_count: number; domain: "esg" | "credit" }>;
+  topLikers: Array<{ id: number; name: string; email: string; team: string | null; like_count: number }>;
+  topActiveUsers: Array<{ id: number; name: string; email: string; team: string | null; activity_count: number }>;
+}
+
+interface TeamsAnalyticsData {
+  teamEngagement: Array<{
+    team: string;
+    user_count: number;
+    like_count: number;
+    likes_per_user: number;
+    activity_count: number;
+    activity_per_user: number;
+    engagement_score: number;
+  }>;
+  usersByTeam: Array<{ team: string; user_count: number }>;
+  likesByTeam: Array<{ team: string; like_count: number }>;
+  activityByTeam: Array<{ team: string; activity_count: number }>;
+}
 
 interface AnalyticsData {
-  userEngagement?: any;
-  content?: any;
-  alerts?: any;
-  teams?: any;
+  userEngagement?: UserEngagementData;
+  teams?: TeamsAnalyticsData;
+}
+
+const formatNumber = (value?: number) =>
+  Number.isFinite(value) ? Number(value).toLocaleString() : "0";
+
+const formatDate = (value: string) => new Date(value).toLocaleDateString();
+
+function StatCard({
+  title,
+  value,
+  subtitle,
+  valueClassName,
+}: {
+  title: string;
+  value: string | number;
+  subtitle?: string;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="bg-white p-4 rounded-lg border shadow-sm">
+      <div className="text-sm text-gray-600">{title}</div>
+      <div className={`text-2xl font-bold mt-1 ${valueClassName || ""}`}>{value}</div>
+      {subtitle && <div className="text-xs text-gray-500 mt-1">{subtitle}</div>}
+    </div>
+  );
 }
 
 export default function AnalyticsDashboardPage() {
   const [data, setData] = useState<AnalyticsData>({});
   const [loading, setLoading] = useState(true);
   const [days, setDays] = useState("30");
-  const [activeTab, setActiveTab] = useState<"overview" | "users" | "content" | "alerts" | "teams">("overview");
+  const [activeTab, setActiveTab] = useState<TabId>("overview");
+
+  const tabs = useMemo(
+    () => [
+      { id: "overview", label: "Overview" },
+      { id: "teams", label: "Teams" },
+    ],
+    []
+  );
 
   useEffect(() => {
     fetchAnalytics();
@@ -23,14 +90,12 @@ export default function AnalyticsDashboardPage() {
   const fetchAnalytics = async () => {
     setLoading(true);
     try {
-      const [userEngagement, content, alerts, teams] = await Promise.all([
+      const [userEngagement, teams] = await Promise.all([
         fetch(`/api/admin/analytics/user-engagement?days=${days}`).then((r) => r.json()),
-        fetch(`/api/admin/analytics/content?days=${days}`).then((r) => r.json()),
-        fetch(`/api/admin/analytics/alerts?days=${days}`).then((r) => r.json()),
         fetch(`/api/admin/analytics/teams?days=${days}`).then((r) => r.json()),
       ]);
 
-      setData({ userEngagement, content, alerts, teams });
+      setData({ userEngagement, teams });
     } catch (error) {
       console.error("Error fetching analytics:", error);
     } finally {
@@ -39,80 +104,42 @@ export default function AnalyticsDashboardPage() {
   };
 
   const renderOverview = () => {
-    if (!data.userEngagement || !data.content || !data.alerts) return null;
+    if (!data.userEngagement) return null;
 
     return (
       <div className="space-y-6">
         {/* Overview Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-white p-4 rounded-lg border shadow-sm">
-            <div className="text-sm text-gray-600">Total Users</div>
-            <div className="text-2xl font-bold mt-1">{data.userEngagement.overview.totalUsers.toLocaleString()}</div>
-            <div className="text-xs text-gray-500 mt-1">
-              {data.userEngagement.overview.activeUsers} active in last {days} days
-            </div>
-          </div>
-          <div className="bg-white p-4 rounded-lg border shadow-sm">
-            <div className="text-sm text-gray-600">Total Content</div>
-            <div className="text-2xl font-bold mt-1">{data.content.overview.totalArticles.toLocaleString()}</div>
-            <div className="text-xs text-gray-500 mt-1">
-              {data.content.overview.recentArticles} published in last {days} days
-            </div>
-          </div>
-          <div className="bg-white p-4 rounded-lg border shadow-sm">
-            <div className="text-sm text-gray-600">Total Alerts</div>
-            <div className="text-2xl font-bold mt-1">{data.alerts.overview.totalAlerts.toLocaleString()}</div>
-            <div className="text-xs text-gray-500 mt-1">
-              {data.alerts.overview.activeAlerts} active
-            </div>
-          </div>
-          <div className="bg-white p-4 rounded-lg border shadow-sm">
-            <div className="text-sm text-gray-600">Content Sent</div>
-            <div className="text-2xl font-bold mt-1">{data.alerts.overview.totalContentSent.toLocaleString()}</div>
-            <div className="text-xs text-gray-500 mt-1">
-              {data.alerts.overview.recentContentSent} in last {days} days
-            </div>
-          </div>
+          <StatCard
+            title="Total Users"
+            value={formatNumber(data.userEngagement.overview.totalUsers)}
+            subtitle={`${data.userEngagement.overview.activeUsers} active in last ${days} days`}
+          />
+          <StatCard
+            title="Total Likes"
+            value={formatNumber(data.userEngagement.overview.totalLikes)}
+            subtitle="ESG + Credit"
+          />
+          <StatCard
+            title="Total Activity"
+            value={formatNumber(data.userEngagement.overview.totalActivity)}
+            subtitle={`Last ${days} days`}
+          />
+          <StatCard
+            title="Inactive Users"
+            value={formatNumber(data.userEngagement.overview.inactiveUsers)}
+            subtitle={`No likes/activity in ${days} days`}
+          />
         </div>
 
-        {/* User Engagement & Alerts by Type */}
+        {/* Engagement Over Time */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-white p-6 rounded-lg border shadow-sm">
-            <h3 className="text-lg font-bold mb-4">Users by Team</h3>
+            <h3 className="text-lg font-bold mb-4">Likes Over Time</h3>
             <div className="space-y-2">
-              {data.userEngagement.usersByTeam.slice(0, 5).map((item: any) => (
-                <div key={item.team} className="flex justify-between items-center">
-                  <span className="text-sm">{item.team}</span>
-                  <span className="text-sm font-semibold">{item.count}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-lg border shadow-sm">
-            <h3 className="text-lg font-bold mb-4">Alerts by Type</h3>
-            <div className="space-y-2">
-              {data.alerts.alertsByType.map((item: any) => (
-                <div key={item.alert_type} className="flex justify-between items-center">
-                  <span className="text-sm capitalize">{item.alert_type}</span>
-                  <span className="text-sm">
-                    <span className="font-semibold text-green-600">{item.active_count}</span>
-                    <span className="text-gray-400"> / {item.count}</span>
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Recent Activity */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white p-6 rounded-lg border shadow-sm">
-            <h3 className="text-lg font-bold mb-4">New Users (Last {days} Days)</h3>
-            <div className="space-y-1 max-h-64 overflow-y-auto">
-              {data.userEngagement.newUsers.slice(0, 10).map((item: any) => (
+              {data.userEngagement.likesOverTime.slice(0, 10).map((item) => (
                 <div key={item.date} className="flex justify-between items-center text-sm">
-                  <span className="text-gray-600">{new Date(item.date).toLocaleDateString()}</span>
+                  <span className="text-gray-600">{formatDate(item.date)}</span>
                   <span className="font-semibold">{item.count}</span>
                 </div>
               ))}
@@ -120,49 +147,21 @@ export default function AnalyticsDashboardPage() {
           </div>
 
           <div className="bg-white p-6 rounded-lg border shadow-sm">
-            <h3 className="text-lg font-bold mb-4">Content Sent (Last {days} Days)</h3>
-            <div className="space-y-1 max-h-64 overflow-y-auto">
-              {data.alerts.contentSentOverTime.slice(0, 10).map((item: any) => (
+            <h3 className="text-lg font-bold mb-4">Activity Over Time</h3>
+            <div className="space-y-2">
+              {data.userEngagement.activityOverTime.slice(0, 10).map((item) => (
                 <div key={item.date} className="flex justify-between items-center text-sm">
-                  <span className="text-gray-600">{new Date(item.date).toLocaleDateString()}</span>
+                  <span className="text-gray-600">{formatDate(item.date)}</span>
                   <span className="font-semibold">{item.count}</span>
                 </div>
               ))}
             </div>
           </div>
         </div>
-      </div>
-    );
-  };
 
-  const renderUsers = () => {
-    if (!data.userEngagement) return null;
-
-    return (
-      <div className="space-y-6">
-        {/* User Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-white p-4 rounded-lg border shadow-sm">
-            <div className="text-sm text-gray-600">Total Users</div>
-            <div className="text-2xl font-bold mt-1">{data.userEngagement.overview.totalUsers.toLocaleString()}</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg border shadow-sm">
-            <div className="text-sm text-gray-600">Active Users</div>
-            <div className="text-2xl font-bold mt-1 text-green-600">{data.userEngagement.overview.activeUsers.toLocaleString()}</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg border shadow-sm">
-            <div className="text-sm text-gray-600">Users with Alerts</div>
-            <div className="text-2xl font-bold mt-1 text-blue-600">{data.userEngagement.overview.usersWithAlerts.toLocaleString()}</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg border shadow-sm">
-            <div className="text-sm text-gray-600">Total Likes</div>
-            <div className="text-2xl font-bold mt-1 text-purple-600">{data.userEngagement.overview.totalLikes.toLocaleString()}</div>
-          </div>
-        </div>
-
-        {/* Top Likers */}
-        <div className="bg-white rounded-lg border shadow-sm">
-          <div className="p-6">
+        {/* Top Likers & Top Active Users */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-white p-6 rounded-lg border shadow-sm">
             <h3 className="text-lg font-bold mb-4">Top Likers</h3>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
@@ -175,7 +174,7 @@ export default function AnalyticsDashboardPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {data.userEngagement.topLikers.map((user: any) => (
+                  {data.userEngagement.topLikers.map((user) => (
                     <tr key={user.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm font-medium">{user.name}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{user.email}</td>
@@ -187,172 +186,26 @@ export default function AnalyticsDashboardPage() {
               </table>
             </div>
           </div>
-        </div>
-
-        {/* Users by Team */}
-        <div className="bg-white p-6 rounded-lg border shadow-sm">
-          <h3 className="text-lg font-bold mb-4">Users by Team</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {data.userEngagement.usersByTeam.map((item: any) => (
-              <div key={item.team} className="p-3 bg-gray-50 rounded-lg">
-                <div className="text-xs text-gray-600">{item.team}</div>
-                <div className="text-xl font-bold mt-1">{item.count}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const renderContent = () => {
-    if (!data.content) return null;
-
-    return (
-      <div className="space-y-6">
-        {/* Content Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white p-4 rounded-lg border shadow-sm">
-            <div className="text-sm text-gray-600">Total Articles</div>
-            <div className="text-2xl font-bold mt-1">{data.content.overview.totalArticles.toLocaleString()}</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg border shadow-sm">
-            <div className="text-sm text-gray-600">Total Events</div>
-            <div className="text-2xl font-bold mt-1">{data.content.overview.totalEvents.toLocaleString()}</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg border shadow-sm">
-            <div className="text-sm text-gray-600">Recent Articles</div>
-            <div className="text-2xl font-bold mt-1 text-blue-600">{data.content.overview.recentArticles.toLocaleString()}</div>
-            <div className="text-xs text-gray-500 mt-1">Last {days} days</div>
-          </div>
-        </div>
-
-        {/* Top Articles */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white rounded-lg border shadow-sm">
-            <div className="p-6">
-              <h3 className="text-lg font-bold mb-4">Top ESG Articles</h3>
-              <div className="space-y-3">
-                {data.content.topArticles.esg.map((article: any) => (
-                  <div key={article.id} className="border-b pb-3">
-                    <div className="text-sm font-medium truncate">{article.title}</div>
-                    <div className="flex justify-between items-center mt-1">
-                      <span className="text-xs text-gray-500">{article.source}</span>
-                      <span className="text-xs font-semibold text-purple-600">{article.like_count} likes</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg border shadow-sm">
-            <div className="p-6">
-              <h3 className="text-lg font-bold mb-4">Top Credit Articles</h3>
-              <div className="space-y-3">
-                {data.content.topArticles.credit.map((article: any) => (
-                  <div key={article.id} className="border-b pb-3">
-                    <div className="text-sm font-medium truncate">{article.title}</div>
-                    <div className="flex justify-between items-center mt-1">
-                      <span className="text-xs text-gray-500">{article.source}</span>
-                      <span className="text-xs font-semibold text-purple-600">{article.like_count} likes</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Top Sources */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white p-6 rounded-lg border shadow-sm">
-            <h3 className="text-lg font-bold mb-4">Top ESG Sources</h3>
-            <div className="space-y-2">
-              {data.content.topSources.esg.map((source: any, idx: number) => (
-                <div key={idx} className="flex justify-between items-center">
-                  <span className="text-sm">{source.source}</span>
-                  <span className="text-sm">
-                    <span className="font-semibold">{source.article_count}</span>
-                    <span className="text-gray-400 text-xs ml-2">{source.unique_likes} likes</span>
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
 
           <div className="bg-white p-6 rounded-lg border shadow-sm">
-            <h3 className="text-lg font-bold mb-4">Top Credit Sources</h3>
-            <div className="space-y-2">
-              {data.content.topSources.credit.map((source: any, idx: number) => (
-                <div key={idx} className="flex justify-between items-center">
-                  <span className="text-sm">{source.source}</span>
-                  <span className="text-sm">
-                    <span className="font-semibold">{source.article_count}</span>
-                    <span className="text-gray-400 text-xs ml-2">{source.unique_likes} likes</span>
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const renderAlerts = () => {
-    if (!data.alerts) return null;
-
-    return (
-      <div className="space-y-6">
-        {/* Alert Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-white p-4 rounded-lg border shadow-sm">
-            <div className="text-sm text-gray-600">Total Alerts</div>
-            <div className="text-2xl font-bold mt-1">{data.alerts.overview.totalAlerts.toLocaleString()}</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg border shadow-sm">
-            <div className="text-sm text-gray-600">Active Alerts</div>
-            <div className="text-2xl font-bold mt-1 text-green-600">{data.alerts.overview.activeAlerts.toLocaleString()}</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg border shadow-sm">
-            <div className="text-sm text-gray-600">Total Content Sent</div>
-            <div className="text-2xl font-bold mt-1">{data.alerts.overview.totalContentSent.toLocaleString()}</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg border shadow-sm">
-            <div className="text-sm text-gray-600">Recent Content</div>
-            <div className="text-2xl font-bold mt-1 text-blue-600">{data.alerts.overview.recentContentSent.toLocaleString()}</div>
-            <div className="text-xs text-gray-500 mt-1">Last {days} days</div>
-          </div>
-        </div>
-
-        {/* Most Active Alerts */}
-        <div className="bg-white rounded-lg border shadow-sm">
-          <div className="p-6">
-            <h3 className="text-lg font-bold mb-4">Most Active Alerts (Last {days} Days)</h3>
+            <h3 className="text-lg font-bold mb-4">Top Active Users</h3>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Alert Name</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Team</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Content Sent</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Activity</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {data.alerts.mostActiveAlerts.map((alert: any) => (
-                    <tr key={alert.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm font-medium">{alert.alert_name}</td>
-                      <td className="px-4 py-3 text-sm">
-                        <span className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded capitalize">
-                          {alert.alert_type}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{alert.user_name}</td>
-                      <td className="px-4 py-3 text-sm">{alert.team || "N/A"}</td>
-                      <td className="px-4 py-3 text-sm font-semibold text-green-600">{alert.content_count}</td>
+                  {data.userEngagement.topActiveUsers.map((user) => (
+                    <tr key={user.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 text-sm font-medium">{user.name}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{user.email}</td>
+                      <td className="px-4 py-3 text-sm">{user.team || "N/A"}</td>
+                      <td className="px-4 py-3 text-sm font-semibold text-blue-600">{user.activity_count}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -361,27 +214,71 @@ export default function AnalyticsDashboardPage() {
           </div>
         </div>
 
-        {/* Alerts by Domain & Top Keywords */}
+        {/* Likes by Type & Top Pages */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-white p-6 rounded-lg border shadow-sm">
-            <h3 className="text-lg font-bold mb-4">Alerts by Domain</h3>
+            <h3 className="text-lg font-bold mb-4">Likes by Content Type</h3>
             <div className="space-y-2">
-              {data.alerts.alertsByDomain.map((item: any, idx: number) => (
-                <div key={idx} className="flex justify-between items-center">
-                  <span className="text-sm uppercase">{item.domain}</span>
-                  <span className="text-sm font-semibold">{item.count}</span>
+              {data.userEngagement.likesByType.map((item) => (
+                <div key={item.content_type} className="flex justify-between items-center">
+                  <span className="text-sm capitalize">{item.content_type}</span>
+                  <span className="text-sm font-semibold text-purple-600">{item.count}</span>
                 </div>
               ))}
+              {data.userEngagement.likesByType.length === 0 && (
+                <p className="text-sm text-gray-500">No likes yet</p>
+              )}
             </div>
           </div>
 
           <div className="bg-white p-6 rounded-lg border shadow-sm">
-            <h3 className="text-lg font-bold mb-4">Top Keywords in Alerts</h3>
-            <div className="flex flex-wrap gap-2">
-              {data.alerts.topKeywords.map((item: any, idx: number) => (
-                <span key={idx} className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
-                  {item.keyword} ({item.count})
-                </span>
+            <h3 className="text-lg font-bold mb-4">Top Visited Pages</h3>
+            <div className="space-y-2">
+              {data.userEngagement.topPages.map((item) => (
+                <div key={item.page} className="flex justify-between items-center">
+                  <span className="text-sm truncate max-w-[70%]" title={item.page}>{item.page}</span>
+                  <span className="text-sm font-semibold text-blue-600">{item.count}</span>
+                </div>
+              ))}
+              {data.userEngagement.topPages.length === 0 && (
+                <p className="text-sm text-gray-500">No activity yet</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Top Sources & Users by Team */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-white p-6 rounded-lg border shadow-sm">
+            <h3 className="text-lg font-bold mb-4">Top Liked Sources</h3>
+            <div className="space-y-2">
+              {data.userEngagement.topSources.map((item, idx) => (
+                <div key={`${item.source}-${idx}`} className="flex justify-between items-center">
+                  <span className="text-sm">{item.source}</span>
+                  <span className="text-sm">
+                    <span className={`px-2 py-0.5 text-xs rounded uppercase ${
+                      item.domain === "credit" ? "bg-orange-100 text-orange-800" : "bg-blue-100 text-blue-800"
+                    }`}>
+                      {item.domain}
+                    </span>
+                    <span className="ml-2 font-semibold text-purple-600">{item.like_count}</span>
+                  </span>
+                </div>
+              ))}
+              {data.userEngagement.topSources.length === 0 && (
+                <p className="text-sm text-gray-500">No likes yet</p>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-lg border shadow-sm">
+            <h3 className="text-lg font-bold mb-4">Users by Team</h3>
+            <div className="space-y-2">
+              {data.userEngagement.usersByTeam.slice(0, 10).map((item) => (
+                <div key={item.team} className="flex justify-between items-center">
+                  <span className="text-sm">{item.team}</span>
+                  <span className="text-sm font-semibold">{item.count}</span>
+                </div>
               ))}
             </div>
           </div>
@@ -405,24 +302,24 @@ export default function AnalyticsDashboardPage() {
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Team</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Users</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Alerts</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Likes</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Alerts/User</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Likes/User</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Activity</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Activity/User</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Score</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {data.teams.teamEngagement
-                    .sort((a: any, b: any) => b.engagement_score - a.engagement_score)
-                    .map((team: any) => (
+                    .sort((a, b) => b.engagement_score - a.engagement_score)
+                    .map((team) => (
                       <tr key={team.team} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-sm font-medium">{team.team}</td>
                         <td className="px-4 py-3 text-sm">{team.user_count}</td>
-                        <td className="px-4 py-3 text-sm">{team.alert_count}</td>
                         <td className="px-4 py-3 text-sm">{team.like_count}</td>
-                        <td className="px-4 py-3 text-sm">{team.alerts_per_user}</td>
                         <td className="px-4 py-3 text-sm">{team.likes_per_user}</td>
+                        <td className="px-4 py-3 text-sm">{team.activity_count}</td>
+                        <td className="px-4 py-3 text-sm">{team.activity_per_user}</td>
                         <td className="px-4 py-3 text-sm">
                           <span className={`px-2 py-1 text-xs font-semibold rounded ${
                             team.engagement_score > 50 ? "bg-green-100 text-green-800" :
@@ -445,7 +342,7 @@ export default function AnalyticsDashboardPage() {
           <div className="bg-white p-6 rounded-lg border shadow-sm">
             <h3 className="text-lg font-bold mb-4">Users by Team</h3>
             <div className="space-y-2">
-              {data.teams.usersByTeam.map((item: any) => (
+              {data.teams.usersByTeam.map((item) => (
                 <div key={item.team} className="flex justify-between items-center">
                   <span className="text-sm">{item.team}</span>
                   <span className="text-sm font-semibold">{item.user_count}</span>
@@ -455,15 +352,12 @@ export default function AnalyticsDashboardPage() {
           </div>
 
           <div className="bg-white p-6 rounded-lg border shadow-sm">
-            <h3 className="text-lg font-bold mb-4">Alerts by Team</h3>
+            <h3 className="text-lg font-bold mb-4">Activity by Team</h3>
             <div className="space-y-2">
-              {data.teams.alertsByTeam.map((item: any) => (
+              {data.teams.activityByTeam.map((item) => (
                 <div key={item.team} className="flex justify-between items-center">
                   <span className="text-sm">{item.team}</span>
-                  <span className="text-sm">
-                    <span className="font-semibold text-green-600">{item.active_alert_count}</span>
-                    <span className="text-gray-400"> / {item.alert_count}</span>
-                  </span>
+                  <span className="text-sm font-semibold text-blue-600">{item.activity_count}</span>
                 </div>
               ))}
             </div>
@@ -472,7 +366,7 @@ export default function AnalyticsDashboardPage() {
           <div className="bg-white p-6 rounded-lg border shadow-sm">
             <h3 className="text-lg font-bold mb-4">Likes by Team</h3>
             <div className="space-y-2">
-              {data.teams.likesByTeam.map((item: any) => (
+              {data.teams.likesByTeam.map((item) => (
                 <div key={item.team} className="flex justify-between items-center">
                   <span className="text-sm">{item.team}</span>
                   <span className="text-sm font-semibold text-purple-600">{item.like_count}</span>
@@ -511,16 +405,10 @@ export default function AnalyticsDashboardPage() {
       {/* Tabs */}
       <div className="bg-white rounded-lg border shadow-sm">
         <div className="flex border-b">
-          {[
-            { id: "overview", label: "Overview" },
-            { id: "users", label: "Users" },
-            { id: "content", label: "Content" },
-            { id: "alerts", label: "Alerts" },
-            { id: "teams", label: "Teams" },
-          ].map((tab) => (
+          {tabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
+              onClick={() => setActiveTab(tab.id as TabId)}
               className={`px-6 py-3 font-medium ${
                 activeTab === tab.id
                   ? "border-b-2 border-blue-600 text-blue-600"
@@ -541,9 +429,6 @@ export default function AnalyticsDashboardPage() {
       ) : (
         <div>
           {activeTab === "overview" && renderOverview()}
-          {activeTab === "users" && renderUsers()}
-          {activeTab === "content" && renderContent()}
-          {activeTab === "alerts" && renderAlerts()}
           {activeTab === "teams" && renderTeams()}
         </div>
       )}
