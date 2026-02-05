@@ -52,7 +52,41 @@ export async function GET(
       created_at: Date;
     };
 
-    const [esgLikes, creditLikesRaw, activity, alerts, totalEsgLikes, totalCreditLikesRaw, totalActivity] = await Promise.all([
+    let activity: ActivityRow[] = [];
+    let totalActivity = 0;
+
+    // Try to fetch user_activity, but handle missing table gracefully
+    try {
+      [activity, totalActivity] = await Promise.all([
+        (esgPrisma as any).user_activity.findMany({
+          where: { user_id: userId },
+          orderBy: { created_at: "desc" },
+          take: 200,
+          select: {
+            id: true,
+            action: true,
+            resource_type: true,
+            resource_id: true,
+            details: true,
+            ip_address: true,
+            created_at: true,
+          },
+        }) as Promise<ActivityRow[]>,
+        (esgPrisma as any).user_activity.count({ where: { user_id: userId } }),
+      ]);
+    } catch (dbError: any) {
+      // Table doesn't exist, use empty arrays
+      console.error('Error fetching user activity:', {
+        message: dbError?.message,
+        code: dbError?.code,
+        meta: dbError?.meta,
+      });
+      if (dbError?.code === 'P2021' || dbError?.message?.includes('user_activity')) {
+        console.warn('user_activity table not found, returning empty activity');
+      }
+    }
+
+    const [esgLikes, creditLikesRaw, alerts, totalEsgLikes, totalCreditLikesRaw] = await Promise.all([
       esgPrisma.likes.findMany({
         where: { user_id: userId },
         orderBy: { created_at: "desc" },
@@ -73,20 +107,6 @@ export async function GET(
         ORDER BY created_at DESC
         LIMIT 200;
       `,
-      (esgPrisma as any).user_activity.findMany({
-        where: { user_id: userId },
-        orderBy: { created_at: "desc" },
-        take: 200,
-        select: {
-          id: true,
-          action: true,
-          resource_type: true,
-          resource_id: true,
-          details: true,
-          ip_address: true,
-          created_at: true,
-        },
-      }) as Promise<ActivityRow[]>,
       esgPrisma.alert_preferences.findMany({
         where: { user_id: userId },
         orderBy: { created_at: "desc" },

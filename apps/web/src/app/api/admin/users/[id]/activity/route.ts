@@ -32,23 +32,41 @@ export async function GET(
       created_at: Date;
     };
 
-    const [activity, totalActivity] = await Promise.all([
-      (esgPrisma as any).user_activity.findMany({
-        where: { user_id: userId },
-        orderBy: { created_at: "desc" },
-        take: limit,
-        select: {
-          id: true,
-          action: true,
-          resource_type: true,
-          resource_id: true,
-          details: true,
-          ip_address: true,
-          created_at: true,
-        },
-      }) as Promise<ActivityRow[]>,
-      (esgPrisma as any).user_activity.count({ where: { user_id: userId } }),
-    ]);
+    let activity: ActivityRow[] = [];
+    let totalActivity = 0;
+
+    try {
+      [activity, totalActivity] = await Promise.all([
+        (esgPrisma as any).user_activity.findMany({
+          where: { user_id: userId },
+          orderBy: { created_at: "desc" },
+          take: limit,
+          select: {
+            id: true,
+            action: true,
+            resource_type: true,
+            resource_id: true,
+            details: true,
+            ip_address: true,
+            created_at: true,
+          },
+        }) as Promise<ActivityRow[]>,
+        (esgPrisma as any).user_activity.count({ where: { user_id: userId } }),
+      ]);
+    } catch (dbError: any) {
+      // Handle missing user_activity table gracefully
+      if (dbError?.code === 'P2021' || dbError?.message?.includes('user_activity')) {
+        console.warn('user_activity table not found, returning empty activity');
+        return NextResponse.json({
+          activity: [],
+          stats: {
+            totalActivity: 0,
+            activityByType: [],
+          },
+        });
+      }
+      throw dbError;
+    }
 
     const articleIds = activity
       .filter((act: ActivityRow) => act.resource_type === "article" && act.resource_id)
@@ -192,9 +210,17 @@ export async function GET(
       },
     });
   } catch (error: any) {
-    console.error("Error fetching user activity:", error);
+    console.error("Error fetching user activity:", {
+      message: error?.message,
+      code: error?.code,
+      meta: error?.meta,
+      stack: error?.stack,
+    });
     return NextResponse.json(
-      { error: "Failed to fetch user activity" },
+      { 
+        error: "Failed to fetch user activity",
+        details: process.env.NODE_ENV === 'development' ? error?.message : undefined
+      },
       { status: 500 }
     );
   }
