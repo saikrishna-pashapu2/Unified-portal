@@ -42,6 +42,16 @@ export async function GET(
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
+    type ActivityRow = {
+      id: number;
+      action: string;
+      resource_type: string | null;
+      resource_id: number | null;
+      details: string | null;
+      ip_address: string | null;
+      created_at: Date;
+    };
+
     const [esgLikes, creditLikesRaw, activity, alerts, totalEsgLikes, totalCreditLikesRaw, totalActivity] = await Promise.all([
       esgPrisma.likes.findMany({
         where: { user_id: userId },
@@ -63,7 +73,7 @@ export async function GET(
         ORDER BY created_at DESC
         LIMIT 200;
       `,
-      esgPrisma.user_activity.findMany({
+      (esgPrisma as any).user_activity.findMany({
         where: { user_id: userId },
         orderBy: { created_at: "desc" },
         take: 200,
@@ -76,7 +86,7 @@ export async function GET(
           ip_address: true,
           created_at: true,
         },
-      }),
+      }) as Promise<ActivityRow[]>,
       esgPrisma.alert_preferences.findMany({
         where: { user_id: userId },
         orderBy: { created_at: "desc" },
@@ -97,7 +107,7 @@ export async function GET(
         FROM likes
         WHERE user_id = ${userId};
       `,
-      esgPrisma.user_activity.count({ where: { user_id: userId } }),
+      (esgPrisma as any).user_activity.count({ where: { user_id: userId } }),
     ]);
 
     const creditLikes = creditLikesRaw.map((like) => ({
@@ -272,11 +282,11 @@ export async function GET(
     });
 
     const activityByTypeMap = new Map<string, number>();
-    activity.forEach((act) => {
+    activity.forEach((act: ActivityRow) => {
       activityByTypeMap.set(act.action, (activityByTypeMap.get(act.action) || 0) + 1);
     });
 
-    const enrichedActivity = activity.map((act) => {
+    const enrichedActivity = activity.map((act: ActivityRow) => {
       const type = act.resource_type || "page";
       const resourceId = act.resource_id || 0;
       const resourceMap =

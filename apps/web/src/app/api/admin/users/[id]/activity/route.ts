@@ -22,8 +22,18 @@ export async function GET(
     const { searchParams } = new URL(req.url);
     const limit = parseInt(searchParams.get("limit") || "50");
 
+    type ActivityRow = {
+      id: number;
+      action: string;
+      resource_type: string | null;
+      resource_id: number | null;
+      details: string | null;
+      ip_address: string | null;
+      created_at: Date;
+    };
+
     const [activity, totalActivity] = await Promise.all([
-      esgPrisma.user_activity.findMany({
+      (esgPrisma as any).user_activity.findMany({
         where: { user_id: userId },
         orderBy: { created_at: "desc" },
         take: limit,
@@ -36,19 +46,19 @@ export async function GET(
           ip_address: true,
           created_at: true,
         },
-      }),
-      esgPrisma.user_activity.count({ where: { user_id: userId } }),
+      }) as Promise<ActivityRow[]>,
+      (esgPrisma as any).user_activity.count({ where: { user_id: userId } }),
     ]);
 
     const articleIds = activity
-      .filter((act) => act.resource_type === "article" && act.resource_id)
-      .map((act) => act.resource_id as number);
+      .filter((act: ActivityRow) => act.resource_type === "article" && act.resource_id)
+      .map((act: ActivityRow) => act.resource_id as number);
     const eventIds = activity
-      .filter((act) => act.resource_type === "event" && act.resource_id)
-      .map((act) => act.resource_id as number);
+      .filter((act: ActivityRow) => act.resource_type === "event" && act.resource_id)
+      .map((act: ActivityRow) => act.resource_id as number);
     const publicationIds = activity
-      .filter((act) => act.resource_type === "publication" && act.resource_id)
-      .map((act) => act.resource_id as number);
+      .filter((act: ActivityRow) => act.resource_type === "publication" && act.resource_id)
+      .map((act: ActivityRow) => act.resource_id as number);
 
     const [esgArticles, creditArticles, esgEvents, creditEvents, creditEventsLegacy, esgPublications] =
       await Promise.all([
@@ -144,7 +154,7 @@ export async function GET(
       });
     });
 
-    const enrichedActivity = activity.map((act) => {
+    const enrichedActivity = activity.map((act: ActivityRow) => {
       const type = act.resource_type || "page";
       const resourceId = act.resource_id || 0;
       const resourceMap =
@@ -167,7 +177,7 @@ export async function GET(
     });
 
     const activityByType = new Map<string, number>();
-    enrichedActivity.forEach((act) => {
+    enrichedActivity.forEach((act: ActivityRow) => {
       activityByType.set(act.action, (activityByType.get(act.action) || 0) + 1);
     });
 
