@@ -36,36 +36,31 @@ export async function GET(
     let totalActivity = 0;
 
     try {
-      [activity, totalActivity] = await Promise.all([
-        (esgPrisma as any).user_activity.findMany({
-          where: { user_id: userId },
-          orderBy: { created_at: "desc" },
-          take: limit,
-          select: {
-            id: true,
-            action: true,
-            resource_type: true,
-            resource_id: true,
-            details: true,
-            ip_address: true,
-            created_at: true,
-          },
-        }) as Promise<ActivityRow[]>,
-        (esgPrisma as any).user_activity.count({ where: { user_id: userId } }),
+      // Use raw SQL queries since Prisma model may not be generated
+      const [activityResult, countResult] = await Promise.all([
+        esgPrisma.$queryRaw<ActivityRow[]>`
+          SELECT id, action, resource_type, resource_id, details, ip_address, created_at
+          FROM user_activity
+          WHERE user_id = ${userId}
+          ORDER BY created_at DESC
+          LIMIT ${limit}
+        `,
+        esgPrisma.$queryRaw<{ count: bigint }[]>`
+          SELECT COUNT(*)::bigint as count FROM user_activity WHERE user_id = ${userId}
+        `,
       ]);
+      activity = activityResult;
+      totalActivity = Number(countResult[0]?.count ?? 0);
     } catch (dbError: any) {
       // Handle missing user_activity table gracefully
-      if (dbError?.code === 'P2021' || dbError?.message?.includes('user_activity')) {
-        console.warn('user_activity table not found, returning empty activity');
-        return NextResponse.json({
-          activity: [],
-          stats: {
-            totalActivity: 0,
-            activityByType: [],
-          },
-        });
-      }
-      throw dbError;
+      console.warn('Error fetching user_activity:', dbError?.message);
+      return NextResponse.json({
+        activity: [],
+        stats: {
+          totalActivity: 0,
+          activityByType: [],
+        },
+      });
     }
 
     const articleIds = activity

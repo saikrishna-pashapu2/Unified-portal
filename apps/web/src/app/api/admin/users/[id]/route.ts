@@ -55,35 +55,25 @@ export async function GET(
     let activity: ActivityRow[] = [];
     let totalActivity = 0;
 
-    // Try to fetch user_activity, but handle missing table gracefully
+    // Try to fetch user_activity using raw SQL (more reliable than Prisma model)
     try {
-      [activity, totalActivity] = await Promise.all([
-        (esgPrisma as any).user_activity.findMany({
-          where: { user_id: userId },
-          orderBy: { created_at: "desc" },
-          take: 200,
-          select: {
-            id: true,
-            action: true,
-            resource_type: true,
-            resource_id: true,
-            details: true,
-            ip_address: true,
-            created_at: true,
-          },
-        }) as Promise<ActivityRow[]>,
-        (esgPrisma as any).user_activity.count({ where: { user_id: userId } }),
+      const [activityResult, countResult] = await Promise.all([
+        esgPrisma.$queryRaw<ActivityRow[]>`
+          SELECT id, action, resource_type, resource_id, details, ip_address, created_at
+          FROM user_activity
+          WHERE user_id = ${userId}
+          ORDER BY created_at DESC
+          LIMIT 200
+        `,
+        esgPrisma.$queryRaw<{ count: bigint }[]>`
+          SELECT COUNT(*)::bigint as count FROM user_activity WHERE user_id = ${userId}
+        `,
       ]);
+      activity = activityResult;
+      totalActivity = Number(countResult[0]?.count ?? 0);
     } catch (dbError: any) {
-      // Table doesn't exist, use empty arrays
-      console.error('Error fetching user activity:', {
-        message: dbError?.message,
-        code: dbError?.code,
-        meta: dbError?.meta,
-      });
-      if (dbError?.code === 'P2021' || dbError?.message?.includes('user_activity')) {
-        console.warn('user_activity table not found, returning empty activity');
-      }
+      // Table doesn't exist or query failed, use empty arrays
+      console.warn('Error fetching user activity:', dbError?.message);
     }
 
     const [esgLikes, creditLikesRaw, alerts, totalEsgLikes, totalCreditLikesRaw] = await Promise.all([
