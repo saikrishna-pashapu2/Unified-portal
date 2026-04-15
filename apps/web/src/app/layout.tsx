@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import "./globals.css";
 import AuthProvider from "@/components/providers/AuthProvider";
 import DomainTheme from "@/components/providers/DomainTheme";
@@ -21,7 +22,9 @@ export default function RootLayout({
         <AuthProvider>
           <DomainSwitchProvider>
             <DomainTheme>
-              <UserActivityTracker />
+              <Suspense fallback={null}>
+                <UserActivityTracker />
+              </Suspense>
               {children}
             </DomainTheme>
           </DomainSwitchProvider>
