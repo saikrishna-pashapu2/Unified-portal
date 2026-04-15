@@ -15,8 +15,10 @@ import {
   addMessage,
   getConversationHistory,
   updateConversationCost,
+  recordToolCall,
 } from "@/lib/article-assistant-db";
 import { streamArticleChat, generateFollowUpQuestions } from "@/lib/article-assistant-agent";
+import { recordUserActivity } from "@/lib/user-activity";
 
 // Token counting helper
 function countTokens(text: string, model: string = "gpt-4o-mini"): number {
@@ -128,7 +130,28 @@ export async function POST(request: NextRequest) {
             article.content || "",
             article.title || "Untitled",
             conversation.article_summary,
-            openaiKey
+            openaiKey,
+            async (toolEvent) => {
+              await recordToolCall(
+                domain,
+                conversation.id,
+                toolEvent.toolName,
+                toolEvent.toolInput,
+                toolEvent.toolOutput,
+                toolEvent.status,
+                toolEvent.executionTimeMs,
+                toolEvent.errorMessage
+              );
+
+              if (conversation.user_id) {
+                await recordUserActivity({
+                  userId: conversation.user_id,
+                  action: "use_tool",
+                  resourceType: "tool",
+                  details: `${toolEvent.toolName} on /${domain}/articles/${conversation.article_id}`,
+                });
+              }
+            }
           );
 
           console.log("[Chat] Got response stream");

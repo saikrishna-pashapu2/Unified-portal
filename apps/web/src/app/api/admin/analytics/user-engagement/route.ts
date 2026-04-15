@@ -69,7 +69,9 @@ export async function GET(req: NextRequest) {
     }));
 
     const totalActivityRaw = await esgPrisma.$queryRaw<any[]>`
-      SELECT COUNT(*) as count FROM user_activity
+      SELECT COUNT(*) as count
+      FROM user_activity
+      WHERE created_at > NOW() - INTERVAL '${days} days'
     `;
     const totalActivity = Number(totalActivityRaw[0]?.count || 0);
 
@@ -227,11 +229,12 @@ export async function GET(req: NextRequest) {
 
     // Top visited pages (from activity details)
     const topPagesRaw = await esgPrisma.$queryRaw<any[]>`
-      SELECT COALESCE(details, 'Unknown') as page,
+      SELECT COALESCE(NULLIF(details, ''), 'Unknown') as page,
              COUNT(*) as count
       FROM user_activity
       WHERE created_at > NOW() - INTERVAL '${days} days'
-      GROUP BY COALESCE(details, 'Unknown')
+        AND action = 'view_page'
+      GROUP BY COALESCE(NULLIF(details, ''), 'Unknown')
       ORDER BY count DESC
       LIMIT 10
     `;

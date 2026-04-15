@@ -95,17 +95,25 @@ export async function GET(req: NextRequest) {
     };
 
     // Recent activity metrics
-    const userActivityRaw = await esgPrisma.$queryRaw<any[]>`
-      SELECT 
-        COUNT(DISTINCT l.user_id) as active_users,
-        COUNT(l.id) as total_likes
-      FROM likes l
-      WHERE l.created_at > NOW() - INTERVAL '24 hours'
-    `;
+    const [userActivityRaw, likesRaw] = await Promise.all([
+      esgPrisma.$queryRaw<any[]>`
+        SELECT 
+          COUNT(DISTINCT user_id) as active_users,
+          COUNT(id) as total_activity
+        FROM user_activity
+        WHERE created_at > NOW() - INTERVAL '24 hours'
+      `,
+      esgPrisma.$queryRaw<any[]>`
+        SELECT COUNT(id) as total_likes
+        FROM likes
+        WHERE created_at > NOW() - INTERVAL '24 hours'
+      `,
+    ]);
 
     const activityMetrics = {
       activeUsersLast24h: Number(userActivityRaw[0]?.active_users || 0),
-      totalLikesLast24h: Number(userActivityRaw[0]?.total_likes || 0),
+      totalActivityLast24h: Number(userActivityRaw[0]?.total_activity || 0),
+      totalLikesLast24h: Number(likesRaw[0]?.total_likes || 0),
     };
 
     return NextResponse.json({

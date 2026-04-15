@@ -10,6 +10,7 @@ import Link from "next/link";
 import { ArrowLeft, ExternalLink, Calendar, Building2, Heart, Users, Sparkles, Leaf, Shield, User2, Clock } from "lucide-react";
 import SafeHTMLContent from "@/components/SafeHTMLContent";
 import ArticleAssistant from "@/components/articles/ArticleAssistant";
+import { TrackActivity } from "@/components/analytics/UserActivityTracker";
 
 async function fetchArticle(id: string) {
   const domain = "esg";
@@ -99,6 +100,13 @@ export default async function ArticleDetail({
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-green-50">
+      <TrackActivity
+        action="view_article"
+        resourceType="article"
+        resourceId={contentId}
+        details={`/${domain}/articles/${contentId}`}
+      />
+
       {/* Header with Back Navigation - Full Width */}
       <div className="px-6 py-4 bg-white border-b border-gray-200 shadow-sm">
         <Link 

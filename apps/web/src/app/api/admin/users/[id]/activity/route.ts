@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/nextauth-options";
 import { esgPrisma } from "@esgcredit/db-esg";
 import { creditPrisma } from "@esgcredit/db-credit";
+import { extractActivityPath, inferActivityDomain } from "@/lib/user-activity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -113,44 +114,44 @@ export async function GET(
           : Promise.resolve([]),
       ]);
 
-    const articleMap = new Map<number, { title: string; url: string | null; domain: "esg" | "credit" }>();
+    const esgArticleMap = new Map<number, { title: string; url: string | null; domain: "esg" }>();
     esgArticles.forEach((article) => {
-      articleMap.set(article.id, {
+      esgArticleMap.set(article.id, {
         title: article.title,
         url: article.link || null,
         domain: "esg",
       });
     });
+
+    const creditArticleMap = new Map<number, { title: string; url: string | null; domain: "credit" }>();
     creditArticles.forEach((article) => {
-      if (!articleMap.has(article.id)) {
-        articleMap.set(article.id, {
-          title: article.title || "Untitled",
-          url: article.link || null,
-          domain: "credit",
-        });
-      }
+      creditArticleMap.set(article.id, {
+        title: article.title || "Untitled",
+        url: article.link || null,
+        domain: "credit",
+      });
     });
 
-    const eventMap = new Map<number, { title: string; url: string | null; domain: "esg" | "credit" }>();
+    const esgEventMap = new Map<number, { title: string; url: string | null; domain: "esg" }>();
     esgEvents.forEach((event) => {
-      eventMap.set(event.id, {
+      esgEventMap.set(event.id, {
         title: event.event_name || "Untitled",
         url: event.event_url || null,
         domain: "esg",
       });
     });
+
+    const creditEventMap = new Map<number, { title: string; url: string | null; domain: "credit" }>();
     creditEvents.forEach((event) => {
-      if (!eventMap.has(event.id)) {
-        eventMap.set(event.id, {
-          title: event.title || "Untitled",
-          url: event.source_url || null,
-          domain: "credit",
-        });
-      }
+      creditEventMap.set(event.id, {
+        title: event.title || "Untitled",
+        url: event.source_url || null,
+        domain: "credit",
+      });
     });
     creditEventsLegacy.forEach((event) => {
-      if (!eventMap.has(event.id)) {
-        eventMap.set(event.id, {
+      if (!creditEventMap.has(event.id)) {
+        creditEventMap.set(event.id, {
           title: event.title || "Untitled",
           url: event.link || null,
           domain: "credit",
@@ -167,25 +168,55 @@ export async function GET(
       });
     });
 
+    const getResourceMeta = (
+      type: string,
+      resourceId: number,
+      preferredDomain: "esg" | "credit" | null
+    ) => {
+      if (type === "article") {
+        if (preferredDomain === "credit") {
+          return creditArticleMap.get(resourceId) ?? esgArticleMap.get(resourceId) ?? null;
+        }
+
+        if (preferredDomain === "esg") {
+          return esgArticleMap.get(resourceId) ?? creditArticleMap.get(resourceId) ?? null;
+        }
+
+        return esgArticleMap.get(resourceId) ?? creditArticleMap.get(resourceId) ?? null;
+      }
+
+      if (type === "event") {
+        if (preferredDomain === "credit") {
+          return creditEventMap.get(resourceId) ?? esgEventMap.get(resourceId) ?? null;
+        }
+
+        if (preferredDomain === "esg") {
+          return esgEventMap.get(resourceId) ?? creditEventMap.get(resourceId) ?? null;
+        }
+
+        return esgEventMap.get(resourceId) ?? creditEventMap.get(resourceId) ?? null;
+      }
+
+      if (type === "publication") {
+        return publicationMap.get(resourceId) ?? null;
+      }
+
+      return null;
+    };
+
     const enrichedActivity = activity.map((act: ActivityRow) => {
       const type = act.resource_type || "page";
       const resourceId = act.resource_id || 0;
-      const resourceMap =
-        type === "article"
-          ? articleMap
-          : type === "event"
-          ? eventMap
-          : type === "publication"
-          ? publicationMap
-          : null;
-      const meta = resourceMap?.get(resourceId);
+      const activityDomain = inferActivityDomain(act.details);
+      const activityPath = extractActivityPath(act.details);
+      const meta = getResourceMeta(type, resourceId, activityDomain);
 
       return {
         ...act,
         resource_type: type,
         resource_title: meta?.title || null,
-        resource_url: meta?.url || null,
-        domain: meta?.domain || null,
+        resource_url: activityPath || meta?.url || null,
+        domain: meta?.domain || activityDomain || null,
       };
     });
 

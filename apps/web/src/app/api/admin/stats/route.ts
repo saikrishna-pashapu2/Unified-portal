@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/nextauth-options";
 import { esgPrisma } from "@esgcredit/db-esg";
+import { creditPrisma } from "@esgcredit/db-credit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,31 +18,58 @@ export async function GET(req: NextRequest) {
     }
 
     const now = new Date();
+    const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
     // Get stats in parallel
     const [
       totalUsers,
-      activeUsers,
+      loginUsersRaw,
+      activityUsersRaw,
+      esgLikeUsersRaw,
+      creditLikeUsersRaw,
+      assistantUsersRaw,
       newUsersThisWeek,
       totalAlerts,
       activeAlerts,
       recentUsers,
       emailStats,
-      aiAssistantStats,
+      aiAssistantStatsRaw,
     ] = await Promise.all([
       // Total users
       esgPrisma.users.count(),
       
-      // Active users (logged in last 30 days)
-      esgPrisma.users.count({
-        where: {
-          last_login: {
-            gte: thirtyDaysAgo,
-          },
-        },
-      }),
+      esgPrisma.$queryRaw<Array<{ id: number }>>`
+        SELECT id
+        FROM users
+        WHERE last_login >= ${thirtyDaysAgo}
+      `,
+
+      esgPrisma.$queryRaw<Array<{ user_id: number }>>`
+        SELECT DISTINCT user_id
+        FROM user_activity
+        WHERE created_at >= ${thirtyDaysAgo}
+      `,
+
+      esgPrisma.$queryRaw<Array<{ user_id: number }>>`
+        SELECT DISTINCT user_id
+        FROM likes
+        WHERE created_at >= ${thirtyDaysAgo}
+      `,
+
+      creditPrisma.$queryRaw<Array<{ user_id: number }>>`
+        SELECT DISTINCT user_id
+        FROM likes
+        WHERE created_at >= ${thirtyDaysAgo}
+      `,
+
+      esgPrisma.$queryRaw<Array<{ user_id: number }>>`
+        SELECT DISTINCT user_id
+        FROM article_conversations
+        WHERE created_at >= ${thirtyDaysAgo}
+          AND user_id IS NOT NULL
+      `,
       
       // New users this week
       esgPrisma.users.count({
@@ -82,16 +110,36 @@ export async function GET(req: NextRequest) {
         _count: true,
       }),
 
-      // AI Assistant stats (last 30 days)
-      // Note: article_ai_sessions table doesn't exist in schema yet
-      // Returning default values until tables are added to Prisma schema
-      Promise.resolve({
-        totalSessions: 0,
-        activeSessions: 0,
-        uniqueUsers: 0,
-        totalCost: 0,
-      }),
+      esgPrisma.$queryRaw<Array<{
+        total_sessions: bigint;
+        active_sessions: bigint;
+        unique_users: bigint;
+        total_cost: number;
+      }>>`
+        SELECT
+          COUNT(*)::bigint as total_sessions,
+          COUNT(*) FILTER (WHERE last_message_at >= ${last24Hours})::bigint as active_sessions,
+          COUNT(DISTINCT user_id) FILTER (WHERE user_id IS NOT NULL)::bigint as unique_users,
+          COALESCE(SUM(total_cost_usd), 0) as total_cost
+        FROM article_conversations
+        WHERE created_at >= ${thirtyDaysAgo}
+      `,
     ]);
+
+    const activeUserIds = new Set<number>();
+    loginUsersRaw.forEach((row) => activeUserIds.add(Number(row.id)));
+    activityUsersRaw.forEach((row) => row.user_id && activeUserIds.add(Number(row.user_id)));
+    esgLikeUsersRaw.forEach((row) => row.user_id && activeUserIds.add(Number(row.user_id)));
+    creditLikeUsersRaw.forEach((row) => row.user_id && activeUserIds.add(Number(row.user_id)));
+    assistantUsersRaw.forEach((row) => row.user_id && activeUserIds.add(Number(row.user_id)));
+
+    const aiAssistantStatsResult = aiAssistantStatsRaw[0];
+    const aiAssistantStats = {
+      totalSessions: Number(aiAssistantStatsResult?.total_sessions || 0),
+      activeSessions: Number(aiAssistantStatsResult?.active_sessions || 0),
+      uniqueUsers: Number(aiAssistantStatsResult?.unique_users || 0),
+      totalCost: Number(aiAssistantStatsResult?.total_cost || 0),
+    };
 
     // Process email stats
     const emailStatsMap = emailStats.reduce((acc: any, stat) => {
@@ -101,7 +149,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       totalUsers,
-      activeUsers,
+      activeUsers: activeUserIds.size,
       newUsersThisWeek,
       totalAlerts,
       activeAlerts,

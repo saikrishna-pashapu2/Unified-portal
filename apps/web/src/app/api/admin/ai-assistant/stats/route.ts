@@ -153,6 +153,40 @@ export async function GET(req: NextRequest) {
     const totalTokens = Number(tokenStats[0]?.total_tokens || 0);
     const totalCost = Number(tokenStats[0]?.total_cost || 0);
 
+    const toolOverviewQuery = domain !== 'all'
+      ? esgPrisma.$queryRaw<Array<{
+          total_calls: bigint;
+          successful_calls: bigint;
+          unique_tools: bigint;
+        }>>`
+          SELECT
+            COUNT(atc.id)::bigint as total_calls,
+            COUNT(*) FILTER (WHERE atc.status = 'success')::bigint as successful_calls,
+            COUNT(DISTINCT atc.tool_name)::bigint as unique_tools
+          FROM article_tool_calls atc
+          JOIN article_conversations ac ON atc.conversation_id = ac.id
+          WHERE atc.created_at >= ${startDate}
+          AND ac.article_source = ${domain}
+        `
+      : esgPrisma.$queryRaw<Array<{
+          total_calls: bigint;
+          successful_calls: bigint;
+          unique_tools: bigint;
+        }>>`
+          SELECT
+            COUNT(atc.id)::bigint as total_calls,
+            COUNT(*) FILTER (WHERE atc.status = 'success')::bigint as successful_calls,
+            COUNT(DISTINCT atc.tool_name)::bigint as unique_tools
+          FROM article_tool_calls atc
+          JOIN article_conversations ac ON atc.conversation_id = ac.id
+          WHERE atc.created_at >= ${startDate}
+        `;
+
+    const toolOverview = await toolOverviewQuery;
+    const totalToolCalls = Number(toolOverview[0]?.total_calls || 0);
+    const successfulToolCalls = Number(toolOverview[0]?.successful_calls || 0);
+    const uniqueTools = Number(toolOverview[0]?.unique_tools || 0);
+
     // Domain stats
     const domainStatsRaw = await esgPrisma.$queryRaw<Array<{ 
       domain: string; 
@@ -354,6 +388,58 @@ export async function GET(req: NextRequest) {
       cost: Number((r as any).cost || 0),
     })));
 
+    const topToolsQuery = domain !== 'all'
+      ? esgPrisma.$queryRaw<Array<{
+          tool_name: string;
+          calls: bigint;
+          success_count: bigint;
+          error_count: bigint;
+          avg_execution_ms: number | null;
+        }>>`
+          SELECT
+            atc.tool_name,
+            COUNT(*)::bigint as calls,
+            COUNT(*) FILTER (WHERE atc.status = 'success')::bigint as success_count,
+            COUNT(*) FILTER (WHERE atc.status = 'error')::bigint as error_count,
+            AVG(atc.execution_time_ms)::float as avg_execution_ms
+          FROM article_tool_calls atc
+          JOIN article_conversations ac ON atc.conversation_id = ac.id
+          WHERE atc.created_at >= ${startDate}
+          AND ac.article_source = ${domain}
+          GROUP BY atc.tool_name
+          ORDER BY calls DESC
+          LIMIT 10
+        `
+      : esgPrisma.$queryRaw<Array<{
+          tool_name: string;
+          calls: bigint;
+          success_count: bigint;
+          error_count: bigint;
+          avg_execution_ms: number | null;
+        }>>`
+          SELECT
+            atc.tool_name,
+            COUNT(*)::bigint as calls,
+            COUNT(*) FILTER (WHERE atc.status = 'success')::bigint as success_count,
+            COUNT(*) FILTER (WHERE atc.status = 'error')::bigint as error_count,
+            AVG(atc.execution_time_ms)::float as avg_execution_ms
+          FROM article_tool_calls atc
+          JOIN article_conversations ac ON atc.conversation_id = ac.id
+          WHERE atc.created_at >= ${startDate}
+          GROUP BY atc.tool_name
+          ORDER BY calls DESC
+          LIMIT 10
+        `;
+
+    const topToolsRaw = await topToolsQuery;
+    const topTools = topToolsRaw.map((tool) => ({
+      toolName: tool.tool_name,
+      calls: Number(tool.calls),
+      successCount: Number(tool.success_count),
+      errorCount: Number(tool.error_count),
+      avgExecutionMs: tool.avg_execution_ms !== null ? Math.round(Number(tool.avg_execution_ms)) : null,
+    }));
+
     // Recent activity
     const recentActivityQuery = domain !== 'all'
       ? esgPrisma.$queryRaw<Array<{
@@ -420,10 +506,62 @@ export async function GET(req: NextRequest) {
     
     const recentActivity = await recentActivityQuery;
 
+    const recentToolCallsQuery = domain !== 'all'
+      ? esgPrisma.$queryRaw<Array<{
+          tool_name: string;
+          status: string;
+          execution_time_ms: number | null;
+          created_at: Date;
+          article_id: number;
+          article_source: string;
+          user_id: number | null;
+        }>>`
+          SELECT
+            atc.tool_name,
+            atc.status,
+            atc.execution_time_ms,
+            atc.created_at,
+            ac.article_id,
+            ac.article_source,
+            ac.user_id
+          FROM article_tool_calls atc
+          JOIN article_conversations ac ON atc.conversation_id = ac.id
+          WHERE atc.created_at >= ${startDate}
+          AND ac.article_source = ${domain}
+          ORDER BY atc.created_at DESC
+          LIMIT 20
+        `
+      : esgPrisma.$queryRaw<Array<{
+          tool_name: string;
+          status: string;
+          execution_time_ms: number | null;
+          created_at: Date;
+          article_id: number;
+          article_source: string;
+          user_id: number | null;
+        }>>`
+          SELECT
+            atc.tool_name,
+            atc.status,
+            atc.execution_time_ms,
+            atc.created_at,
+            ac.article_id,
+            ac.article_source,
+            ac.user_id
+          FROM article_tool_calls atc
+          JOIN article_conversations ac ON atc.conversation_id = ac.id
+          WHERE atc.created_at >= ${startDate}
+          ORDER BY atc.created_at DESC
+          LIMIT 20
+        `;
+
+    const recentToolCallsRaw = await recentToolCallsQuery;
+
     // Performance metrics
     const avgTokensPerSession = totalSessions > 0 ? Math.round(totalTokens / totalSessions) : 0;
     const avgCostPerSession = totalSessions > 0 ? (totalCost / totalSessions) : 0;
     const avgSessionsPerUser = uniqueUsers > 0 ? (totalSessions / uniqueUsers) : 0;
+    const avgToolCallsPerSession = totalSessions > 0 ? (totalToolCalls / totalSessions) : 0;
 
     // Get user details for recent activity
     const recentActivityWithUsers = await Promise.all(
@@ -448,6 +586,38 @@ export async function GET(req: NextRequest) {
       })
     );
 
+    const recentToolUserIds = Array.from(
+      new Set(
+        recentToolCallsRaw
+          .map((toolCall) => toolCall.user_id)
+          .filter((userId): userId is number => userId !== null)
+      )
+    );
+
+    const recentToolUsers = recentToolUserIds.length
+      ? await esgPrisma.users.findMany({
+          where: { id: { in: recentToolUserIds } },
+          select: { id: true, email: true, first_name: true, last_name: true },
+        })
+      : [];
+
+    const recentToolUsersById = new Map(recentToolUsers.map((user) => [user.id, user]));
+    const recentToolCalls = recentToolCallsRaw.map((toolCall) => {
+      const user = toolCall.user_id ? recentToolUsersById.get(toolCall.user_id) : null;
+
+      return {
+        toolName: toolCall.tool_name,
+        status: toolCall.status,
+        executionTimeMs: toolCall.execution_time_ms,
+        createdAt: toolCall.created_at.toISOString(),
+        articleId: toolCall.article_id,
+        domain: toolCall.article_source,
+        userId: toolCall.user_id || 0,
+        userName: user ? `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email || 'Unknown' : 'Unknown',
+        userEmail: user?.email || 'N/A',
+      };
+    });
+
     // ============================================================
     // RESPONSE
     // ============================================================
@@ -465,9 +635,13 @@ export async function GET(req: NextRequest) {
         uniqueUsers,
         totalTokens,
         totalCost,
+        totalToolCalls,
+        successfulToolCalls,
+        uniqueTools,
         avgTokensPerSession,
         avgCostPerSession,
         avgSessionsPerUser,
+        avgToolCallsPerSession,
       },
       domainBreakdown: domainStats.map(stat => ({
         domain: stat.domain,
@@ -499,7 +673,9 @@ export async function GET(req: NextRequest) {
         cost: article.cost,
         messages: article.messages,
       })),
+      topTools,
       recentActivity: recentActivityWithUsers,
+      recentToolCalls,
     });
   } catch (error: any) {
     console.error('[Admin AI Stats] Error:', error);

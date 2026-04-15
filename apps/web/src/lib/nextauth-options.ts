@@ -3,6 +3,7 @@ import Credentials from "next-auth/providers/credentials";
 import { findUserByEmail } from "@/lib/auth-db";
 import bcrypt from "bcryptjs";
 import { checkLoginRateLimit, resetLoginAttempts, formatLockoutTime, recordFailedAttempt } from "@/lib/rate-limit";
+import { recordUserActivity, updateUserLastLogin } from "@/lib/user-activity";
 
 export const authOptions: NextAuthOptions = {
   pages: { signIn: "/signin" },           // use your custom page
@@ -58,6 +59,18 @@ export const authOptions: NextAuthOptions = {
 
         // Successful login - reset rate limit attempts
         resetLoginAttempts(String(creds.email));
+
+        const loginTimestamp = new Date();
+        await Promise.allSettled([
+          updateUserLastLogin(row.id, loginTimestamp),
+          recordUserActivity({
+            userId: row.id,
+            action: "login",
+            resourceType: "auth",
+            details: "Successful sign in",
+            occurredAt: loginTimestamp,
+          }),
+        ]);
 
         // derive fields robustly
         const displayName =

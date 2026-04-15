@@ -100,6 +100,7 @@ interface PerformanceMetrics {
   };
   activity: {
     activeUsersLast24h: number;
+    totalActivityLast24h: number;
     totalLikesLast24h: number;
   };
 }
@@ -631,6 +632,10 @@ export default function SystemHealthPage() {
                 <div className="flex justify-between">
                   <span className="text-gray-500">Active Users:</span>
                   <span className="font-bold">{performance?.activity.activeUsersLast24h}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Total Activity:</span>
+                  <span className="font-bold">{performance?.activity.totalActivityLast24h}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Total Likes:</span>

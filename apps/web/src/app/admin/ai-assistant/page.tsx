@@ -15,6 +15,7 @@ import {
   BarChart3,
   Clock,
   Zap,
+  Wrench,
   AlertCircle,
   Loader2,
   Download,
@@ -34,9 +35,13 @@ interface Stats {
     uniqueUsers: number;
     totalTokens: number;
     totalCost: number;
+    totalToolCalls: number;
+    successfulToolCalls: number;
+    uniqueTools: number;
     avgTokensPerSession: number;
     avgCostPerSession: number;
     avgSessionsPerUser: number;
+    avgToolCallsPerSession: number;
   };
   domainBreakdown: Array<{
     domain: string;
@@ -64,6 +69,13 @@ interface Stats {
     sessions: number;
     tokens: number;
   }>;
+  topTools: Array<{
+    toolName: string;
+    calls: number;
+    successCount: number;
+    errorCount: number;
+    avgExecutionMs: number | null;
+  }>;
   recentActivity: Array<{
     sessionId: string;
     articleId: number;
@@ -75,6 +87,17 @@ interface Stats {
     messageCount: number;
     tokens: number;
     cost: number;
+  }>;
+  recentToolCalls: Array<{
+    toolName: string;
+    status: string;
+    executionTimeMs: number | null;
+    createdAt: string;
+    articleId: number;
+    domain: string;
+    userId: number;
+    userName: string;
+    userEmail: string;
   }>;
 }
 
@@ -207,13 +230,20 @@ export default function AIAssistantStatsPage() {
         </div>
 
         {/* Overview Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
           <StatCard
             icon={<MessageSquare className="w-6 h-6" />}
             title="Total Sessions"
             value={formatNumber(stats.overview.totalSessions)}
             subtitle={`${stats.overview.activeSessions} active`}
             color="blue"
+          />
+          <StatCard
+            icon={<Wrench className="w-6 h-6" />}
+            title="Tool Calls"
+            value={formatNumber(stats.overview.totalToolCalls)}
+            subtitle={`${stats.overview.uniqueTools} tools • ${stats.overview.avgToolCallsPerSession.toFixed(1)} per session`}
+            color="indigo"
           />
           <StatCard
             icon={<Users className="w-6 h-6" />}
@@ -372,6 +402,46 @@ export default function AIAssistantStatsPage() {
           </div>
         </div>
 
+        <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100 mb-8">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <Wrench className="w-5 h-5 text-indigo-600" />
+            Top Tools
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Tool</th>
+                  <th className="text-right py-3 px-4 text-sm font-semibold text-gray-600">Calls</th>
+                  <th className="text-right py-3 px-4 text-sm font-semibold text-gray-600">Success</th>
+                  <th className="text-right py-3 px-4 text-sm font-semibold text-gray-600">Errors</th>
+                  <th className="text-right py-3 px-4 text-sm font-semibold text-gray-600">Avg Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.topTools.map((tool) => (
+                  <tr key={tool.toolName} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="py-3 px-4 font-medium text-gray-900">{tool.toolName}</td>
+                    <td className="text-right py-3 px-4 text-gray-700">{formatNumber(tool.calls)}</td>
+                    <td className="text-right py-3 px-4 text-green-700">{formatNumber(tool.successCount)}</td>
+                    <td className="text-right py-3 px-4 text-red-600">{formatNumber(tool.errorCount)}</td>
+                    <td className="text-right py-3 px-4 text-gray-600">
+                      {tool.avgExecutionMs !== null ? `${formatNumber(tool.avgExecutionMs)} ms` : '—'}
+                    </td>
+                  </tr>
+                ))}
+                {stats.topTools.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="py-6 px-4 text-center text-sm text-gray-500">
+                      No tool usage recorded for this period.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         {/* Recent Activity */}
         <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
           <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
@@ -404,6 +474,45 @@ export default function AIAssistantStatsPage() {
             ))}
           </div>
         </div>
+
+        <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100 mt-8">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <Wrench className="w-5 h-5 text-indigo-600" />
+            Recent Tool Calls
+          </h3>
+          <div className="space-y-3">
+            {stats.recentToolCalls.slice(0, 10).map((toolCall, index) => (
+              <div key={`${toolCall.toolName}-${toolCall.createdAt}-${index}`} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div className="flex items-center gap-4">
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                    toolCall.status === 'success' ? 'bg-green-100' : 'bg-red-100'
+                  }`}>
+                    <Wrench className={`w-5 h-5 ${
+                      toolCall.status === 'success' ? 'text-green-600' : 'text-red-600'
+                    }`} />
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-900">{toolCall.userName}</p>
+                    <p className="text-sm text-gray-500">
+                      {toolCall.toolName} • Article #{toolCall.articleId} • {toolCall.domain.toUpperCase()} • {new Date(toolCall.createdAt).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className={`font-medium ${toolCall.status === 'success' ? 'text-green-700' : 'text-red-600'}`}>
+                    {toolCall.status}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    {toolCall.executionTimeMs !== null ? `${formatNumber(toolCall.executionTimeMs)} ms` : 'No timing'}
+                  </p>
+                </div>
+              </div>
+            ))}
+            {stats.recentToolCalls.length === 0 && (
+              <p className="text-sm text-gray-500">No tool calls yet.</p>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -415,13 +524,14 @@ function StatCard({ icon, title, value, subtitle, color }: {
   title: string;
   value: string;
   subtitle: string;
-  color: 'blue' | 'green' | 'purple' | 'orange';
+  color: 'blue' | 'green' | 'purple' | 'orange' | 'indigo';
 }) {
   const colorClasses = {
     blue: 'from-blue-500 to-blue-600',
     green: 'from-green-500 to-green-600',
     purple: 'from-purple-500 to-purple-600',
     orange: 'from-orange-500 to-orange-600',
+    indigo: 'from-indigo-500 to-indigo-600',
   };
 
   return (

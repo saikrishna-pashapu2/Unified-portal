@@ -3,6 +3,7 @@ import "./globals.css";
 import AuthProvider from "@/components/providers/AuthProvider";
 import DomainTheme from "@/components/providers/DomainTheme";
 import { DomainSwitchProvider } from "@/components/providers/DomainSwitchAnimation";
+import { UserActivityTracker } from "@/components/analytics/UserActivityTracker";
 
 export const metadata: Metadata = {
   title: "ESG Credit Rating",
@@ -19,7 +20,10 @@ export default function RootLayout({
       <body>
         <AuthProvider>
           <DomainSwitchProvider>
-            <DomainTheme>{children}</DomainTheme>
+            <DomainTheme>
+              <UserActivityTracker />
+              {children}
+            </DomainTheme>
           </DomainSwitchProvider>
         </AuthProvider>
       </body>

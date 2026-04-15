@@ -17,6 +17,7 @@ import {
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import ShareButton from "@/components/events/ShareButton";
+import { TrackActivity } from "@/components/analytics/UserActivityTracker";
 
 function formatDateTime(date?: string | null, time?: string | null, timezone?: string | null) {
   if (!date) return null;
@@ -124,6 +125,13 @@ export default async function CreditEventDetailPage({
 
   return (
     <main className="min-h-screen bg-[var(--background)]">
+      <TrackActivity
+        action="view_event"
+        resourceType="event"
+        resourceId={numericId}
+        details={`/${domain}/events/${numericId}`}
+      />
+
       {/* Hero Section */}
       <div className="relative overflow-hidden">
         {/* Background gradient - Slate theme for Credit */}

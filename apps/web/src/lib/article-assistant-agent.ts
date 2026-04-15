@@ -80,7 +80,15 @@ export async function streamArticleChat(
   articleContent: string,
   articleTitle: string,
   articleSummary: string | null,
-  openaiApiKey: string
+  openaiApiKey: string,
+  onToolExecution?: (event: {
+    toolName: string;
+    toolInput: unknown;
+    toolOutput: unknown | null;
+    status: "success" | "error";
+    executionTimeMs: number | null;
+    errorMessage: string | null;
+  }) => Promise<void> | void
 ): Promise<AsyncGenerator<string>> {
   const llm = new ChatOpenAI({
     openAIApiKey: openaiApiKey,
@@ -280,6 +288,38 @@ Remember: Use web_search proactively to provide comprehensive, well-sourced answ
     }),
   ];
 
+  const logToolExecution = async (event: {
+    toolName: string;
+    toolInput: unknown;
+    toolOutput: unknown | null;
+    status: "success" | "error";
+    executionTimeMs: number | null;
+    errorMessage: string | null;
+  }) => {
+    if (!onToolExecution) {
+      return;
+    }
+
+    try {
+      await onToolExecution(event);
+    } catch (error) {
+      console.error("[Agent] Failed to record tool execution:", error);
+    }
+  };
+
+  const resolveToolResult = async (toolResult: string | AsyncGenerator<unknown, string, any>) => {
+    if (typeof toolResult === "string") {
+      return toolResult;
+    }
+
+    let output = "";
+    for await (const chunk of toolResult) {
+      output += String(chunk ?? "");
+    }
+
+    return output;
+  };
+
   return (async function* () {
     try {
       console.log("[Agent] Starting with", formattedMessages.length, "messages");
@@ -306,9 +346,19 @@ Remember: Use web_search proactively to provide comprehensive, well-sourced answ
         for (const toolCall of initialResponse.tool_calls) {
           const tool = tools.find(t => t.name === toolCall.name);
           if (tool && toolCall.id) {
+            const startedAt = Date.now();
             try {
               console.log(`[Agent] Executing ${toolCall.name} with args:`, JSON.stringify(toolCall.args).substring(0, 100));
-              const toolResult = await tool.func(toolCall.args as any);
+              const rawToolResult = await tool.func(toolCall.args as any);
+              const toolResult = await resolveToolResult(rawToolResult);
+              await logToolExecution({
+                toolName: toolCall.name,
+                toolInput: toolCall.args,
+                toolOutput: toolResult,
+                status: "success",
+                executionTimeMs: Date.now() - startedAt,
+                errorMessage: null,
+              });
               
               // If it's a chart, extract and store the marker separately
               if (toolCall.name === 'generate_chart' && toolResult.includes('<CHART>')) {
@@ -332,6 +382,14 @@ Remember: Use web_search proactively to provide comprehensive, well-sourced answ
               }
             } catch (error) {
               console.error("[Agent] Tool execution failed:", error);
+              await logToolExecution({
+                toolName: toolCall.name,
+                toolInput: toolCall.args,
+                toolOutput: null,
+                status: "error",
+                executionTimeMs: Date.now() - startedAt,
+                errorMessage: error instanceof Error ? error.message : "Tool execution failed.",
+              });
               toolResults.push({ id: toolCall.id, content: "Search failed. Please try rephrasing your question." });
             }
           }
@@ -376,9 +434,19 @@ Remember: Use web_search proactively to provide comprehensive, well-sourced answ
           for (const toolCall of secondResponse.tool_calls) {
             const tool = tools.find(t => t.name === toolCall.name);
             if (tool && toolCall.id) {
+              const startedAt = Date.now();
               try {
                 console.log(`[Agent] Executing ${toolCall.name} with args:`, JSON.stringify(toolCall.args).substring(0, 200));
-                const toolResult = await tool.func(toolCall.args as any);
+                const rawToolResult = await tool.func(toolCall.args as any);
+                const toolResult = await resolveToolResult(rawToolResult);
+                await logToolExecution({
+                  toolName: toolCall.name,
+                  toolInput: toolCall.args,
+                  toolOutput: toolResult,
+                  status: "success",
+                  executionTimeMs: Date.now() - startedAt,
+                  errorMessage: null,
+                });
                 
                 // If it's a chart, extract and store the marker separately
                 if (toolCall.name === 'generate_chart' && toolResult.includes('<CHART>')) {
@@ -394,6 +462,14 @@ Remember: Use web_search proactively to provide comprehensive, well-sourced answ
                 }
               } catch (error) {
                 console.error("[Agent] Tool execution failed:", error);
+                await logToolExecution({
+                  toolName: toolCall.name,
+                  toolInput: toolCall.args,
+                  toolOutput: null,
+                  status: "error",
+                  executionTimeMs: Date.now() - startedAt,
+                  errorMessage: error instanceof Error ? error.message : "Tool execution failed.",
+                });
                 additionalToolResults.push({ id: toolCall.id, content: "Tool execution failed." });
               }
             }
