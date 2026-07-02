@@ -677,8 +677,13 @@ function runLocalDriverChecks(
   if (linkedSources.every((source) => source.authorityScore < 55)) {
     sourceIssues.push("source mix is not authoritative enough");
   }
-  if (metricSupport.unsupportedMetrics.length > 0) {
-    unsupportedMetrics.push(...metricSupport.unsupportedMetrics);
+  const blockingUnsupportedMetrics = metricSupport.unsupportedMetrics.filter(
+    isBlockingUnsupportedMetricToken,
+  );
+  if (blockingUnsupportedMetrics.length > 0) {
+    unsupportedMetrics.push(
+      ...blockingUnsupportedMetrics.map(formatUnsupportedMetricIssue),
+    );
   }
   if (driver.keySources.some(isGenericKeySource)) {
     sourceIssues.push("generic key source label used");
@@ -782,10 +787,14 @@ function combineVerificationResults(
 }
 
 function isBlockingModelIssue(issue: string): boolean {
-  const normalized = issue.toLowerCase();
-  if (!normalized.trim()) return false;
+  const trimmed = issue.trim();
+  const normalized = trimmed.toLowerCase();
+  if (!normalized) return false;
 
   if (isAffirmativeVerifierNote(normalized)) {
+    return false;
+  }
+  if (isStandaloneYearToken(trimmed) || isStandaloneYearOnlyIssue(trimmed)) {
     return false;
   }
 
@@ -952,11 +961,12 @@ function normalizeSingleDriver(
   const hadGenericKeySources = driver.keySources.some(isGenericKeySource);
   const keySources = normalizeKeySources(driver.keySources, linkedSources);
   const metricSupport = validateMetricSupport(driver.evidenceKpi, linkedSources);
+  const blockingUnsupportedMetrics = metricSupport.unsupportedMetrics.filter(
+    isBlockingUnsupportedMetricToken,
+  );
   const weakGenericTitle = isWeakGenericTitle(driver.driverTitle);
   const validationWarnings = [
-    ...metricSupport.unsupportedMetrics.map(
-      (metric) => `Metric not found in linked evidence: ${metric}`,
-    ),
+    ...blockingUnsupportedMetrics.map(formatUnsupportedMetricIssue),
     ...(weakGenericTitle ? ["Title is too generic for pitch use"] : []),
     ...(hadGenericKeySources ? ["Generic source label was replaced"] : []),
   ];
@@ -979,7 +989,7 @@ function normalizeSingleDriver(
       linkedSources,
       driver.evidenceKpi,
       hadGenericKeySources,
-      !metricSupport.supported,
+      blockingUnsupportedMetrics.length > 0,
       weakGenericTitle,
     ),
     lastChecked: new Date().toISOString().slice(0, 10),
@@ -1146,7 +1156,19 @@ function validateMetricSupport(
 
   const sourceText = normalizeForMetricMatch(
     linkedSources
-      .map((source) => `${source.title} ${source.snippet} ${source.contentSnippet}`)
+      .map((source) =>
+        [
+          source.title,
+          source.snippet,
+          source.contentSnippet,
+          source.publishedDate,
+          source.updatedDate,
+          source.lastModified,
+          source.retrievedAt,
+        ]
+          .filter(Boolean)
+          .join(" "),
+      )
       .join(" "),
   );
   const unsupportedMetrics = metrics.filter(
@@ -1154,9 +1176,35 @@ function validateMetricSupport(
   );
 
   return {
-    supported: unsupportedMetrics.length === 0,
+    supported: !unsupportedMetrics.some(isBlockingUnsupportedMetricToken),
     unsupportedMetrics,
   };
+}
+
+function isBlockingUnsupportedMetricToken(metric: string): boolean {
+  return !isStandaloneYearToken(metric);
+}
+
+function isStandaloneYearToken(value: string): boolean {
+  return /^20[2-5]\d$/.test(value.trim());
+}
+
+function isStandaloneYearOnlyIssue(issue: string): boolean {
+  const normalized = issue.trim().toLowerCase();
+  const yearMatch = normalized.match(/\b20[2-5]\d\b/);
+  if (!yearMatch) return false;
+
+  const fillerPattern =
+    /\b(metric|date|year|not|found|in|linked|provided|evidence|source|sources|snippet|snippets)\b|[:;,.\-\s]/g;
+  const withoutYear = normalized
+    .replace(/\b20[2-5]\d\b/g, "")
+    .replace(fillerPattern, "");
+
+  return withoutYear.length === 0;
+}
+
+function formatUnsupportedMetricIssue(metric: string): string {
+  return `Metric not found in linked evidence: ${metric}`;
 }
 
 function extractEvidenceMetrics(sources: EsgDriverSource[]): string[] {
