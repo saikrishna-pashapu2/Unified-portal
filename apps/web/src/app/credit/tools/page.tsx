@@ -2,17 +2,15 @@ import Link from "next/link";
 import { 
   Building2, 
   LayoutDashboard,
-  ChevronRight,
-  FileCheck
+  ChevronRight
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Import Tool Components
 import FitchTool from "./fitch/ui";
-import TendersTool from "./tenders-tool";
 
 // Tool Configuration Types
-type ToolId = "overview" | "fitch" | "tenders";
+type ToolId = "overview" | "fitch";
 
 interface ToolConfig {
   id: ToolId;
@@ -37,13 +35,6 @@ const CREDIT_TOOLS: ToolConfig[] = [
     icon: Building2, 
     component: FitchTool,
     description: "Fitch ratings search and analysis"
-  },
-  {
-    id: "tenders",
-    label: "Tenders",
-    icon: FileCheck,
-    component: TendersTool,
-    description: "Explore credit-related tenders"
   }
 ];
 
@@ -52,8 +43,6 @@ export default async function CreditToolsPage({
 }: { 
   searchParams: { [key: string]: string | string[] | undefined };
 }) {
-  const domain = "credit";
-  
   // All tools available
   const domainTools = CREDIT_TOOLS;
 
@@ -162,13 +151,7 @@ export default async function CreditToolsPage({
               </div>
             ) : (
               <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
-                {/* Pass props to ActiveComponent if it's TendersTool */}
-                {activeToolId === 'tenders' ? (
-                   // @ts-ignore
-                   <ActiveComponent domain={domain} searchParams={searchParams} />
-                ) : (
-                   <ActiveComponent />
-                )}
+                <ActiveComponent />
               </div>
             )}
           </div>

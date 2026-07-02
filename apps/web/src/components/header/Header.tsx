@@ -1,7 +1,7 @@
 import Link from "next/link";
 import DomainSwitch from "./DomainSwitch";
 import UserMenu from "./UserMenu";
-import { Home, Newspaper, CalendarDays, BookOpen, Wrench, Leaf, TrendingUp } from "lucide-react";
+import { Home, Newspaper, CalendarDays, BookOpen, Wrench, Leaf, TrendingUp, FileCheck } from "lucide-react";
 
 export default function Header({ domain }: { domain: "esg" | "credit" }) {
   const base = `/${domain}`;
@@ -11,6 +11,7 @@ export default function Header({ domain }: { domain: "esg" | "credit" }) {
     { href: base, label: "Home", icon: Home },
     { href: `${base}/articles`, label: "Articles", icon: Newspaper },
     { href: `${base}/events`, label: "Events", icon: CalendarDays },
+    { href: `${base}/tenders`, label: "Tenders", icon: FileCheck },
     { href: `${base}/publications`, label: "Publications", icon: BookOpen },
     { href: `${base}/tools`, label: "Tools", icon: Wrench },
   ];

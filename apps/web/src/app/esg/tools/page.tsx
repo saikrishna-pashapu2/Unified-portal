@@ -4,8 +4,7 @@ import {
   FileSpreadsheet, 
   FileText, 
   LayoutDashboard,
-  ChevronRight,
-  FileCheck
+  ChevronRight
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -13,10 +12,9 @@ import { cn } from "@/lib/utils";
 import EsgSearch from "./search";
 import EsgExcel from "./excel";
 import PdfxHome from "@/app/esg/pdfx/page";
-import TendersTool from "./tenders-tool";
 
 // Tool Configuration Types
-type ToolId = "overview" | "search" | "excel" | "pdfx" | "tenders";
+type ToolId = "overview" | "search" | "excel" | "pdfx";
 
 interface ToolConfig {
   id: ToolId;
@@ -55,13 +53,6 @@ const TOOLS: ToolConfig[] = [
     icon: FileText, 
     component: PdfxHome,
     description: "Translate and analyze PDF documents"
-  },
-  {
-    id: "tenders",
-    label: "Tenders",
-    icon: FileCheck,
-    component: TendersTool,
-    description: "Browse government tenders related to ESG"
   }
 ];
 
@@ -70,8 +61,6 @@ export default async function ToolsPage({
 }: { 
   searchParams: { [key: string]: string | string[] | undefined };
 }) {
-  const domain = "esg";
-  
   // All tools available
   const domainTools = TOOLS;
 
@@ -181,13 +170,7 @@ export default async function ToolsPage({
               </div>
             ) : (
               <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
-                {/* Pass props to ActiveComponent if it's TendersTool */}
-                {activeToolId === 'tenders' ? (
-                   // @ts-ignore
-                   <ActiveComponent domain={domain} searchParams={searchParams} />
-                ) : (
-                   <ActiveComponent />
-                )}
+                <ActiveComponent />
               </div>
             )}
           </div>
