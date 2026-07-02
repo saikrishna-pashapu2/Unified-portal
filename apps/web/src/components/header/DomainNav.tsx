@@ -10,7 +10,8 @@ const itemsByDomain = {
     { href: "/esg/tenders", label: "Tenders" },
     { href: "/esg/publications", label: "Publications" },
     { href: "/esg/tools", label: "All Tools" },
-    { href: "/esg/pdf-translate", label: "PDF Translate" },
+    { href: "/esg/tools?tool=drivers", label: "Driver Agent" },
+    { href: "/esg/pdfx", label: "PDF Translate" },
   ],
   credit: [
     { href: "/credit", label: "Home" },

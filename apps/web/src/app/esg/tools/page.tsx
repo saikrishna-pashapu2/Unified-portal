@@ -52,10 +52,10 @@ const TOOLS: ToolConfig[] = [
   },
   {
     id: "drivers",
-    label: "ESG Drivers",
+    label: "ESG Driver Agent",
     icon: Sparkles,
     component: EsgDriversTool,
-    description: "Generate country and sector ESG drivers"
+    description: "Generate country and sector ESG driver packs with evidence"
   },
   { 
     id: "pdfx", 

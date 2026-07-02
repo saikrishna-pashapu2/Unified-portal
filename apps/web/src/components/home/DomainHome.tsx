@@ -67,6 +67,12 @@ const domainThemes: Record<Domain, DomainTheme> = {
     icon: Leaf,
     workflows: [
       {
+        href: "/esg/tools?tool=drivers",
+        label: "Driver agent",
+        description: "Generate ESG driver packs by country and sector.",
+        icon: Search,
+      },
+      {
         href: "/esg/events",
         label: "Events",
         description: "Upcoming sustainability briefings and forums.",
