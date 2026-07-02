@@ -106,25 +106,26 @@ function formatDisplayDate(value: Date | string | null | undefined) {
 export default async function CreditArticlesPage({
   searchParams,
 }: {
-  searchParams: SearchParams;
+  searchParams: Promise<SearchParams>;
 }) {
-  const selectedRegion = resolveRegion(searchParams.region);
-  const rawSector = resolveSector(searchParams.sector);
+  const resolvedSearchParams = await searchParams;
+  const selectedRegion = resolveRegion(resolvedSearchParams.region);
+  const rawSector = resolveSector(resolvedSearchParams.sector);
   const selectedSector =
     selectedRegion === "MiddleEast" || selectedRegion === "CentralAsia"
       ? rawSector
       : undefined;
-  const page = Math.max(1, Number(searchParams.page ?? "1") || 1);
-  const date = searchParams.date;
-  const dateFrom = searchParams.dateFrom;
-  const dateTo = searchParams.dateTo;
+  const page = Math.max(1, Number(resolvedSearchParams.page ?? "1") || 1);
+  const date = resolvedSearchParams.date;
+  const dateFrom = resolvedSearchParams.dateFrom;
+  const dateTo = resolvedSearchParams.dateTo;
 
   // Fetch sources filtered by region and sector
   const sources = await fetchCreditSources({
     region: selectedRegion,
     sector: selectedSector,
   });
-  const rawSource = searchParams.source?.trim() ?? "";
+  const rawSource = resolvedSearchParams.source?.trim() ?? "";
   const sourceOptions = [...sources].sort((a, b) => a.localeCompare(b));
   const selectedSource = sourceOptions.includes(rawSource) ? rawSource : undefined;
 

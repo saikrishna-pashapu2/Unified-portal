@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 // PUT - Toggle alert active status
 export async function PUT(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -18,7 +18,8 @@ export async function PUT(
     }
 
     const userId = Number((session.user as any).id);
-    const alertId = parseInt(params.id);
+    const { id } = await params;
+    const alertId = parseInt(id);
     const body = await req.json();
 
     const [updated] = await esgPrisma.$queryRaw<any[]>`

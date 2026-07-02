@@ -175,7 +175,7 @@ function SignInForm() {
                 </label>
               </div>
               <div className="text-sm">
-                <a href="#" className="font-medium text-emerald-600 hover:text-emerald-500 transition-colors">
+                <a href="/forgot-password" className="font-medium text-emerald-600 hover:text-emerald-500 transition-colors">
                   Forgot password?
                 </a>
               </div>

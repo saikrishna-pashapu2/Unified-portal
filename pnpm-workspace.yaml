@@ -1,3 +1,36 @@
 packages:
   - 'packages/*'
   - 'apps/*'
+overrides:
+  '@prisma/client': 5.22.0
+  '@smithy/config-resolver': ^4.4.0
+  prisma: 5.22.0
+  next-auth: ^4.24.12
+  '@langchain/core': ^1.1.28
+  next: ^15.5.16
+  axios: ^1.16.0
+  basic-ftp: ^5.2.0
+  brace-expansion: ^2.0.3
+  dompurify: ^3.4.11
+  fast-xml-parser: ^5.3.5
+  follow-redirects: ^1.16.0
+  form-data: ^4.0.6
+  glob: ^10.5.0
+  ip-address: ^10.1.1
+  js-yaml: ^4.2.0
+  jspdf: ^4.2.1
+  js-cookie: ^3.0.7
+  langsmith: ^0.6.0
+  mdast-util-to-hast: ^13.2.1
+  minimatch: ^9.0.7
+  nodemailer: ^9.0.1
+  pdfjs-dist: ^4.2.67
+  picomatch: ^2.3.2
+  postcss: ^8.5.10
+  protobufjs: ^7.5.5
+  preact: ^10.27.3
+  tar: ^7.5.16
+  undici: ^7.28.0
+  uuid: ^11.1.1
+  ws: ^8.21.0
+  yaml: ^2.8.3

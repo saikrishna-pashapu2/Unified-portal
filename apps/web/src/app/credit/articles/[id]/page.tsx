@@ -47,17 +47,18 @@ export default async function ArticleDetail({
   params,
   searchParams,
 }: { 
-  params: { id: string };
-  searchParams: { back?: string };
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ back?: string }>;
 }) {
+  const [{ id }, resolvedSearchParams] = await Promise.all([params, searchParams]);
   const domain = "credit";
-  const item = await fetchArticle(params.id);
+  const item = await fetchArticle(id);
   if (!item) {
     return <div className="mx-auto max-w-3xl p-6">Not found</div>;
   }
 
   // Determine the back URL - use the one from query params if available, otherwise default
-  const backUrl = searchParams.back || `/credit/articles`;
+  const backUrl = resolvedSearchParams.back || `/credit/articles`;
 
   // Use content first, fallback to summary
   const body = (item as any).content ?? (item as any).summary ?? "";
@@ -65,7 +66,7 @@ export default async function ArticleDetail({
   // after you compute `item`, also compute like meta:
   const session = await getServerSession(authOptions);
   const userId = Number((session?.user as any)?.id || 0);
-  const contentId = Number(params.id);
+  const contentId = Number(id);
   let likeCount = 0, liked = false;
   const likers = Number.isFinite(contentId)
     ? await getLikers(domain, "article", contentId)
@@ -128,7 +129,7 @@ export default async function ArticleDetail({
         {/* Agent - 40% */}
         <div className="w-[40%] h-full">
           <ArticleAssistant
-            articleId={Number(params.id)}
+            articleId={Number(id)}
             domain={domain}
             articleTitle={item.title ?? "Untitled"}
           />

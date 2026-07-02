@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+.ignored_node_modules/
 .pnp
 .pnp.js
 .yarn/install-state.gz
@@ -74,6 +75,9 @@ Desktop.ini
 
 # Vercel
 .vercel
+
+# Backup (disabled features)
+_backup/
 
 # Turbo
 .turbo

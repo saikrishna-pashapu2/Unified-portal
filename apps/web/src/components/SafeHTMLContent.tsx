@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import DOMPurify from "isomorphic-dompurify";
 
 interface SafeHTMLContentProps {
   htmlContent: string;
@@ -12,15 +13,11 @@ export default function SafeHTMLContent({ htmlContent, className = "" }: SafeHTM
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Basic client-side sanitization - remove script tags and dangerous attributes
-    const basicSanitize = (html: string) => {
-      return html
-        .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-        .replace(/on\w+="[^"]*"/gi, '')
-        .replace(/javascript:/gi, '');
-    };
-
-    const cleaned = basicSanitize(htmlContent);
+    const cleaned = DOMPurify.sanitize(htmlContent, {
+      USE_PROFILES: { html: true },
+      FORBID_TAGS: ["script", "style", "iframe", "object", "embed", "form"],
+      FORBID_ATTR: ["style"],
+    });
     setSanitizedHTML(cleaned);
     setIsLoading(false);
   }, [htmlContent]);

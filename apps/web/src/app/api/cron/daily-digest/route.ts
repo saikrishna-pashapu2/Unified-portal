@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { queueDailyDigests } from "@/lib/alerts/digest";
+import { requireCronSecret } from "@/lib/api-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,22 +12,8 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(request: Request) {
   try {
-    // Verify cron secret for security
-    const authHeader = request.headers.get("authorization");
-    const expectedAuth = `Bearer ${process.env.CRON_SECRET}`;
-
-    if (!process.env.CRON_SECRET) {
-      console.error("⚠️  CRON_SECRET not set in environment variables");
-      return NextResponse.json(
-        { error: "Server misconfiguration" },
-        { status: 500 }
-      );
-    }
-
-    if (authHeader !== expectedAuth) {
-      console.warn("🚫 Unauthorized cron attempt:", authHeader);
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const authError = requireCronSecret(request);
+    if (authError) return authError;
 
     // Run the daily digest job
     const currentHour = new Date().getHours();

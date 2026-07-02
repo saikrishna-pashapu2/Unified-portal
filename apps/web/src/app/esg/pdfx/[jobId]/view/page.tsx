@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -25,8 +26,9 @@ type PagePayload = {
   translatedText: string;
 };
 
-export default function PdfView({ params }: { params: { jobId: string } }) {
-  const { jobId } = params;
+export default function PdfView() {
+  const params = useParams<{ jobId: string }>();
+  const jobId = params.jobId;
   const [pages, setPages] = useState<PagePayload[]>([]);
   const [page, setPage] = useState(1);
   const [mode, setMode] = useState<'single' | 'continuous'>('single');

@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -18,7 +18,8 @@ export async function GET(
     }
 
     const userEmail = session.user.email;
-    const historyId = parseInt(params.id);
+    const { id } = await params;
+    const historyId = parseInt(id);
 
     // Get the history record
     const history = await creditPrisma.fitch_upload_history.findFirst({

@@ -30,7 +30,7 @@ export async function extractPdfTextBuffer(fileBuf: Buffer): Promise<PageText[]>
   console.log('[extractPdfTextBuffer] Starting extraction, buffer size:', fileBuf.length);
   stubGraphicsIfNeeded();
 
-  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.js');
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
   // Disable worker & font face for Node
   (pdfjs as any).GlobalWorkerOptions.workerSrc = undefined;
 

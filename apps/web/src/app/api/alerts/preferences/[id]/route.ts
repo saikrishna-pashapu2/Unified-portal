@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 // PUT - Update specific alert
 export async function PUT(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -18,7 +18,8 @@ export async function PUT(
     }
 
     const userId = Number((session.user as any).id);
-    const alertId = parseInt(params.id);
+    const { id } = await params;
+    const alertId = parseInt(id);
     const body = await req.json();
 
     const emailAddr = body.email_address || (session.user as any).email;
@@ -72,7 +73,7 @@ export async function PUT(
 // DELETE - Delete specific alert
 export async function DELETE(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -81,7 +82,8 @@ export async function DELETE(
     }
 
     const userId = Number((session.user as any).id);
-    const alertId = parseInt(params.id);
+    const { id } = await params;
+    const alertId = parseInt(id);
 
     await esgPrisma.$queryRaw`
       DELETE FROM alert_preferences

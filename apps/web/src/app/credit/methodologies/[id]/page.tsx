@@ -4,8 +4,9 @@ import Link from "next/link";
 import { ArrowLeft, ExternalLink, Calendar, Building2 } from "lucide-react";
 import SafeHTMLContent from "@/components/SafeHTMLContent";
 
-export default async function MethodologyDetail({ params }: { params: { id: string } }) {
-  const methodology = await getMethodology(Number(params.id));
+export default async function MethodologyDetail({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const methodology = await getMethodology(Number(id));
   if (!methodology) return notFound();
 
   const isFitch = methodology.source?.startsWith("Fitch");
@@ -131,8 +132,9 @@ export default async function MethodologyDetail({ params }: { params: { id: stri
   );
 }
 
-export async function generateMetadata({ params }: { params: { id: string } }) {
-  const methodology = await getMethodology(Number(params.id));
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const methodology = await getMethodology(Number(id));
   
   if (!methodology) {
     return {

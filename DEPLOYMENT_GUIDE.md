@@ -42,7 +42,7 @@ This guide documents the complete deployment process for the ESG/Credit Portal o
 
 ### 1. Connect to EC2 Instance
 ```bash
-ssh -i your-key.pem ubuntu@YOUR_EC2_IP
+ssh -i "unified.pem" ubuntu@ec2-51-112-164-164.me-central-1.compute.amazonaws.com
 ```
 
 ### 2. Update System Packages

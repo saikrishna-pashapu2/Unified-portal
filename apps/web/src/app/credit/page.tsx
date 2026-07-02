@@ -1,7 +1,7 @@
 import { getHomeArticles, getFreshCount, getRecentSources } from "@/lib/home";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/nextauth-options";
-import CreditHome from "@/components/home/CreditHome";
+import DomainHome from "@/components/home/DomainHome";
 
 export const revalidate = 0;
 
@@ -17,7 +17,8 @@ export default async function CreditHomePage() {
   ]);
 
   return (
-    <CreditHome
+    <DomainHome
+      domain={domain}
       articles={articles}
       freshCount={freshCount}
       activeSources={activeSources}

@@ -13,26 +13,27 @@ export const revalidate = 0;
 export default async function EsgArticlesPage({
   searchParams,
 }: {
-  searchParams: { page?: string; date?: string; source?: string };
+  searchParams: Promise<{ page?: string; date?: string; source?: string }>;
 }) {
+  const resolvedSearchParams = await searchParams;
   const domain = "esg";
-  const page = Math.max(1, Number(searchParams.page ?? 1));
+  const page = Math.max(1, Number(resolvedSearchParams.page ?? 1));
   const pageSize = 15;
-  
+
   const { rows: items, total, date } = await listArticles({
     domain,
     page,
     pageSize,
-    date: searchParams.date,
-    source: searchParams.source,
+    date: resolvedSearchParams.date,
+    source: resolvedSearchParams.source,
   });
 
   const serializedItems = JSON.parse(JSON.stringify(items));
   const totalPages = Math.ceil(total / pageSize);
 
   const sources = await fetchSources(domain);
-  const selectedSource = searchParams.source && sources.includes(searchParams.source) 
-    ? searchParams.source 
+  const selectedSource = resolvedSearchParams.source && sources.includes(resolvedSearchParams.source)
+    ? resolvedSearchParams.source
     : undefined;
 
   const session = await getServerSession(authOptions);
@@ -46,7 +47,7 @@ export default async function EsgArticlesPage({
     getUserLikedSet(domain, userId, "article", ids),
   ]);
 
-  const displayDate = new Date(date).toLocaleDateString('en-US', { 
+  const displayDate = new Date(date).toLocaleDateString('en-US', {
     year: 'numeric', 
     month: 'long', 
     day: 'numeric' 
@@ -111,7 +112,7 @@ export default async function EsgArticlesPage({
               <input
                 type="date"
                 name="date"
-                defaultValue={searchParams.date || date.slice(0, 10)}
+                defaultValue={resolvedSearchParams.date || date.slice(0, 10)}
                 className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:bg-white transition-all"
               />
             </div>
@@ -164,8 +165,8 @@ export default async function EsgArticlesPage({
           <div className="space-y-6">
             {serializedItems.map((a: any, i: number) => {
               const backParams = new URLSearchParams();
-              if (searchParams.date) backParams.set('date', searchParams.date);
-              if (searchParams.source) backParams.set('source', searchParams.source);
+              if (resolvedSearchParams.date) backParams.set('date', resolvedSearchParams.date);
+              if (resolvedSearchParams.source) backParams.set('source', resolvedSearchParams.source);
               if (page > 1) backParams.set('page', String(page));
               const backQuery = backParams.toString();
               const articleHref = backQuery 

@@ -82,10 +82,11 @@ function getDaysUntil(startDate?: string | null): number | null {
 }
 
 export default async function EventDetailPage({
-  params: { id },
+  params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const { id } = await params;
   const domain = "esg";
   
   // Validate ID

@@ -12,15 +12,16 @@ export const revalidate = 0;
 export default async function EventsPage({
   searchParams,
 }: {
-  searchParams: { page?: string; pageSize?: string; view?: string; q?: string; source?: string; dateRange?: string };
+  searchParams: Promise<{ page?: string; pageSize?: string; view?: string; q?: string; source?: string; dateRange?: string }>;
 }) {
+  const resolvedSearchParams = await searchParams;
   const domain = "esg";
-  const page = Math.max(1, Number(searchParams.page ?? "1"));
-  const pageSize = Math.min(50, Math.max(5, Number(searchParams.pageSize ?? "20")));
-  const viewMode = searchParams.view || "grid";
-  const searchQuery = searchParams.q?.trim() || undefined;
-  const sourceFilter = searchParams.source?.trim() || undefined;
-  const dateRangeFilter = searchParams.dateRange?.trim() || undefined;
+  const page = Math.max(1, Number(resolvedSearchParams.page ?? "1"));
+  const pageSize = Math.min(50, Math.max(5, Number(resolvedSearchParams.pageSize ?? "20")));
+  const viewMode = resolvedSearchParams.view || "grid";
+  const searchQuery = resolvedSearchParams.q?.trim() || undefined;
+  const sourceFilter = resolvedSearchParams.source?.trim() || undefined;
+  const dateRangeFilter = resolvedSearchParams.dateRange?.trim() || undefined;
 
   const sources = await getEventSources(domain);
   const { rows, total } = await listEvents({

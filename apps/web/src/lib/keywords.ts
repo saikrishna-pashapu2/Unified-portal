@@ -1,15 +1,33 @@
+function uniqueKeywords(values: string[]): string[] {
+  const seen = new Set<string>();
+  const keywords: string[] = [];
+
+  for (const value of values) {
+    const keyword = value.trim();
+    if (!keyword) continue;
+
+    const key = keyword.toLocaleLowerCase();
+    if (seen.has(key)) continue;
+
+    seen.add(key);
+    keywords.push(keyword);
+  }
+
+  return keywords;
+}
+
 export function parseKeywords(raw: any): string[] {
   if (!raw) return [];
-  if (Array.isArray(raw)) return raw.map(String).filter(Boolean);
+  if (Array.isArray(raw)) return uniqueKeywords(raw.map(String));
   if (typeof raw === "string") {
     try {
       const j = JSON.parse(raw);
-      if (Array.isArray(j)) return j.map(String).filter(Boolean);
+      if (Array.isArray(j)) return uniqueKeywords(j.map(String));
     } catch {}
-    return raw
+    return uniqueKeywords(raw
+      .replace(/^\{|\}$/g, "")
       .split(/[;,]/g)
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
+      .map((s) => s.trim().replace(/^"|"$/g, "").trim()));
   }
   if (typeof raw === "object") {
     const vals: string[] = [];
@@ -17,7 +35,7 @@ export function parseKeywords(raw: any): string[] {
       if (Array.isArray(v)) vals.push(...(v as any[]).map(String));
       else if (typeof v === "string") vals.push(v);
     }
-    return vals.filter(Boolean);
+    return uniqueKeywords(vals);
   }
   return [];
 }

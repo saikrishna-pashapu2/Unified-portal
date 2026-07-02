@@ -7,7 +7,7 @@ export const runtime = 'nodejs';
 
 export async function DELETE(
   _req: Request,
-  { params }: { params: { jobId: string } }
+  { params }: { params: Promise<{ jobId: string }> }
 ) {
   try {
     const userId = await ensureUserId();
@@ -15,10 +15,11 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const job = await esgPrisma.pdf_translation_jobs.findUnique({ 
-      where: { id: params.jobId } 
+    const { jobId } = await params;
+    const job = await esgPrisma.pdf_translation_jobs.findUnique({
+      where: { id: jobId }
     });
-    
+
     if (!job || job.user_id !== userId) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }

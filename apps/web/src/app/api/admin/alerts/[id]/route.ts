@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -20,7 +20,8 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
-    const alertId = parseInt(params.id);
+    const { id } = await params;
+    const alertId = parseInt(id);
 
     const alert = await esgPrisma.alert_preferences.findUnique({
       where: { id: alertId },
@@ -62,7 +63,7 @@ export async function GET(
  */
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -70,7 +71,8 @@ export async function PATCH(
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
-    const alertId = parseInt(params.id);
+    const { id } = await params;
+    const alertId = parseInt(id);
     const body = await req.json();
 
     // Extract update fields
@@ -112,7 +114,7 @@ export async function PATCH(
  */
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -120,7 +122,8 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
-    const alertId = parseInt(params.id);
+    const { id } = await params;
+    const alertId = parseInt(id);
 
     // Delete alert_content_sent records first (cascade should handle this, but being explicit)
     await esgPrisma.alert_content_sent.deleteMany({

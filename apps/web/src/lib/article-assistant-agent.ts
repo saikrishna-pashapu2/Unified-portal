@@ -109,7 +109,10 @@ export async function streamArticleChat(
       func: async (input: { query: string }) => {
         const { query } = input;
         try {
-          const tavilyApiKey = process.env.TAVILY_API_KEY || "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";
+          const tavilyApiKey = process.env.TAVILY_API_KEY;
+          if (!tavilyApiKey) {
+            return "Web search is not configured for this environment.";
+          }
           
           const response = await fetch("https://api.tavily.com/search", {
             method: "POST",

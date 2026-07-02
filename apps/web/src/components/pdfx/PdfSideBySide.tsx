@@ -10,6 +10,7 @@ declare global {
 }
 
 type ViewMode = "text" | "image";
+const PDFJS_CDN_VERSION = "4.2.67";
 
 interface PdfSideBySideProps {
   jobId: string;
@@ -43,29 +44,32 @@ function PdfViewerContentComponent({ jobId, brand = "credit" }: PdfSideBySidePro
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Load pdfjs-dist dynamically on client side only
+  // Load PDF.js dynamically on client side only.
   useEffect(() => {
+    let cancelled = false;
+
     const loadPdfJs = async () => {
       try {
-        // Use CDN version to completely avoid bundling issues
-        const script = document.createElement('script');
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-        script.onload = () => {
-          // @ts-ignore - pdfjsLib is loaded globally from CDN
-          if (window.pdfjsLib) {
-            // @ts-ignore
-            window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-            // @ts-ignore
-            setPdfjsLib(window.pdfjsLib);
-          }
-        };
-        document.head.appendChild(script);
+        const pdfjs = await import(
+          /* webpackIgnore: true */
+          `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_CDN_VERSION}/pdf.min.mjs`
+        );
+
+        if (!cancelled) {
+          (pdfjs as any).GlobalWorkerOptions.workerSrc =
+            `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_CDN_VERSION}/pdf.worker.min.mjs`;
+          setPdfjsLib(pdfjs);
+        }
       } catch (error) {
         console.error('Failed to load pdfjs-dist:', error);
       }
     };
     
     loadPdfJs();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Load PDF document once pdfjs is available

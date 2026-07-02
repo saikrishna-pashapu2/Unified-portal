@@ -5,9 +5,16 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { esgPrisma as db } from '@esgcredit/db-esg';
+import { requireAdminSession } from '@/lib/api-auth';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireAdminSession();
+    if (auth.response) return auth.response;
+
     const sources = await db.tender_sources.findMany({
       orderBy: {
         created_at: 'desc',

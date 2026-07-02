@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { processEmailQueue } from "@/lib/alerts/email-queue";
+import { requireCronSecret } from "@/lib/api-auth";
 
 /**
  * Cron endpoint to process email queue
@@ -10,22 +11,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   try {
-    // Verify cron secret for security
-    const authHeader = request.headers.get("authorization");
-    const expectedAuth = `Bearer ${process.env.CRON_SECRET}`;
-
-    if (!process.env.CRON_SECRET) {
-      console.error("⚠️  CRON_SECRET not set in environment variables");
-      return NextResponse.json(
-        { error: "Server misconfiguration" },
-        { status: 500 }
-      );
-    }
-
-    if (authHeader !== expectedAuth) {
-      console.warn("🚫 Unauthorized cron attempt:", authHeader);
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const authError = requireCronSecret(request);
+    if (authError) return authError;
 
     // Process the email queue
     console.log("[CRON] 📧 Processing email queue...");

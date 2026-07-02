@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { generateWeeklyDigest } from "@/lib/digest-agent";
+import { requireCronSecret } from "@/lib/api-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,16 +16,8 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(req: Request) {
   try {
-    // Security: Verify this is a legitimate cron request
-    const authHeader = req.headers.get("authorization");
-    const cronSecret = process.env.CRON_SECRET || "your-secret-key-change-this";
-    
-    if (authHeader !== `Bearer ${cronSecret}`) {
-      return NextResponse.json(
-        { ok: false, error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
+    const authError = requireCronSecret(req);
+    if (authError) return authError;
 
     const now = new Date();
     console.log(`[${now.toISOString()}] Starting Weekly Digest Generation...`);

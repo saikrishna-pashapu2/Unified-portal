@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CalendarDays, ExternalLink, MapPin, Newspaper, Tag } from "lucide-react";
 import LikeButton from "@/components/LikeButton";
+import { parseKeywords } from "@/lib/keywords";
 
 type CreditArticleRowCardProps = {
   title: string;
@@ -30,13 +31,7 @@ export default function CreditArticleRowCard({
   initialLiked = false,
   initialLikeCount = 0,
 }: CreditArticleRowCardProps) {
-  const keywords = matchedKeywords
-    ? matchedKeywords
-        .replace(/^\{|\}$/g, "")
-        .split(",")
-        .map((k) => k.replace(/"/g, "").trim())
-        .filter((k) => k.length > 0)
-    : [];
+  const keywords = parseKeywords(matchedKeywords);
 
   return (
     <article className="w-full rounded-2xl border border-border bg-card text-card-foreground shadow-sm transition-shadow hover:shadow-md">

@@ -156,11 +156,11 @@ export default function Register() {
               <div className="ml-3 text-sm">
                 <label htmlFor="terms" className="text-gray-700 dark:text-gray-300">
                   I agree to the{' '}
-                  <a href="#" className="font-medium text-emerald-600 hover:text-emerald-500">
+                  <a href="/terms" className="font-medium text-emerald-600 hover:text-emerald-500">
                     Terms of Service
                   </a>{' '}
                   and{' '}
-                  <a href="#" className="font-medium text-emerald-600 hover:text-emerald-500">
+                  <a href="/privacy" className="font-medium text-emerald-600 hover:text-emerald-500">
                     Privacy Policy
                   </a>
                 </label>

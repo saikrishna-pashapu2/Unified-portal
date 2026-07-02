@@ -30,13 +30,14 @@ const RANGE_TO_DAYS: Record<Range, number> = { "7d": 7, "30d": 30, "60d": 60 };
 export default async function CreditCommunityPage({
   searchParams,
 }: {
-  searchParams?: { sort?: Sort; range?: Range; scope?: Scope; tab?: Tab }
+  searchParams?: Promise<{ sort?: Sort; range?: Range; scope?: Scope; tab?: Tab }>
 }) {
+  const resolvedSearchParams = await searchParams;
   const domain = "credit";
-  const sort: Sort = (searchParams?.sort || "latest") as Sort; // default LATEST
-  const range: Range = (searchParams?.range || "7d") as Range;  // default 7d
-  const scope: Scope = (searchParams?.scope || "all") as Scope; // default ALL
-  const tab: Tab = (searchParams?.tab || "articles") as Tab; // default ARTICLES
+  const sort: Sort = (resolvedSearchParams?.sort || "latest") as Sort; // default LATEST
+  const range: Range = (resolvedSearchParams?.range || "7d") as Range;  // default 7d
+  const scope: Scope = (resolvedSearchParams?.scope || "all") as Scope; // default ALL
+  const tab: Tab = (resolvedSearchParams?.tab || "articles") as Tab; // default ARTICLES
 
   const session = await getServerSession(authOptions);
   const userId = Number((session?.user as any)?.id || 0);

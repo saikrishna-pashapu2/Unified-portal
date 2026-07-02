@@ -6,8 +6,7 @@
  */
 
 import { NextRequest } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/nextauth-options";
+import { requireSession, unauthorized } from "@/lib/api-auth";
 import { getPrisma } from "@/lib/db";
 import { encoding_for_model } from "tiktoken";
 import {
@@ -19,6 +18,9 @@ import {
 } from "@/lib/article-assistant-db";
 import { streamArticleChat, generateFollowUpQuestions } from "@/lib/article-assistant-agent";
 import { recordUserActivity } from "@/lib/user-activity";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 // Token counting helper
 function countTokens(text: string, model: string = "gpt-4o-mini"): number {
@@ -44,7 +46,14 @@ function calculateCost(inputTokens: number, outputTokens: number): number {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const auth = await requireSession();
+    if (auth.response) return auth.response;
+
+    const userId = Number((auth.session.user as any).id);
+    if (!Number.isFinite(userId)) {
+      return unauthorized();
+    }
+
     const body = await request.json();
     const { sessionId, message, domain } = body;
 
@@ -69,6 +78,13 @@ export async function POST(request: NextRequest) {
       return new Response(
         JSON.stringify({ error: "Conversation not found" }),
         { status: 404, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    if (conversation.user_id !== userId) {
+      return new Response(
+        JSON.stringify({ error: "Forbidden" }),
+        { status: 403, headers: { "Content-Type": "application/json" } }
       );
     }
 

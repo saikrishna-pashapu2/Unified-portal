@@ -41,12 +41,13 @@ const CREDIT_TOOLS: ToolConfig[] = [
 export default async function CreditToolsPage({ 
   searchParams 
 }: { 
-  searchParams: { [key: string]: string | string[] | undefined };
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
+  const resolvedSearchParams = await searchParams;
   // All tools available
   const domainTools = CREDIT_TOOLS;
 
-  const activeToolId = (searchParams.tool as ToolId) || "overview";
+  const activeToolId = (resolvedSearchParams.tool as ToolId) || "overview";
   
   // Validate activeToolId
   const activeTool = domainTools.find(t => t.id === activeToolId) || domainTools[0];
@@ -71,7 +72,7 @@ export default async function CreditToolsPage({
               const Icon = tool.icon;
               const isActive = activeToolId === tool.id;
               const href = tool.id === "overview" 
-                ? `/credit/tools` 
+                ? `/credit/tools`
                 : `/credit/tools?tool=${tool.id}`;
               
               return (
@@ -96,7 +97,7 @@ export default async function CreditToolsPage({
           <div className="p-4 border-t border-slate-100">
             <div className="bg-slate-50 rounded-xl p-4">
               <p className="text-xs text-slate-500 text-center">
-                Need help? <a href="#" className="text-blue-600 hover:underline">Contact Support</a>
+                Need help? <Link href="/contact" className="text-blue-600 hover:underline">Contact Support</Link>
               </p>
             </div>
           </div>

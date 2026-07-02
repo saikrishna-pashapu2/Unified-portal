@@ -8,10 +8,11 @@ import { esgPrisma as db } from '@esgcredit/db-esg';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const tenderId = parseInt(params.id);
+    const { id } = await params;
+    const tenderId = parseInt(id);
 
     if (isNaN(tenderId)) {
       return NextResponse.json(

@@ -141,9 +141,9 @@ export async function requeueEmail(emailId: number): Promise<void> {
  * 1. Add to .env file:
  *    MAIL_SERVER=smtp.gmail.com
  *    MAIL_PORT=587
- *    MAIL_USERNAME=news.ai.finviz@gmail.com
- *    MAIL_PASSWORD=ndxu rpsr rcza opna
- *    MAIL_FROM=news.ai.finviz@gmail.com
+ *    MAIL_USERNAME=alerts@example.com
+ *    MAIL_PASSWORD=<app-password>
+ *    MAIL_FROM=alerts@example.com
  * 2. Install nodemailer: npm install nodemailer
  * 3. Done! No API keys or signups needed
  */

@@ -25,12 +25,5 @@
   "devDependencies": {
     "typescript": "^5.0.0",
     "@types/node": "^20.0.0"
-  },
-  "pnpm": {
-    "overrides": {
-      "@prisma/client": "5.22.0",
-      "prisma": "5.22.0",
-      "next-auth": "^4.24.7"
-    }
   }
 }

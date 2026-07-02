@@ -82,10 +82,11 @@ function getDaysUntil(startDate?: string | null): number | null {
 }
 
 export default async function CreditEventDetailPage({
-  params: { id },
+  params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const { id } = await params;
   const domain = "credit";
   
   // Validate ID

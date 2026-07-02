@@ -6,8 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/nextauth-options";
+import { requireSession, unauthorized } from "@/lib/api-auth";
 import { getPrisma } from "@/lib/db";
 import {
   getOrCreateConversation,
@@ -22,10 +21,18 @@ import {
   generateFollowUpQuestions,
 } from "@/lib/article-assistant-agent";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    const userId = session?.user ? Number((session.user as any).id) : null;
+    const auth = await requireSession();
+    if (auth.response) return auth.response;
+
+    const userId = Number((auth.session.user as any).id);
+    if (!Number.isFinite(userId)) {
+      return unauthorized();
+    }
 
     const body = await request.json();
     const { articleId, domain } = body;

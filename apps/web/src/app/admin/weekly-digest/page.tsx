@@ -5,10 +5,11 @@ import { Domain } from "@/lib/db";
 export default async function WeeklyDigestPage({
   searchParams,
 }: {
-  searchParams: { domain?: string; page?: string };
+  searchParams: Promise<{ domain?: string; page?: string }>;
 }) {
-  const domain = (searchParams.domain as Domain) || "esg";
-  const page = Number(searchParams.page) || 1;
+  const resolvedSearchParams = await searchParams;
+  const domain = (resolvedSearchParams.domain as Domain) || "esg";
+  const page = Number(resolvedSearchParams.page) || 1;
   
   const { digests, total, totalPages } = await getDigests(domain, page);
 

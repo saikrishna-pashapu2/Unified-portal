@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { ESG_JOBS, type EsgJob } from "./jobstore";
 import { esgPrisma } from "@esgcredit/db-esg";
+import { ensureUserId } from "@/lib/auth-db";
+import {
+  fetchIssEsgSource,
+  fetchLsegEsgSource,
+  fetchSnpEsgSource,
+} from "@/lib/esg-sources";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,9 +56,14 @@ async function updateRow(job: EsgJob, patch: Partial<{status: string, error_mess
 
 export async function POST(req: Request) {
   try {
+    const authenticatedUserId = await ensureUserId();
+    if (!authenticatedUserId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const form = await req.formData();
     const file = form.get("file") as File | null;
-    const userId = form.get("userId") ? String(form.get("userId")) : null; // Only use userId if provided
+    const userId = String(authenticatedUserId);
 
     if (!file) return NextResponse.json({ error: "No file" }, { status: 400 });
 
@@ -102,8 +113,6 @@ export async function POST(req: Request) {
         const issCol = ensureCol("ISS (oekom)");
         const lsegCol = ensureCol("LSEG (TR.TRESG)");
 
-        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-
         // Process row by row with progress + cancel
         for (let r = 1; r < rows.length; r++) {
           if (job.cancelled) break;
@@ -117,9 +126,9 @@ export async function POST(req: Request) {
 
           // Call the source APIs to get ESG data
           const [snp, iss, lseg] = await Promise.allSettled([
-            fetch(`${baseUrl}/api/esg/source/snp?name=${encodeURIComponent(name)}`).then(r => r.json()),
-            fetch(`${baseUrl}/api/esg/source/iss?name=${encodeURIComponent(name)}`).then(r => r.json()),
-            fetch(`${baseUrl}/api/esg/source/lseg?name=${encodeURIComponent(name)}`).then(r => r.json()),
+            fetchSnpEsgSource(name),
+            fetchIssEsgSource(name),
+            fetchLsegEsgSource(name),
           ]);
 
           // Extract scores and populate the Excel cells

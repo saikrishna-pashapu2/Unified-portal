@@ -4,13 +4,13 @@ import PublicationCard from "@/components/publications/PublicationCard";
 import { listPublications } from "@/lib/publications";
 
 type Params = {
-  params: {};
-  searchParams: Record<string, string | string[] | undefined>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-export default async function PublicationsPage({ params, searchParams }: Params) {
+export default async function PublicationsPage({ searchParams }: Params) {
+  const resolvedSearchParams = await searchParams;
   const domain = "esg";
-  const page = Number(searchParams.page ?? 1) || 1;
+  const page = Number(resolvedSearchParams.page ?? 1) || 1;
 
   const { items, total, pageSize } = await listPublications({
     domain,

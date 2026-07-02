@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { JOBS, Job } from "./jobstore";
 import * as XLSX from "xlsx";
 import { getSlug, getCompany } from "@/lib/fitch";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/nextauth-options";
+import { requireSession } from "@/lib/api-auth";
 import { creditPrisma } from "@esgcredit/db-credit";
 
 export const runtime = "nodejs";         // ensure Node runtime (not Edge)
@@ -14,8 +13,13 @@ function uid() {
 }
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  const userEmail = session?.user?.email || null;
+  const auth = await requireSession();
+  if (auth.response) return auth.response;
+
+  const userEmail = auth.session.user.email;
+  if (!userEmail) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const form = await req.formData();
   const file = form.get("file") as File | null;

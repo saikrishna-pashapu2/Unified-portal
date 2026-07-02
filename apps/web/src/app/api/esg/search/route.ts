@@ -1,20 +1,29 @@
 import { NextResponse } from "next/server";
+import { requireSession } from "@/lib/api-auth";
+import {
+  fetchIssEsgSource,
+  fetchLsegEsgSource,
+  fetchSnpEsgSource,
+} from "@/lib/esg-sources";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 // Main ESG search API that aggregates results from all three sources
 // For now, these are placeholder implementations. You can replace with your actual Python logic
 // or implement the scrapers directly in Node.js with fetch calls.
 
 export async function GET(req: Request) {
+  const auth = await requireSession();
+  if (auth.response) return auth.response;
+
   const name = new URL(req.url).searchParams.get("name") || "";
   if (!name) return NextResponse.json({ error: "Missing name" }, { status: 400 });
-
-  // Call the individual source APIs to get data from all three providers
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || `http://localhost:3000`;
   
   const [snp, iss, lseg] = await Promise.allSettled([
-    fetch(`${baseUrl}/api/esg/source/snp?name=${encodeURIComponent(name)}`).then(r => r.json()),
-    fetch(`${baseUrl}/api/esg/source/iss?name=${encodeURIComponent(name)}`).then(r => r.json()),
-    fetch(`${baseUrl}/api/esg/source/lseg?name=${encodeURIComponent(name)}`).then(r => r.json()),
+    fetchSnpEsgSource(name),
+    fetchIssEsgSource(name),
+    fetchLsegEsgSource(name),
   ]);
 
   // Helper function to safely extract results from Promise.allSettled

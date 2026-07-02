@@ -4,34 +4,18 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/nextauth-options';
+import { requireAdminSession } from '@/lib/api-auth';
 import { scrapeTenders } from '@/lib/tenders/scraper-engine';
 // Import scrapers to ensure they are registered
 import '@/lib/tenders/scrapers';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   try {
-    // Check authentication
-    const session = await getServerSession(authOptions);
-    
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    // Check if user is admin (adjust based on your auth system)
-    // const user = await db.users.findUnique({
-    //   where: { email: session.user.email! },
-    // });
-    // if (!user?.is_admin) {
-    //   return NextResponse.json(
-    //     { error: 'Forbidden: Admin access required' },
-    //     { status: 403 }
-    //   );
-    // }
+    const auth = await requireAdminSession();
+    if (auth.response) return auth.response;
 
     const body = await request.json();
     const sourceShortName = body.source || 'mitwork_kz';

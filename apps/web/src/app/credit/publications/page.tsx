@@ -7,12 +7,13 @@ import { cn } from "@/lib/utils";
 import { Building2, FileText, ArrowRight } from "lucide-react";
 
 type Params = {
-  searchParams: Record<string, string | string[] | undefined>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
 export default async function CreditPublicationsPage({ searchParams }: Params) {
+  const resolvedSearchParams = await searchParams;
   const domain = "credit";
-  const view = (searchParams.view as string) ?? "publications";
+  const view = (resolvedSearchParams.view as string) ?? "publications";
   const isMethodologies = view === "methodologies";
   
   // Credit domain always shows methodologies tab
@@ -23,7 +24,7 @@ export default async function CreditPublicationsPage({ searchParams }: Params) {
   }
 
   // Original publications logic
-  const page = Number(searchParams.page ?? 1) || 1;
+  const page = Number(resolvedSearchParams.page ?? 1) || 1;
 
   const { items, total, pageSize } = await listPublications({
     domain,

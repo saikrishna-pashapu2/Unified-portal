@@ -11,7 +11,6 @@ import cron from 'node-cron';
  * - Email Queue Processing: Every 5 minutes
  */
 
-const CRON_SECRET = process.env.CRON_SECRET || 'your-secret-key-change-this';
 const APP_URL = process.env.NEXTAUTH_URL || 'http://localhost:3000';
 
 // Use globalThis to persist state across module reloads in development
@@ -34,7 +33,6 @@ if (!globalThis.alertSchedulerState) {
     weeklyDigestTask: null,
   };
 }
-
 // Convenience accessors
 const getState = () => globalThis.alertSchedulerState!;
 const setState = (updates: Partial<typeof globalThis.alertSchedulerState>) => {
@@ -42,6 +40,12 @@ const setState = (updates: Partial<typeof globalThis.alertSchedulerState>) => {
 };
 
 async function callEndpoint(path: string, name: string) {
+  const cronSecret = process.env.CRON_SECRET?.trim();
+  if (!cronSecret) {
+    console.error(`Cannot trigger ${name}: CRON_SECRET is not configured`);
+    return;
+  }
+
   try {
     const url = `${APP_URL}${path}`;
     const now = new Date();
@@ -51,7 +55,7 @@ async function callEndpoint(path: string, name: string) {
     const response = await fetch(url, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${CRON_SECRET}`,
+        'Authorization': `Bearer ${cronSecret}`,
         'Content-Type': 'application/json',
       },
     });
@@ -84,6 +88,10 @@ export function startAlertScheduler() {
   }
 
   console.log('🚀 Starting Alert Scheduler...');
+  if (!process.env.CRON_SECRET?.trim()) {
+    console.error('Alert Scheduler not started: CRON_SECRET is not configured');
+    return { success: false, message: 'CRON_SECRET is not configured' };
+  }
   
   // Alert Processing - Every 5 minutes
   // Cron: "*/5 * * * *" = Every 5 minutes
@@ -121,7 +129,6 @@ export function startAlertScheduler() {
   setState({ isStarted: true });
   console.log('🎉 Alert Scheduler started successfully!');
   console.log(`📍 Timezone: Asia/Dubai`);
-  console.log(`🔒 Using CRON_SECRET: ${CRON_SECRET.substring(0, 10)}...`);
   
   return { success: true, message: 'Scheduler started successfully' };
 }
@@ -176,9 +183,4 @@ export function getSchedulerStatus() {
       weeklyDigest: state.weeklyDigestTask !== null,
     },
   };
-}
-
-// Auto-start in production
-if (process.env.NODE_ENV === 'production') {
-  startAlertScheduler();
 }

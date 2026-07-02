@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { generateTestDigest } from "@/lib/digest-agent-test";
+import { requireAdminSession } from "@/lib/api-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +14,9 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(req: Request) {
   try {
+    const auth = await requireAdminSession();
+    if (auth.response) return auth.response;
+
     const url = new URL(req.url);
     const domain = url.searchParams.get("domain") as "esg" | "credit" | null;
 
