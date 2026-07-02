@@ -198,6 +198,7 @@ model users {
   article_conversations                          article_conversations[]
   decisions                                      decisions[]
   email_queue                                    email_queue[]
+  esg_driver_jobs                                esg_driver_jobs[]
   file_uploads                                   file_uploads[]
   likes                                          likes[]
   meeting_participants                           meeting_participants[]
@@ -427,6 +428,28 @@ model article_tool_calls {
 
   @@index([conversation_id, created_at], map: "idx_article_tool_calls_conversation")
   @@index([tool_name], map: "idx_article_tool_calls_tool_name")
+}
+
+model esg_driver_jobs {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id        Int?
+  country        String    @db.VarChar(120)
+  sector         String    @db.VarChar(160)
+  language       String    @default("English") @db.VarChar(80)
+  status         String    @default("queued") @db.VarChar(20)
+  progress       Int       @default(0)
+  stage          String    @default("queued") @db.VarChar(120)
+  error_message  String?
+  result_json    Json?
+  evidence_json  Json?
+  created_at     DateTime? @default(now()) @db.Timestamp(6)
+  updated_at     DateTime? @default(now()) @db.Timestamp(6)
+  completed_at   DateTime? @db.Timestamp(6)
+  users          users?    @relation(fields: [user_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([status], map: "idx_esg_driver_jobs_status")
+  @@index([user_id, created_at(sort: Desc)], map: "idx_esg_driver_jobs_user_created")
+  @@map("esg_driver_jobs")
 }
 
 model decisions {

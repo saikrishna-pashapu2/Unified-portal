@@ -4,17 +4,20 @@ import {
   FileSpreadsheet, 
   FileText, 
   LayoutDashboard,
-  ChevronRight
+  ChevronRight,
+  Sparkles
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Import Tool Components
 import EsgSearch from "./search";
 import EsgExcel from "./excel";
+import EsgDriversTool from "./drivers";
 import PdfxHome from "@/app/esg/pdfx/page";
 
 // Tool Configuration Types
-type ToolId = "overview" | "search" | "excel" | "pdfx";
+type ToolId = "overview" | "search" | "excel" | "drivers" | "pdfx";
+type ToolsSearchParams = { [key: string]: string | string[] | undefined };
 
 interface ToolConfig {
   id: ToolId;
@@ -47,6 +50,13 @@ const TOOLS: ToolConfig[] = [
     component: EsgExcel,
     description: "Bulk update ESG data via Excel"
   },
+  {
+    id: "drivers",
+    label: "ESG Drivers",
+    icon: Sparkles,
+    component: EsgDriversTool,
+    description: "Generate country and sector ESG drivers"
+  },
   { 
     id: "pdfx", 
     label: "PDF Translator", 
@@ -58,13 +68,14 @@ const TOOLS: ToolConfig[] = [
 
 export default async function ToolsPage({ 
   searchParams 
-}: { 
-  searchParams: { [key: string]: string | string[] | undefined };
-}) {
+}: any) {
+  const resolvedSearchParams = (await Promise.resolve(
+    searchParams || {},
+  )) as ToolsSearchParams;
   // All tools available
   const domainTools = TOOLS;
 
-  const activeToolId = (searchParams.tool as ToolId) || "overview";
+  const activeToolId = (resolvedSearchParams.tool as ToolId) || "overview";
   
   // Validate activeToolId
   const activeTool = domainTools.find(t => t.id === activeToolId) || domainTools[0];
@@ -89,7 +100,7 @@ export default async function ToolsPage({
               const Icon = tool.icon;
               const isActive = activeToolId === tool.id;
               const href = tool.id === "overview" 
-                ? `/esg/tools` 
+                ? `/esg/tools`
                 : `/esg/tools?tool=${tool.id}`;
               
               return (
@@ -114,7 +125,7 @@ export default async function ToolsPage({
           <div className="p-4 border-t border-slate-100">
             <div className="bg-slate-50 rounded-xl p-4">
               <p className="text-xs text-slate-500 text-center">
-                Need help? <a href="#" className="text-blue-600 hover:underline">Contact Support</a>
+                Need help? <Link href="/contact" className="text-blue-600 hover:underline">Contact Support</Link>
               </p>
             </div>
           </div>
@@ -131,8 +142,8 @@ export default async function ToolsPage({
           {/* Mobile menu trigger would require client component wrapper or just simple links */}
         </div>
 
-        <div className="p-4 lg:p-8">
-          <div className="max-w-7xl mx-auto">
+        <div className={activeToolId === "drivers" ? "p-0" : "p-4 lg:p-8"}>
+          <div className={activeToolId === "drivers" ? "w-full" : "max-w-7xl mx-auto"}>
             {activeToolId === "overview" ? (
               <div className="space-y-8">
                 <div className="text-center max-w-2xl mx-auto mb-12">
