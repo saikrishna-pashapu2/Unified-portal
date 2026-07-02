@@ -823,3 +823,156 @@ model user_activity {
   @@index([timestamp], map: "idx_user_activity_timestamp")
   @@index([user_id], map: "idx_user_activity_user_id")
 }
+
+model monitored_tender_sources {
+  name                    String              @id @db.VarChar(64)
+  display_name            String              @db.VarChar(128)
+  country                 String              @db.VarChar(2)
+  base_url                String              @db.VarChar(512)
+  enabled                 Boolean             @default(true)
+  schedule_minutes        Int                 @default(60)
+  last_run_at             DateTime?           @db.Timestamptz(6)
+  last_success_at         DateTime?           @db.Timestamptz(6)
+  consecutive_failures    Int                 @default(0)
+  last_error              String?
+  total_tenders_seen      Int                 @default(0)
+  created_at              DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime            @default(now()) @db.Timestamptz(6)
+  monitored_tenders       monitored_tenders[]
+
+  @@index([enabled], map: "idx_monitored_sources_enabled")
+  @@index([country], map: "idx_monitored_sources_country")
+}
+
+model monitored_tenders {
+  id                       String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  source_name              String                       @db.VarChar(64)
+  external_id              String                       @db.VarChar(256)
+  canonical_id             String?                      @db.Uuid
+  title                    String
+  title_en                 String?
+  title_language           String?                      @db.VarChar(16)
+  translation_provider     String?                      @db.VarChar(64)
+  title_translated_at      DateTime?                    @db.Timestamptz(6)
+  buyer_name               String?
+  buyer_external_id        String?                      @db.VarChar(64)
+  country                  String                       @db.VarChar(2)
+  sector                   String?                      @db.VarChar(128)
+  value_amount             Decimal?                     @db.Decimal(18, 2)
+  value_currency           String?                      @db.VarChar(3)
+  published_at             DateTime?                    @db.Timestamptz(6)
+  deadline_at              DateTime?                    @db.Timestamptz(6)
+  status                   String                       @default("unknown") @db.VarChar(32)
+  source_url               String                       @db.VarChar(1024)
+  language                 String                       @default("other") @db.VarChar(16)
+  matched_groups           String[]                     @default([])
+  match_details            Json?
+  ai_relevance_score       Int?
+  ai_summary               String?
+  ai_processed_at          DateTime?                    @db.Timestamptz(6)
+  raw_json                 Json
+  first_seen_at            DateTime                     @default(now()) @db.Timestamptz(6)
+  last_seen_at             DateTime                     @default(now()) @db.Timestamptz(6)
+  last_changed_at          DateTime                     @default(now()) @db.Timestamptz(6)
+  change_log               Json                         @default("[]")
+  is_active                Boolean                      @default(true)
+  source                   monitored_tender_sources     @relation(fields: [source_name], references: [name], onDelete: Restrict, onUpdate: Cascade)
+  canonical                monitored_tenders?           @relation("monitored_tender_canonical", fields: [canonical_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  duplicates               monitored_tenders[]          @relation("monitored_tender_canonical")
+  likes                    monitored_tender_likes[]
+  notification_logs        monitored_notification_logs[]
+  feedback                 monitored_tender_feedback[]
+
+  @@unique([source_name, external_id], map: "uq_monitored_tenders_source_external")
+  @@index([source_name], map: "idx_monitored_tenders_source_name")
+  @@index([canonical_id], map: "idx_monitored_tenders_canonical_id")
+  @@index([country], map: "idx_monitored_tenders_country")
+  @@index([published_at(sort: Desc)], map: "idx_monitored_tenders_published_at")
+  @@index([deadline_at], map: "idx_monitored_tenders_deadline_at")
+  @@index([first_seen_at(sort: Desc)], map: "idx_monitored_tenders_first_seen_at")
+  @@index([is_active], map: "idx_monitored_tenders_is_active")
+}
+
+model monitored_team_members {
+  id                     String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  display_name           String                   @db.VarChar(256)
+  member_key             String                   @unique(map: "uq_monitored_team_members_member_key") @db.VarChar(256)
+  created_at             DateTime                 @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime                 @default(now()) @db.Timestamptz(6)
+  last_used_at           DateTime                 @default(now()) @db.Timestamptz(6)
+  use_count              Int                      @default(1)
+  likes                  monitored_tender_likes[]
+
+  @@index([member_key], map: "idx_monitored_team_members_member_key")
+  @@index([last_used_at], map: "idx_monitored_team_members_last_used_at")
+}
+
+model monitored_share_contacts {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sender_name     String   @db.VarChar(256)
+  sender_key      String   @db.VarChar(256)
+  email           String   @db.VarChar(256)
+  created_at      DateTime @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime @default(now()) @db.Timestamptz(6)
+  last_used_at    DateTime @default(now()) @db.Timestamptz(6)
+  use_count       Int      @default(1)
+
+  @@unique([sender_key, email], map: "uq_monitored_share_contacts_sender_email")
+  @@index([sender_key], map: "idx_monitored_share_contacts_sender_key")
+}
+
+model monitored_tender_likes {
+  id              String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tender_id       String                 @db.Uuid
+  team_member_id  String                 @db.Uuid
+  created_at      DateTime               @default(now()) @db.Timestamptz(6)
+  tender          monitored_tenders      @relation(fields: [tender_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  team_member     monitored_team_members @relation(fields: [team_member_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([tender_id, team_member_id], map: "uq_monitored_tender_likes_tender_member")
+  @@index([tender_id], map: "idx_monitored_tender_likes_tender_id")
+  @@index([team_member_id], map: "idx_monitored_tender_likes_team_member_id")
+  @@index([created_at], map: "idx_monitored_tender_likes_created_at")
+}
+
+model monitored_email_recipients {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email       String   @unique @db.VarChar(256)
+  name        String?  @db.VarChar(256)
+  team        String?  @db.VarChar(128)
+  groups      String[] @default([])
+  enabled     Boolean  @default(true)
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([enabled], map: "idx_monitored_email_recipients_enabled")
+  @@index([team], map: "idx_monitored_email_recipients_team")
+}
+
+model monitored_notification_logs {
+  id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tender_id           String              @db.Uuid
+  channel             String              @db.VarChar(32)
+  recipient           String              @db.VarChar(512)
+  status              String              @db.VarChar(32)
+  external_message_id String?             @db.VarChar(128)
+  error               String?
+  sent_at             DateTime            @default(now()) @db.Timestamptz(6)
+  tender              monitored_tenders   @relation(fields: [tender_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([tender_id], map: "idx_monitored_notification_logs_tender_id")
+  @@index([sent_at], map: "idx_monitored_notification_logs_sent_at")
+  @@index([recipient], map: "idx_monitored_notification_logs_recipient")
+}
+
+model monitored_tender_feedback {
+  id          String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tender_id   String             @db.Uuid
+  verdict     String             @db.VarChar(32)
+  note        String?
+  created_by  String?            @db.VarChar(256)
+  created_at  DateTime           @default(now()) @db.Timestamptz(6)
+  tender      monitored_tenders  @relation(fields: [tender_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([tender_id], map: "idx_monitored_tender_feedback_tender_id")
+}
