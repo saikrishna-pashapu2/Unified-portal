@@ -1,5 +1,6 @@
-import cron from 'node-cron';
 import { env } from "@/lib/config/env";
+
+type NodeCron = typeof import("node-cron");
 
 /**
  * Alert Scheduler Worker
@@ -13,6 +14,16 @@ import { env } from "@/lib/config/env";
  */
 
 const APP_URL = env.NEXTAUTH_URL;
+let cronModule: NodeCron | null = null;
+
+function getCron(): NodeCron {
+  if (!cronModule) {
+    const required = Function("return require('node-cron')")() as NodeCron;
+    cronModule = required;
+  }
+
+  return cronModule;
+}
 
 // Use globalThis to persist state across module reloads in development
 // This ensures the scheduler state is maintained even when Next.js hot-reloads modules
@@ -78,6 +89,8 @@ async function callEndpoint(path: string, name: string) {
 }
 
 export function startAlertScheduler() {
+  const cron = getCron();
+
   // Check if tasks are already running
   const state = getState();
   const hasRunningTasks = state.alertProcessingTask !== null || state.emailQueueTask !== null || state.weeklyDigestTask !== null;

@@ -9,7 +9,8 @@ const nextConfig = {
     '@langchain/core',
     '@langchain/openai',
     'langchain',
-    '@langchain/langgraph'
+    '@langchain/langgraph',
+    'node-cron'
   ],
   webpack: (config, { isServer }) => {
     if (isServer) {

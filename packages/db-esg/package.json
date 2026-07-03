@@ -7,7 +7,7 @@
   },
   "files": ["generated", "src", "prisma"],
   "scripts": {
-    "generate": "prisma generate",
+    "generate": "node ../../scripts/prisma-generate-safe.mjs",
     "pull": "prisma db pull"
   },
   "dependencies": {

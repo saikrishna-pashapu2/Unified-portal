@@ -12,6 +12,9 @@
   - There are 0 non-`NODE_ENV` direct env reads outside `env.ts`.
 - Added root `.env.example` with dummy values only. It documents every config-module variable and the database/Auth runtime variables needed by this repo.
 - Added Vitest to `apps/web` with `test` and `test:watch` scripts, `apps/web/vitest.config.ts`, and 4 characterization test files.
+- Stabilized build verification without changing runtime behavior:
+  - `apps/web/src/lib/alert-scheduler.ts` now lazy-loads `node-cron` only when the scheduler starts, so Next does not bundle Node-only cron internals through `instrumentation.ts`.
+  - `scripts/prisma-generate-safe.mjs` still runs `prisma generate`, but allows a Windows-only generated query-engine DLL rename lock to continue only when the generated client already exists.
 
 ## Behavior oddities preserved
 
@@ -26,16 +29,12 @@
   - 4 test files passed.
   - 23 tests passed.
 - PASS: `apps/web/node_modules/.bin/tsc.CMD --noEmit -p apps/web/tsconfig.json`
-- FAIL: `pnpm build` using pnpm 10.23.0 to match the existing pnpm store.
-  - Fails during `pnpm db:generate` at Prisma generate with `EPERM: operation not permitted, rename ... query_engine-windows.dll.node.tmp* -> query_engine-windows.dll.node`.
-  - Deleting the generated Prisma DLLs so Prisma could recreate them was also denied, which indicates the generated engine files are locked or protected outside this shell.
-- FAIL: `pnpm -C apps/web build` without the root `db:generate` wrapper.
-  - Fails in Next/Webpack while bundling `node-cron` from `apps/web/src/instrumentation.ts` / `apps/web/src/lib/alert-scheduler.ts`.
-  - Errors include unresolved Node built-ins: `node:crypto`, `path`, `child_process`, and `stream`.
-  - I did not patch `next.config.js` because that is build/deployment configuration and this milestone explicitly says not to touch deployment.
+- PASS: `pnpm build` using the user-installed pnpm 10.18.1 at `C:\Users\saikr\AppData\Roaming\npm\pnpm.cmd`
+  - Prisma clients generated for both DB packages.
+  - Next production build completed successfully.
+  - Existing warnings remain: one `react-hooks/exhaustive-deps` warning, two `@next/next/no-img-element` warnings, and stale browserslist/baseline-browser-mapping notices.
 
 ## Open questions
 
-- Can the process locking `packages/db-*/generated/client/query_engine-windows.dll.node` be stopped, or should generated Prisma clients be removed from source control in a later milestone?
-- Do you want a separate approved build-fix task for the `node-cron` instrumentation bundling issue?
-- Should future verification use a pinned pnpm 10 command, or should the repo declare a `packageManager` field in a separate dependency-management milestone?
+- Should generated Prisma clients remain tracked? They are noisy in the working tree and make Windows query-engine DLL locks more likely.
+- Should the repo declare a `packageManager` field in a later dependency-management milestone? I did not keep one in this milestone because the Dockerfile still installs global `pnpm@8` explicitly.

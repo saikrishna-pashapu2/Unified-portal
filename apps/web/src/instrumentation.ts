@@ -9,6 +9,8 @@
 
 import { env } from "@/lib/config/env";
 
+export const runtime = "nodejs";
+
 export async function register() {
   // Only run in Node.js runtime (not Edge)
   if (
