@@ -1,4 +1,5 @@
 import "server-only";
+import { env } from "@/lib/config/env";
 
 const S_AND_P_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
@@ -49,7 +50,7 @@ export async function fetchSnpEsgSource(name: string) {
       referer: "https://www.spglobal.com/sustainable1/en/scores/results",
     };
 
-    const searchToken = process.env.SPGLOBAL_SEARCH_TOKEN?.trim();
+    const searchToken = env.SPGLOBAL_SEARCH_TOKEN?.trim();
     if (searchToken) {
       searchHeaders.authorization = `Bearer ${searchToken}`;
     }

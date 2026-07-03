@@ -4,6 +4,7 @@
  */
 
 import { esgPrisma } from "@esgcredit/db-esg";
+import { env } from "@/lib/config/env";
 
 export type EmailQueueItem = {
   id: number;
@@ -150,7 +151,7 @@ export async function requeueEmail(emailId: number): Promise<void> {
 export async function sendEmail(email: EmailQueueItem): Promise<boolean> {
   try {
     // Check if SMTP is configured
-    if (!process.env.MAIL_USERNAME || !process.env.MAIL_PASSWORD) {
+    if (!env.MAIL_USERNAME || !env.MAIL_PASSWORD) {
       console.warn("⚠️  Gmail SMTP not configured - email not sent");
       console.log(`📧 Would send to: ${email.email_to}`);
       console.log(`Subject: ${email.email_subject}`);
@@ -167,18 +168,18 @@ export async function sendEmail(email: EmailQueueItem): Promise<boolean> {
 
     // Create reusable transporter using Gmail SMTP
     const transporter = nodemailer.default.createTransport({
-      host: process.env.MAIL_SERVER || "smtp.gmail.com",
-      port: parseInt(process.env.MAIL_PORT || "587"),
+      host: env.MAIL_SERVER,
+      port: parseInt(env.MAIL_PORT),
       secure: false, // true for 465, false for other ports
       auth: {
-        user: process.env.MAIL_USERNAME,
-        pass: process.env.MAIL_PASSWORD,
+        user: env.MAIL_USERNAME,
+        pass: env.MAIL_PASSWORD,
       },
     });
 
     // Send email
     const info = await transporter.sendMail({
-      from: process.env.MAIL_FROM || process.env.MAIL_USERNAME, // sender address
+      from: env.MAIL_FROM, // sender address
       to: email.email_to, // recipient
       subject: email.email_subject,
       text: email.email_body, // plain text body

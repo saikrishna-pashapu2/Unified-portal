@@ -3,6 +3,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { getServerSession, type Session } from "next-auth";
 import { esgPrisma } from "@esgcredit/db-esg";
+import { env } from "@/lib/config/env";
 import { authOptions } from "@/lib/nextauth-options";
 
 type SessionWithRole = Session & {
@@ -68,7 +69,7 @@ export async function requireAdminSession(): Promise<AuthResult> {
 }
 
 export function requireCronSecret(request: Request): NextResponse | null {
-  const cronSecret = process.env.CRON_SECRET?.trim();
+  const cronSecret = env.CRON_SECRET?.trim();
 
   if (!cronSecret) {
     return NextResponse.json({ error: "Server misconfiguration" }, { status: 500 });
@@ -81,4 +82,3 @@ export function requireCronSecret(request: Request): NextResponse | null {
 
   return null;
 }
-

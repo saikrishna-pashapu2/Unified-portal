@@ -1,8 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
+import { env } from "@/lib/config/env";
 
 const ROOT = process.cwd();
-const BASE = process.env.PDFX_STORAGE_DIR || ".pdfx_store";
+const BASE = env.PDFX_STORAGE_DIR;
 export const PDFX_BASE = path.join(ROOT, BASE);
 export const PDFX_UPLOADS = path.join(PDFX_BASE, "uploads");
 export const PDFX_OUTPUTS = path.join(PDFX_BASE, "outputs");

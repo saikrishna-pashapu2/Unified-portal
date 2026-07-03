@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Calendar, DollarSign, Building2, ArrowRight } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { env } from '@/lib/config/env';
 
 interface Tender {
   id: number;
@@ -48,7 +49,7 @@ export default async function TendersList({
   if (maxAmount) params.set('maxAmount', maxAmount);
 
   // Fetch tenders
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+  const baseUrl = env.NEXT_PUBLIC_API_URL;
   const res = await fetch(`${baseUrl}/api/tenders?${params.toString()}`, {
     cache: 'no-store',
   });

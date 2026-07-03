@@ -1,5 +1,6 @@
 import "server-only";
 import path from "path";
+import { env } from "@/lib/config/env";
 
 export interface DeepAgentRuntimeConfig {
   ollamaHost: string;
@@ -8,14 +9,10 @@ export interface DeepAgentRuntimeConfig {
   workspaceBaseDir: string;
 }
 
-function readEnv(name: string): string {
-  return (process.env[name] ?? "").trim();
-}
-
 export function getDeepAgentRuntimeConfig(): DeepAgentRuntimeConfig {
-  const ollamaHost = readEnv("OLLAMA_HOST") || "https://ollama.com";
-  const ollamaModel = readEnv("OLLAMA_MODEL") || "minimax-m2.5:cloud";
-  const ollamaApiKey = readEnv("OLLAMA_API_KEY");
+  const ollamaHost = env.OLLAMA_HOST;
+  const ollamaModel = env.OLLAMA_MODEL;
+  const ollamaApiKey = env.OLLAMA_API_KEY?.trim() ?? "";
 
   if (!ollamaApiKey) {
     throw new Error("Missing OLLAMA_API_KEY for Deep Agent.");

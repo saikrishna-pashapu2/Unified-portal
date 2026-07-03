@@ -7,6 +7,7 @@
 
 import { NextRequest } from "next/server";
 import { requireSession, unauthorized } from "@/lib/api-auth";
+import { env } from "@/lib/config/env";
 import { getPrisma } from "@/lib/db";
 import { encoding_for_model } from "tiktoken";
 import {
@@ -125,7 +126,7 @@ export async function POST(request: NextRequest) {
     const history = await getConversationHistory(domain, conversation.id, 10);
 
     // Get OpenAI key
-    const openaiKey = process.env.OPENAI_API_KEY;
+    const openaiKey = env.OPENAI_API_KEY;
     if (!openaiKey) {
       return new Response(
         JSON.stringify({ error: "OpenAI API key not configured" }),

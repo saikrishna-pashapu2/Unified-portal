@@ -1,4 +1,5 @@
 import cron from 'node-cron';
+import { env } from "@/lib/config/env";
 
 /**
  * Alert Scheduler Worker
@@ -11,7 +12,7 @@ import cron from 'node-cron';
  * - Email Queue Processing: Every 5 minutes
  */
 
-const APP_URL = process.env.NEXTAUTH_URL || 'http://localhost:3000';
+const APP_URL = env.NEXTAUTH_URL;
 
 // Use globalThis to persist state across module reloads in development
 // This ensures the scheduler state is maintained even when Next.js hot-reloads modules
@@ -40,7 +41,7 @@ const setState = (updates: Partial<typeof globalThis.alertSchedulerState>) => {
 };
 
 async function callEndpoint(path: string, name: string) {
-  const cronSecret = process.env.CRON_SECRET?.trim();
+  const cronSecret = env.CRON_SECRET?.trim();
   if (!cronSecret) {
     console.error(`Cannot trigger ${name}: CRON_SECRET is not configured`);
     return;
@@ -88,7 +89,7 @@ export function startAlertScheduler() {
   }
 
   console.log('🚀 Starting Alert Scheduler...');
-  if (!process.env.CRON_SECRET?.trim()) {
+  if (!env.CRON_SECRET?.trim()) {
     console.error('Alert Scheduler not started: CRON_SECRET is not configured');
     return { success: false, message: 'CRON_SECRET is not configured' };
   }

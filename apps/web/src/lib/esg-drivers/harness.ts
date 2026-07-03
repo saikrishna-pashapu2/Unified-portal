@@ -3,6 +3,7 @@ import "server-only";
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import { ChatOpenAI } from "@langchain/openai";
 import { z } from "zod";
+import { env } from "@/lib/config/env";
 import {
   deckReviewSchema,
   driverQueryPlanSchema,
@@ -177,9 +178,9 @@ export async function generateEsgDriverResult(
 
 export function assertDriverGenerationConfig() {
   const missing = [
-    ["OPENAI_API_KEY", process.env.OPENAI_API_KEY],
-    ["GOOGLE_API_KEY_2", process.env.GOOGLE_API_KEY_2],
-    ["GOOGLE_CSE_ID_2", process.env.GOOGLE_CSE_ID_2],
+    ["OPENAI_API_KEY", env.OPENAI_API_KEY],
+    ["GOOGLE_API_KEY_2", env.GOOGLE_API_KEY_2],
+    ["GOOGLE_CSE_ID_2", env.GOOGLE_CSE_ID_2],
   ]
     .filter(([, value]) => !String(value || "").trim())
     .map(([name]) => name);
@@ -1045,14 +1046,14 @@ function getStructuredModel() {
   const supportsCustomTemperature = !/^gpt-5/i.test(modelName);
 
   return new ChatOpenAI({
-    openAIApiKey: process.env.OPENAI_API_KEY,
+    openAIApiKey: env.OPENAI_API_KEY,
     modelName,
     ...(supportsCustomTemperature ? { temperature: 0.2 } : {}),
   });
 }
 
 function getModelName(): string {
-  return process.env.OPENAI_ESG_DRIVERS_MODEL || "gpt-5-mini";
+  return env.OPENAI_ESG_DRIVERS_MODEL;
 }
 
 function formatEvidenceForPrompt(evidence: EsgDriverSource[]): string {

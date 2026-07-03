@@ -1,4 +1,5 @@
 import { ChatOpenAI } from "@langchain/openai";
+import { env } from "@/lib/config/env";
 import { getPrisma, Domain } from "@/lib/db";
 
 /**
@@ -59,7 +60,7 @@ export async function generateTestDigest(domain: Domain) {
     ).join("\n\n");
 
     const llm = new ChatOpenAI({
-      openAIApiKey: process.env.OPENAI_API_KEY,
+      openAIApiKey: env.OPENAI_API_KEY,
       modelName: "gpt-4o-mini",
       temperature: 0.5,
       modelKwargs: { response_format: { type: "json_object" } },

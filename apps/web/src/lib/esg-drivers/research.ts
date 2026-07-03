@@ -1,4 +1,5 @@
 import * as cheerio from "cheerio";
+import { env } from "@/lib/config/env";
 import {
   buildLogicSearchQueries,
   selectDriverLogics,
@@ -277,8 +278,8 @@ async function searchGoogleCustomSearch(
   query: string,
   maxResults: number,
 ): Promise<GoogleSearchItem[]> {
-  const apiKey = process.env.GOOGLE_API_KEY_2?.trim();
-  const cseId = process.env.GOOGLE_CSE_ID_2?.trim();
+  const apiKey = env.GOOGLE_API_KEY_2?.trim();
+  const cseId = env.GOOGLE_CSE_ID_2?.trim();
 
   if (!apiKey || !cseId) {
     throw new Error("Missing GOOGLE_API_KEY_2 or GOOGLE_CSE_ID_2 for ESG driver research.");

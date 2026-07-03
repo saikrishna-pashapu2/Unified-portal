@@ -1,6 +1,7 @@
 import { getPrisma } from "@/lib/db";
 import { summarizeText } from "@/app/actions/summarize";
 import { Suspense } from "react";
+import { env } from "@/lib/config/env";
 import LikeButton from "@/components/LikeButton";
 import { getLikeCounts, getUserLikedSet, getLikers } from "@/lib/likes";
 import { getServerSession } from "next-auth";
@@ -86,10 +87,10 @@ export default async function ArticleDetail({
 
   // provider enabled?
   const providerReady =
-    !!process.env.CUSTOM_AI_KEY &&
-    !!process.env.CUSTOM_AI_URL &&
-    !process.env.CUSTOM_AI_URL.includes("<") &&
-    !process.env.CUSTOM_AI_URL.includes(">");
+    !!env.CUSTOM_AI_KEY &&
+    !!env.CUSTOM_AI_URL &&
+    !env.CUSTOM_AI_URL.includes("<") &&
+    !env.CUSTOM_AI_URL.includes(">");
 
   const getESGIcon = () => {
     return <Leaf className="w-8 h-8 text-white" />;

@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession, unauthorized } from "@/lib/api-auth";
+import { env } from "@/lib/config/env";
 import { getPrisma } from "@/lib/db";
 import {
   getOrCreateConversation,
@@ -101,7 +102,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Generate summary using AI
-      const openaiKey = process.env.OPENAI_API_KEY;
+      const openaiKey = env.OPENAI_API_KEY;
       if (!openaiKey) {
         return NextResponse.json(
           { error: "OpenAI API key not configured" },
@@ -160,7 +161,7 @@ export async function POST(request: NextRequest) {
 
       // Generate contextual follow-up questions based on conversation history
       try {
-        const openaiKey = process.env.OPENAI_API_KEY;
+        const openaiKey = env.OPENAI_API_KEY;
         if (openaiKey) {
           // Get article for context
           const prisma = getPrisma(domain);
@@ -201,7 +202,7 @@ export async function POST(request: NextRequest) {
     } else {
       // New conversation with summary but no messages - generate initial suggested questions
       try {
-        const openaiKey = process.env.OPENAI_API_KEY;
+        const openaiKey = env.OPENAI_API_KEY;
         if (openaiKey) {
           const prisma = getPrisma(domain);
           let article: any = null;

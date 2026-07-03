@@ -1,5 +1,7 @@
 "use server";
 
+import { env } from "@/lib/config/env";
+
 function isValidUrl(u?: string | null) {
   if (!u) return false;
   if (u.includes("<") || u.includes(">")) return false; // placeholder guard
@@ -7,8 +9,8 @@ function isValidUrl(u?: string | null) {
 }
 
 export async function summarizeText(text: string) {
-  const url = process.env.CUSTOM_AI_URL ?? "";
-  const key = process.env.CUSTOM_AI_KEY ?? "";
+  const url = env.CUSTOM_AI_URL;
+  const key = env.CUSTOM_AI_KEY;
 
   if (!isValidUrl(url) || !key) {
     return { ok: false, summary: "Summarization service is not configured." };

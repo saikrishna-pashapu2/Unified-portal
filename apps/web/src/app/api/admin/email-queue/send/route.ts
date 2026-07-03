@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/nextauth-options";
 import { esgPrisma } from "@esgcredit/db-esg";
+import { env } from "@/lib/config/env";
 import nodemailer from "nodemailer";
 
 export const runtime = "nodejs";
@@ -49,13 +50,13 @@ export async function POST(req: NextRequest) {
         port: 587,
         secure: false,
         auth: {
-          user: process.env.EMAIL_USER,
-          pass: process.env.EMAIL_PASS,
+          user: env.EMAIL_USER,
+          pass: env.EMAIL_PASS,
         },
       });
 
       await transporter.sendMail({
-        from: `"ESG Portal" <${process.env.EMAIL_USER}>`,
+        from: `"ESG Portal" <${env.EMAIL_USER}>`,
         to,
         subject,
         html: htmlBody,

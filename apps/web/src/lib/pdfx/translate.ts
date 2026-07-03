@@ -1,7 +1,8 @@
 import OpenAI from 'openai';
+import { env } from "@/lib/config/env";
 
 const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
+  apiKey: env.OPENAI_API_KEY!,
 });
 
 function cleanTranslation(s: string) {

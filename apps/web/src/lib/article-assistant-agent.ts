@@ -12,6 +12,7 @@ import { BaseMessage, HumanMessage, AIMessage, SystemMessage } from "@langchain/
 // import { ToolNode } from "@langchain/langgraph/prebuilt"; // Unused - kept for reference
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
+import { env } from "@/lib/config/env";
 
 // Define the state for our agent (unused - kept for reference)
 /*
@@ -109,7 +110,7 @@ export async function streamArticleChat(
       func: async (input: { query: string }) => {
         const { query } = input;
         try {
-          const tavilyApiKey = process.env.TAVILY_API_KEY;
+          const tavilyApiKey = env.TAVILY_API_KEY;
           if (!tavilyApiKey) {
             return "Web search is not configured for this environment.";
           }
