@@ -20,6 +20,50 @@ CREATE TABLE IF NOT EXISTS monitored_tender_sources (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS monitored_ingest_runs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  source_name varchar(64) NOT NULL REFERENCES monitored_tender_sources(name) ON UPDATE CASCADE ON DELETE CASCADE,
+  started_at timestamptz NOT NULL,
+  finished_at timestamptz,
+  status varchar(32) NOT NULL DEFAULT 'running',
+  fetched integer NOT NULL DEFAULT 0,
+  normalized integer NOT NULL DEFAULT 0,
+  matched_total integer NOT NULL DEFAULT 0,
+  matched_esg integer NOT NULL DEFAULT 0,
+  matched_credit integer NOT NULL DEFAULT 0,
+  created_count integer NOT NULL DEFAULT 0,
+  updated_count integer NOT NULL DEFAULT 0,
+  unchanged_count integer NOT NULL DEFAULT 0,
+  deleted_count integer NOT NULL DEFAULT 0,
+  emails_sent integer NOT NULL DEFAULT 0,
+  partial_errors_count integer NOT NULL DEFAULT 0,
+  duration_ms numeric(18, 3),
+  error_type varchar(128),
+  error text,
+  metadata_json jsonb
+);
+
+CREATE TABLE IF NOT EXISTS monitored_tender_candidates (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  run_id uuid NOT NULL REFERENCES monitored_ingest_runs(id) ON DELETE CASCADE,
+  source_name varchar(64) NOT NULL REFERENCES monitored_tender_sources(name) ON UPDATE CASCADE ON DELETE CASCADE,
+  external_id varchar(256) NOT NULL,
+  title text NOT NULL,
+  title_en text,
+  buyer_name text,
+  country varchar(2) NOT NULL,
+  published_at timestamptz,
+  deadline_at timestamptz,
+  status varchar(32) NOT NULL DEFAULT 'unknown',
+  source_url varchar(1024) NOT NULL,
+  matched_groups text[] NOT NULL DEFAULT '{}',
+  match_details jsonb,
+  match_status varchar(32) NOT NULL DEFAULT 'unmatched',
+  raw_json jsonb NOT NULL,
+  seen_at timestamptz NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS monitored_tenders (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   source_name varchar(64) NOT NULL REFERENCES monitored_tender_sources(name) ON UPDATE CASCADE ON DELETE RESTRICT,
@@ -97,6 +141,24 @@ CREATE TABLE IF NOT EXISTS monitored_email_recipients (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS monitored_system_alerts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  alert_key varchar(160) NOT NULL,
+  alert_type varchar(64) NOT NULL,
+  severity varchar(16) NOT NULL DEFAULT 'warning',
+  status varchar(16) NOT NULL DEFAULT 'open',
+  source_name varchar(64) REFERENCES monitored_tender_sources(name) ON UPDATE CASCADE ON DELETE SET NULL,
+  title text NOT NULL,
+  detail text NOT NULL,
+  metadata_json jsonb,
+  opened_at timestamptz NOT NULL DEFAULT now(),
+  last_seen_at timestamptz NOT NULL DEFAULT now(),
+  resolved_at timestamptz,
+  notifications_sent integer NOT NULL DEFAULT 0,
+  last_notified_at timestamptz,
+  CONSTRAINT uq_monitored_system_alerts_key UNIQUE (alert_key)
+);
+
 CREATE TABLE IF NOT EXISTS monitored_notification_logs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tender_id uuid NOT NULL REFERENCES monitored_tenders(id) ON DELETE CASCADE,
@@ -120,6 +182,16 @@ CREATE TABLE IF NOT EXISTS monitored_tender_feedback (
 CREATE INDEX IF NOT EXISTS idx_monitored_sources_enabled ON monitored_tender_sources(enabled);
 CREATE INDEX IF NOT EXISTS idx_monitored_sources_country ON monitored_tender_sources(country);
 
+CREATE INDEX IF NOT EXISTS idx_monitored_ingest_runs_source_started ON monitored_ingest_runs(source_name, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_monitored_ingest_runs_status ON monitored_ingest_runs(status);
+CREATE INDEX IF NOT EXISTS idx_monitored_ingest_runs_started_at ON monitored_ingest_runs(started_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_monitored_tender_candidates_run_id ON monitored_tender_candidates(run_id);
+CREATE INDEX IF NOT EXISTS idx_monitored_tender_candidates_source_seen ON monitored_tender_candidates(source_name, seen_at DESC);
+CREATE INDEX IF NOT EXISTS idx_monitored_tender_candidates_external ON monitored_tender_candidates(source_name, external_id);
+CREATE INDEX IF NOT EXISTS idx_monitored_tender_candidates_matched_groups ON monitored_tender_candidates USING gin(matched_groups);
+CREATE INDEX IF NOT EXISTS idx_monitored_tender_candidates_seen_at ON monitored_tender_candidates(seen_at DESC);
+
 CREATE INDEX IF NOT EXISTS idx_monitored_tenders_source_name ON monitored_tenders(source_name);
 CREATE INDEX IF NOT EXISTS idx_monitored_tenders_canonical_id ON monitored_tenders(canonical_id);
 CREATE INDEX IF NOT EXISTS idx_monitored_tenders_country ON monitored_tenders(country);
@@ -142,6 +214,11 @@ CREATE INDEX IF NOT EXISTS idx_monitored_tender_likes_created_at ON monitored_te
 
 CREATE INDEX IF NOT EXISTS idx_monitored_email_recipients_enabled ON monitored_email_recipients(enabled);
 CREATE INDEX IF NOT EXISTS idx_monitored_email_recipients_team ON monitored_email_recipients(team);
+
+CREATE INDEX IF NOT EXISTS idx_monitored_system_alerts_status ON monitored_system_alerts(status);
+CREATE INDEX IF NOT EXISTS idx_monitored_system_alerts_type ON monitored_system_alerts(alert_type);
+CREATE INDEX IF NOT EXISTS idx_monitored_system_alerts_source_name ON monitored_system_alerts(source_name);
+CREATE INDEX IF NOT EXISTS idx_monitored_system_alerts_last_seen_at ON monitored_system_alerts(last_seen_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_monitored_notification_logs_tender_id ON monitored_notification_logs(tender_id);
 CREATE INDEX IF NOT EXISTS idx_monitored_notification_logs_sent_at ON monitored_notification_logs(sent_at);

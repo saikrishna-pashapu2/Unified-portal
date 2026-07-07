@@ -862,9 +862,69 @@ model monitored_tender_sources {
   created_at              DateTime            @default(now()) @db.Timestamptz(6)
   updated_at              DateTime            @default(now()) @db.Timestamptz(6)
   monitored_tenders       monitored_tenders[]
+  ingest_runs             monitored_ingest_runs[]
+  tender_candidates       monitored_tender_candidates[]
+  system_alerts           monitored_system_alerts[]
 
   @@index([enabled], map: "idx_monitored_sources_enabled")
   @@index([country], map: "idx_monitored_sources_country")
+}
+
+model monitored_ingest_runs {
+  id                   String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  source_name          String                        @db.VarChar(64)
+  started_at           DateTime                      @db.Timestamptz(6)
+  finished_at          DateTime?                     @db.Timestamptz(6)
+  status               String                        @default("running") @db.VarChar(32)
+  fetched              Int                           @default(0)
+  normalized           Int                           @default(0)
+  matched_total        Int                           @default(0)
+  matched_esg          Int                           @default(0)
+  matched_credit       Int                           @default(0)
+  created_count        Int                           @default(0)
+  updated_count        Int                           @default(0)
+  unchanged_count      Int                           @default(0)
+  deleted_count        Int                           @default(0)
+  emails_sent          Int                           @default(0)
+  partial_errors_count Int                           @default(0)
+  duration_ms          Decimal?                      @db.Decimal(18, 3)
+  error_type           String?                       @db.VarChar(128)
+  error                String?
+  metadata_json        Json?
+  source               monitored_tender_sources      @relation(fields: [source_name], references: [name], onDelete: Cascade, onUpdate: Cascade)
+  candidates           monitored_tender_candidates[]
+
+  @@index([source_name, started_at(sort: Desc)], map: "idx_monitored_ingest_runs_source_started")
+  @@index([status], map: "idx_monitored_ingest_runs_status")
+  @@index([started_at(sort: Desc)], map: "idx_monitored_ingest_runs_started_at")
+}
+
+model monitored_tender_candidates {
+  id             String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  run_id         String                   @db.Uuid
+  source_name    String                   @db.VarChar(64)
+  external_id    String                   @db.VarChar(256)
+  title          String
+  title_en       String?
+  buyer_name     String?
+  country        String                   @db.VarChar(2)
+  published_at   DateTime?                @db.Timestamptz(6)
+  deadline_at    DateTime?                @db.Timestamptz(6)
+  status         String                   @default("unknown") @db.VarChar(32)
+  source_url     String                   @db.VarChar(1024)
+  matched_groups String[]                 @default([])
+  match_details  Json?
+  match_status   String                   @default("unmatched") @db.VarChar(32)
+  raw_json       Json
+  seen_at        DateTime                 @db.Timestamptz(6)
+  created_at     DateTime                 @default(now()) @db.Timestamptz(6)
+  run            monitored_ingest_runs    @relation(fields: [run_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  source         monitored_tender_sources @relation(fields: [source_name], references: [name], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([run_id], map: "idx_monitored_tender_candidates_run_id")
+  @@index([source_name, seen_at(sort: Desc)], map: "idx_monitored_tender_candidates_source_seen")
+  @@index([source_name, external_id], map: "idx_monitored_tender_candidates_external")
+  @@index([seen_at(sort: Desc)], map: "idx_monitored_tender_candidates_seen_at")
 }
 
 model monitored_tenders {
@@ -970,6 +1030,29 @@ model monitored_email_recipients {
 
   @@index([enabled], map: "idx_monitored_email_recipients_enabled")
   @@index([team], map: "idx_monitored_email_recipients_team")
+}
+
+model monitored_system_alerts {
+  id                 String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  alert_key          String                    @unique(map: "uq_monitored_system_alerts_key") @db.VarChar(160)
+  alert_type         String                    @db.VarChar(64)
+  severity           String                    @default("warning") @db.VarChar(16)
+  status             String                    @default("open") @db.VarChar(16)
+  source_name        String?                   @db.VarChar(64)
+  title              String
+  detail             String
+  metadata_json      Json?
+  opened_at          DateTime                  @default(now()) @db.Timestamptz(6)
+  last_seen_at       DateTime                  @default(now()) @db.Timestamptz(6)
+  resolved_at        DateTime?                 @db.Timestamptz(6)
+  notifications_sent Int                       @default(0)
+  last_notified_at   DateTime?                 @db.Timestamptz(6)
+  source             monitored_tender_sources? @relation(fields: [source_name], references: [name], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([status], map: "idx_monitored_system_alerts_status")
+  @@index([alert_type], map: "idx_monitored_system_alerts_type")
+  @@index([source_name], map: "idx_monitored_system_alerts_source_name")
+  @@index([last_seen_at(sort: Desc)], map: "idx_monitored_system_alerts_last_seen_at")
 }
 
 model monitored_notification_logs {

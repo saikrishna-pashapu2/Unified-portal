@@ -43,6 +43,9 @@ const MONITORED_TABLE_NAMES = [
   "monitored_notification_logs",
   "monitored_tender_feedback",
   "monitored_share_contacts",
+  "monitored_ingest_runs",
+  "monitored_tender_candidates",
+  "monitored_system_alerts",
 ];
 
 export function isMissingMonitoredTenderSchema(error: unknown): boolean {
@@ -157,8 +160,8 @@ function orderByFor(sort: TenderSort): any[] {
   if (sort === "value_desc") return [{ value_amount: { sort: "desc", nulls: "last" } }, { id: "asc" }];
   if (sort === "value_asc") return [{ value_amount: { sort: "asc", nulls: "last" } }, { id: "asc" }];
   return [
-    { published_at: { sort: "desc", nulls: "last" } },
     { first_seen_at: "desc" },
+    { published_at: { sort: "desc", nulls: "last" } },
     { id: "asc" },
   ];
 }
