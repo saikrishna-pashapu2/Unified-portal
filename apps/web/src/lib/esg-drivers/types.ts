@@ -1,4 +1,68 @@
-export type EsgDriverJobStatus = "queued" | "processing" | "done" | "error";
+import type {
+  CatalogSourceStatus,
+  DriverSelectionPlan,
+} from "./catalog/types";
+
+export type EsgDriverJobStatus =
+  | "queued"
+  | "processing"
+  | "done"
+  | "error"
+  | "cancelled";
+
+export type EsgDriverActivityKind =
+  | "system"
+  | "selection"
+  | "search"
+  | "search-results"
+  | "source"
+  | "draft"
+  | "review"
+  | "fallback"
+  | "accepted"
+  | "omitted";
+
+export type EsgDriverActivityOutcome =
+  | "running"
+  | "found"
+  | "accepted"
+  | "rejected"
+  | "passed"
+  | "failed"
+  | "warning";
+
+export interface EsgDriverActivityResult {
+  title: string;
+  url?: string;
+  domain?: string;
+  outcome?: EsgDriverActivityOutcome;
+}
+
+/** Safe, explicit process telemetry. This is never model chain-of-thought. */
+export interface EsgDriverProgressDetail {
+  kind: EsgDriverActivityKind;
+  title?: string;
+  detail?: string;
+  outcome?: EsgDriverActivityOutcome;
+  driverId?: string;
+  driverNumber?: number;
+  section?: EsgDriverSection;
+  candidateId?: string;
+  query?: string;
+  resultCount?: number;
+  results?: EsgDriverActivityResult[];
+  reasons?: string[];
+  score?: number;
+  confidence?: number;
+  budget?: {
+    searchRequests: number;
+    maxSearchRequests: number;
+    sourceFetches: number;
+    maxSourceFetches: number;
+    activeDurationMs: number;
+    maxDurationMs: number;
+  };
+}
 
 export interface EsgDriverJobActivity {
   id: string;
@@ -6,6 +70,7 @@ export interface EsgDriverJobActivity {
   stage: string;
   progress: number;
   status: EsgDriverJobStatus;
+  detail?: EsgDriverProgressDetail;
 }
 
 export type EsgDriverSection =
@@ -24,6 +89,14 @@ export interface EsgDriverSource {
   domain: string;
   snippet: string;
   contentSnippet: string;
+  retrievalStatus: "retrieved" | "failed";
+  evidenceProvenance:
+    | "retrieved-page"
+    | "search-snippet"
+    | "approved-context";
+  isContextualFallback: boolean;
+  finalUrl: string | null;
+  retrievalError: string | null;
   publishedDate: string | null;
   updatedDate: string | null;
   lastModified: string | null;
@@ -32,6 +105,31 @@ export interface EsgDriverSource {
   freshnessScore: number;
   relevanceScore: number;
   sourceScore: number;
+  approvalId?: string;
+  approvalLabel?: string;
+  approvalUsage?: "direct" | "context";
+  approvalCountryScope?: string[];
+  approvalSectorScope?: string[];
+  approvalLogicScope?: string[];
+  approvalClaimTypes?: string[];
+}
+
+export interface RejectedEsgDriverSource {
+  id?: string;
+  title: string;
+  url: string;
+  domain: string;
+  driverLogicId: string;
+  reason:
+    | "not-approved"
+    | "retrieval-failed"
+    | "country-mismatch"
+    | "sector-mismatch"
+    | "logic-mismatch"
+    | "context-only";
+  detail: string;
+  approvalId?: string;
+  rejectedAt: string;
 }
 
 export interface DriverResearchPlan {
@@ -48,6 +146,7 @@ export interface DriverEvidencePack {
   queries: string[];
   candidateSources: EsgDriverSource[];
   selectedSources: EsgDriverSource[];
+  rejectedSources: RejectedEsgDriverSource[];
   extractedMetrics: string[];
   evidenceSummary: string;
 }
@@ -80,8 +179,32 @@ export interface AcceptedDriver {
   attempts: number;
 }
 
+export interface EsgDriverSlotFailure {
+  driverId: string;
+  driverNumber: number;
+  originalDriverLogicId: string;
+  attemptedDriverLogicIds: string[];
+  reasons: string[];
+  createdAt: string;
+}
+
+export interface EsgDriverCandidateTrace {
+  slotId: string;
+  driverId: string;
+  candidateId: string;
+  score: number;
+  scoreReasons: string[];
+  sourceStatus: CatalogSourceStatus;
+  attempts: number;
+  status: "preflight-rejected" | "rejected" | "accepted";
+  rejectionReason: string | null;
+  createdAt: string;
+}
+
 export interface HarnessTrace {
   mode: "research-grade";
+  catalogVersion: string;
+  selectionPlan: DriverSelectionPlan;
   model: string;
   startedAt: string;
   completedAt: string;
@@ -92,6 +215,7 @@ export interface HarnessTrace {
     maxRewriteAttemptsPerDriver: number;
     minimumConfidenceTarget: number;
   };
+  researchBudget: EsgDriverProgressDetail["budget"] | null;
   driverPlans: DriverResearchPlan[];
   evidencePacks: DriverEvidencePack[];
   acceptedDrivers: Array<{
@@ -102,6 +226,16 @@ export interface HarnessTrace {
     confidence: number;
   }>;
   rejectedAttempts: RejectedDriverAttempt[];
+  rejectedSources: RejectedEsgDriverSource[];
+  candidateAttempts: EsgDriverCandidateTrace[];
+  slotFailures?: EsgDriverSlotFailure[];
+  logicReplacements: Array<{
+    driverId: string;
+    originalDriverLogicId: string;
+    replacementDriverLogicId: string;
+    reason: string;
+    createdAt: string;
+  }>;
   deckReview: {
     passed: boolean;
     score: number;
@@ -132,11 +266,61 @@ export interface EsgDriverResult {
   country: string;
   sector: string;
   language: string;
+  catalogVersion: string;
   generatedAt: string;
   drivers: EsgDriver[];
   evidence: EsgDriverSource[];
   warnings: string[];
+  /** Absent on legacy saved packs created before partial completion support. */
+  completion?: "complete" | "partial";
+  expectedDriverCount?: number;
+  slotFailures?: EsgDriverSlotFailure[];
   trace?: HarnessTrace;
+}
+
+export interface EsgDriverCheckpointSlotState {
+  slotId: string;
+  driverId: string;
+  candidateId: string;
+  status: "accepted" | "exhausted";
+  driver?: EsgDriver;
+  evidencePack?: DriverEvidencePack;
+  verification?: DriverVerificationResult;
+  attempts?: number;
+  researchPlan?: DriverResearchPlan;
+  rejectedAttempts?: RejectedDriverAttempt[];
+  attemptedCandidateIds: string[];
+  failure?: EsgDriverSlotFailure;
+}
+
+export interface EsgDriverCheckpoint {
+  version: 1;
+  catalogVersion: string;
+  selectionPlan: DriverSelectionPlan;
+  canonicalDrivers: EsgDriver[];
+  evidencePacks: DriverEvidencePack[];
+  completedSlotIds: string[];
+  failedSlots: EsgDriverSlotFailure[];
+  attemptedCandidateIds: string[];
+  /** Optional for compatibility with checkpoints created before trace persistence. */
+  candidateAttempts?: EsgDriverCandidateTrace[];
+  slotStates: EsgDriverCheckpointSlotState[];
+  updatedAt: string;
+  resume?: {
+    parentJobId: string;
+    requestedAt: string;
+    revalidateAcceptedSources: true;
+  };
+}
+
+export interface GenerateEsgDriverHarnessOptions {
+  onProgress?: (
+    stage: string,
+    progress: number,
+    detail?: EsgDriverProgressDetail,
+  ) => void | Promise<void>;
+  checkpoint?: EsgDriverCheckpoint;
+  onCheckpoint?: (checkpoint: EsgDriverCheckpoint) => Promise<void>;
 }
 
 export interface EsgDriverJob {
@@ -151,6 +335,9 @@ export interface EsgDriverJob {
   error: string | null;
   result: EsgDriverResult | null;
   evidence: EsgDriverSource[];
+  checkpoint: EsgDriverCheckpoint | null;
+  catalogVersion: string | null;
+  parentJobId: string | null;
   activity: EsgDriverJobActivity[];
   createdAt: string | null;
   updatedAt: string | null;

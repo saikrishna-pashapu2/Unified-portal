@@ -6,15 +6,26 @@ describe("env config", () => {
     expect(loadEnv({})).toMatchObject({
       CUSTOM_AI_KEY: "",
       CUSTOM_AI_URL: "",
+      ESG_DRIVER_SELECTION_MODE: "catalog",
       MAIL_PORT: "587",
       MAIL_SERVER: "smtp.gmail.com",
       NEXT_PUBLIC_API_URL: "http://localhost:3000",
       NEXTAUTH_URL: "http://localhost:3000",
       OLLAMA_HOST: "https://ollama.com",
       OLLAMA_MODEL: "minimax-m2.5:cloud",
-      OPENAI_ESG_DRIVERS_MODEL: "gpt-5-mini",
+      OPENAI_ESG_DRIVERS_MODEL: "gpt-5.4-mini",
       PDFX_STORAGE_DIR: ".pdfx_store",
     });
+  });
+
+  it("allows an explicit legacy ESG driver selector rollback", () => {
+    expect(
+      loadEnv({ ESG_DRIVER_SELECTION_MODE: "legacy" })
+        .ESG_DRIVER_SELECTION_MODE,
+    ).toBe("legacy");
+    expect(() =>
+      loadEnv({ ESG_DRIVER_SELECTION_MODE: "unknown" as "catalog" }),
+    ).toThrow(/Invalid environment configuration/);
   });
 
   it("keeps MAIL_FROM fallback tied to MAIL_USERNAME", () => {

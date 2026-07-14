@@ -1,6 +1,17 @@
 packages:
   - 'packages/*'
   - 'apps/*'
+allowBuilds:
+  '@prisma/client': true
+  '@prisma/engines': true
+  canvas: true
+  core-js: true
+  prisma: true
+  protobufjs: true
+  puppeteer: true
+  sharp: true
+  tesseract.js: true
+  unrs-resolver: true
 overrides:
   '@prisma/client': 5.22.0
   '@smithy/config-resolver': ^4.4.0
@@ -13,6 +24,7 @@ overrides:
   brace-expansion: ^2.0.3
   dompurify: ^3.4.11
   fast-xml-parser: ^5.3.5
+  flatted: ^3.4.2
   follow-redirects: ^1.16.0
   form-data: ^4.0.6
   glob: ^10.5.0
@@ -22,7 +34,6 @@ overrides:
   js-cookie: ^3.0.7
   langsmith: ^0.6.0
   mdast-util-to-hast: ^13.2.1
-  minimatch: ^9.0.7
   nodemailer: ^9.0.1
   pdfjs-dist: ^4.2.67
   picomatch: ^2.3.2

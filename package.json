@@ -1,6 +1,11 @@
 {
   "name": "portal-v3",
   "private": true,
+  "packageManager": "pnpm@10.18.1",
+  "engines": {
+    "node": ">=22.12.0",
+    "pnpm": ">=10.0.0"
+  },
   "workspaces": [
     "packages/*"
   ],
@@ -8,18 +13,21 @@
     "dev": "pnpm -C apps/web dev",
     "build": "pnpm db:generate && pnpm -C apps/web build",
     "start": "pnpm -C apps/web start",
+    "worker": "pnpm -C apps/web worker",
+    "catalog:generate": "pnpm -C apps/web catalog:generate",
+    "catalog:check": "pnpm -C apps/web catalog:check",
     "lint": "pnpm -C apps/web lint",
-    "type-check": "pnpm -C apps/web tsc --noEmit",
+    "type-check": "pnpm -C apps/web exec tsc --noEmit --incremental false && pnpm -C apps/web exec tsc -p tsconfig.esg-driver-worker.json --noEmit --incremental false",
+    "test": "pnpm -C apps/web test",
+    "test:e2e": "pnpm -C apps/web test:e2e",
+    "postinstall": "pnpm db:generate",
     "db:pull": "pnpm -C packages/db-esg pull && pnpm -C packages/db-credit pull",
     "db:generate": "pnpm -C packages/db-esg generate && pnpm -C packages/db-credit generate",
+    "db:migrate:deploy": "node scripts/prisma-migrate-deploy.mjs",
     "db:studio:esg": "pnpm -C packages/db-esg studio",
     "db:studio:credit": "pnpm -C packages/db-credit studio",
-    "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules apps/*/.next",
+    "clean": "node scripts/clean.mjs",
     "audit": "pnpm audit --audit-level moderate",
-    "docker:build": "docker build -t portal-v3 .",
-    "docker:run": "docker-compose up -d",
-    "docker:stop": "docker-compose down",
-    "docker:logs": "docker-compose logs -f app",
     "prod:check": "node scripts/production-check.js"
   },
   "devDependencies": {

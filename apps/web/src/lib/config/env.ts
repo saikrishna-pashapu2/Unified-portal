@@ -10,6 +10,7 @@ export const envSchema = z
     EMAIL_PASS: optionalString,
     EMAIL_USER: optionalString,
     ENABLE_ALERT_SCHEDULER: optionalString,
+    ESG_DRIVER_SELECTION_MODE: z.enum(["catalog", "legacy"]).optional(),
     GOOGLE_API_KEY_2: optionalString,
     GOOGLE_CSE_ID_2: optionalString,
     MAIL_FROM: optionalString,
@@ -42,6 +43,7 @@ export interface EnvConfig {
   EMAIL_PASS?: string;
   EMAIL_USER?: string;
   ENABLE_ALERT_SCHEDULER?: string;
+  ESG_DRIVER_SELECTION_MODE: "catalog" | "legacy";
   GOOGLE_API_KEY_2?: string;
   GOOGLE_CSE_ID_2?: string;
   MAIL_FROM?: string;
@@ -85,6 +87,7 @@ export function loadEnv(rawEnv: RawEnv): Readonly<EnvConfig> {
     EMAIL_PASS: raw.EMAIL_PASS,
     EMAIL_USER: raw.EMAIL_USER,
     ENABLE_ALERT_SCHEDULER: raw.ENABLE_ALERT_SCHEDULER,
+    ESG_DRIVER_SELECTION_MODE: raw.ESG_DRIVER_SELECTION_MODE || "catalog",
     GOOGLE_API_KEY_2: raw.GOOGLE_API_KEY_2,
     GOOGLE_CSE_ID_2: raw.GOOGLE_CSE_ID_2,
     MAIL_FROM: raw.MAIL_FROM || raw.MAIL_USERNAME,
@@ -100,7 +103,7 @@ export function loadEnv(rawEnv: RawEnv): Readonly<EnvConfig> {
     OLLAMA_HOST: (raw.OLLAMA_HOST ?? "").trim() || "https://ollama.com",
     OLLAMA_MODEL: (raw.OLLAMA_MODEL ?? "").trim() || "minimax-m2.5:cloud",
     OPENAI_API_KEY: raw.OPENAI_API_KEY,
-    OPENAI_ESG_DRIVERS_MODEL: raw.OPENAI_ESG_DRIVERS_MODEL || "gpt-5-mini",
+    OPENAI_ESG_DRIVERS_MODEL: raw.OPENAI_ESG_DRIVERS_MODEL || "gpt-5.4-mini",
     OPENAI_ORG_ID: raw.OPENAI_ORG_ID || undefined,
     PDFX_STORAGE_DIR: raw.PDFX_STORAGE_DIR || ".pdfx_store",
     SPGLOBAL_SEARCH_TOKEN: raw.SPGLOBAL_SEARCH_TOKEN,

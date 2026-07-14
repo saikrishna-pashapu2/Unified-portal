@@ -12,6 +12,29 @@ export interface EsgDriverLogic {
   preciseQuestion: string;
   evidenceTarget: string;
   sourcePriorities: string[];
+  /** Legacy registry scopes accepted for a catalog archetype. */
+  registryLogicIds?: string[];
+  /** Exact catalog URLs to hydrate before broader same-publisher discovery. */
+  seedUrls?: string[];
+  catalogArchetypeId?: string;
+  catalogName?: string;
+  catalogCountryScopes?: string[];
+  catalogSectorScopes?: string[];
+  catalogSectorFamilies?: string[];
+  catalogSourceStatus?: "reviewed-seed" | "reviewed-guidance-only" | "missing";
+  exampleGuidance?: string;
+  catalogEvidenceCategory?:
+    | "regulation"
+    | "policy"
+    | "forecast"
+    | "market-metric"
+    | "standard"
+    | "evergreen-framework"
+    | "risk"
+    | "other";
+  specialistLibrary?: string | null;
+  documentVersion?: string | null;
+  pageReferences?: string[];
 }
 
 export const DRIVER_LOGIC_LIBRARY: EsgDriverLogic[] = [
@@ -147,15 +170,161 @@ export const DRIVER_LOGIC_LIBRARY: EsgDriverLogic[] = [
       "Sector supply-chain target, Scope 3 lever, low-carbon input, sustainable procurement standard, or client supply-chain finance solution.",
     sourcePriorities: ["sector bodies", "IEA", "IATA", "GHG Protocol", "UNEP FI"],
   },
+  {
+    id: "sustainable-finance-market",
+    section: "Global Drivers",
+    type: "Sector-related",
+    logic: "Show sustainable finance frameworks or market programs shaping the sector.",
+    preciseQuestion:
+      "Which sustainable finance framework or market program creates a practical ESG direction for this sector?",
+    evidenceTarget:
+      "Sustainable finance framework, banking principle, market program, or dated finance initiative.",
+    sourcePriorities: ["UNEP FI", "central bank", "market regulator", "ADGM", "AIFC"],
+  },
+  {
+    id: "sector-target-setting-pressure",
+    section: "Global Drivers",
+    type: "Sector-related",
+    logic: "Show target-setting pressure from sector pathways or science-based frameworks.",
+    preciseQuestion:
+      "Which sector target-setting framework or pathway raises expectations for companies in this sector?",
+    evidenceTarget:
+      "Science-based target framework, sector pathway, transition target, or recognized sector guidance.",
+    sourcePriorities: ["SBTi", "IEA", "sector bodies", "UNEP FI"],
+  },
+  {
+    id: "market-disclosure-rule",
+    section: "Regulatory Requirements",
+    type: "Country-related",
+    logic: "Show a local market, exchange, or financial-centre disclosure rule.",
+    preciseQuestion:
+      "Which local market, exchange, financial-centre, or regulator disclosure expectation affects ESG reporting in this country?",
+    evidenceTarget:
+      "Disclosure guide, market rule, sustainable finance framework, listing guidance, or regulator program.",
+    sourcePriorities: ["stock exchange", "market regulator", "financial centre", "DFSA", "ADGM", "AIFC"],
+  },
+  {
+    id: "country-taxonomy-framework",
+    section: "Regulatory Requirements",
+    type: "Country-related",
+    logic: "Show a country taxonomy, sustainable finance framework, or classification initiative.",
+    preciseQuestion:
+      "Which country taxonomy or sustainable finance framework shapes what counts as sustainable activity?",
+    evidenceTarget:
+      "Taxonomy, sustainable finance framework, green finance program, or regulator classification guidance.",
+    sourcePriorities: ["central bank", "market regulator", "government", "financial centre"],
+  },
+  {
+    id: "financial-supervisor-climate-risk",
+    section: "Climate Risks",
+    type: "Sector-related",
+    logic: "Show financial supervisor or sector body expectations for climate-risk management.",
+    preciseQuestion:
+      "Which supervisor or sector body guidance makes climate-risk governance material for this sector?",
+    evidenceTarget:
+      "Climate-risk principle, supervisory expectation, governance guidance, or stress-testing signal.",
+    sourcePriorities: ["FSB", "NGFS", "Basel Committee", "central bank", "sector regulator"],
+  },
+  {
+    id: "country-adaptation-resilience",
+    section: "Climate Risks",
+    type: "Country-related",
+    logic: "Show country adaptation, resilience, or physical-risk policy direction.",
+    preciseQuestion:
+      "Which country climate resilience or adaptation signal matters for this sector's risk exposure?",
+    evidenceTarget:
+      "Adaptation plan, physical-risk profile, resilience strategy, or dated climate-risk country profile.",
+    sourcePriorities: ["World Bank", "national government", "climate ministry", "ADB"],
+  },
+  {
+    id: "sustainable-capital-access",
+    section: "Capital Markets",
+    type: "Country-related",
+    logic: "Show how sustainable finance affects access to capital in this country.",
+    preciseQuestion:
+      "Which sustainable finance program or capital-market framework affects access to funding in this country?",
+    evidenceTarget:
+      "Sustainable finance program, DFI framework, financial-centre initiative, or green finance market signal.",
+    sourcePriorities: ["World Bank", "IFC", "central bank", "financial centre", "DFI"],
+  },
+  {
+    id: "climate-risk-capital-expectations",
+    section: "Capital Markets",
+    type: "Sector-related",
+    logic: "Show investor or lender expectations around climate-risk governance.",
+    preciseQuestion:
+      "Which investor, lender, or supervisor expectation affects climate-risk governance for this sector?",
+    evidenceTarget:
+      "Investor expectation, lender framework, supervisor principle, or climate-risk disclosure framework.",
+    sourcePriorities: ["FSB", "NGFS", "UNEP FI", "Basel Committee", "stock exchanges"],
+  },
+  {
+    id: "scope-3-accounting-expectation",
+    section: "Supply Chain",
+    type: "Sector-related",
+    logic: "Show Scope 3 or financed-emissions accounting expectations for the sector.",
+    preciseQuestion:
+      "Which Scope 3, financed-emissions, or value-chain accounting standard makes ESG measurement material for this sector?",
+    evidenceTarget:
+      "Scope 3 guidance, financed-emissions standard, value-chain accounting method, or reporting expectation.",
+    sourcePriorities: ["GHG Protocol", "PCAF", "UNEP FI", "sector bodies"],
+  },
+  {
+    id: "supplier-disclosure-pressure",
+    section: "Supply Chain",
+    type: "General",
+    logic: "Show supplier disclosure or value-chain engagement pressure.",
+    preciseQuestion:
+      "Which supplier disclosure or value-chain engagement framework raises supply-chain ESG expectations?",
+    evidenceTarget:
+      "Supplier disclosure framework, supply-chain engagement program, Scope 3 requirement, or procurement standard.",
+    sourcePriorities: ["CDP", "GHG Protocol", "WRI", "sector bodies"],
+  },
 ];
 
-const DEFAULT_LOGIC_IDS = DRIVER_LOGIC_LIBRARY.map((logic) => logic.id);
+const DEFAULT_LOGIC_IDS = [
+  "global-climate-commitments",
+  "sector-emissions-footprint",
+  "sector-transition-initiative",
+  "global-disclosure-standards",
+  "country-climate-policy",
+  "country-sector-regulation",
+  "global-climate-macro-risk",
+  "country-sector-climate-risk",
+  "investor-lender-expectations",
+  "development-finance-pressure",
+  "supply-chain-climate-exposure",
+  "sector-supply-chain-solution",
+];
 
-export function selectDriverLogics(input: GenerateEsgDriversInput): EsgDriverLogic[] {
+export function selectLegacyDriverLogics(input: GenerateEsgDriversInput): EsgDriverLogic[] {
   const byId = new Map(DRIVER_LOGIC_LIBRARY.map((logic) => [logic.id, logic]));
   return DEFAULT_LOGIC_IDS.map((id) => byId.get(id)).filter(
     (logic): logic is EsgDriverLogic => Boolean(logic),
   );
+}
+
+/** @deprecated Prefer buildDriverSelectionPlan(). Retained for rollback compatibility. */
+export function selectDriverLogics(input: GenerateEsgDriversInput): EsgDriverLogic[] {
+  return selectLegacyDriverLogics(input);
+}
+
+export function getReplacementDriverLogics(
+  logic: EsgDriverLogic,
+  usedLogicIds: Set<string>,
+): EsgDriverLogic[] {
+  return DRIVER_LOGIC_LIBRARY.filter((candidate) => {
+    if (candidate.id === logic.id) return true;
+    if (usedLogicIds.has(candidate.id)) return false;
+    if (DEFAULT_LOGIC_IDS.includes(candidate.id)) return false;
+    return candidate.section === logic.section;
+  }).sort((left, right) => {
+    if (left.id === logic.id) return -1;
+    if (right.id === logic.id) return 1;
+    if (left.type === logic.type && right.type !== logic.type) return -1;
+    if (right.type === logic.type && left.type !== logic.type) return 1;
+    return 0;
+  });
 }
 
 export function buildLogicSearchQueries(
@@ -238,6 +407,10 @@ function getLogicSearchTemplate(logicId: string, sectorGroup: string): string {
         "{sector} investor expectations financed emissions FSB NGFS climate disclosure",
       "sector-supply-chain-solution":
         "{country} {sector} sustainable supply chain finance client Scope 3 ESG",
+      "sustainable-finance-market":
+        "{country} {sector} CBUAE DFSA ADGM UNEP FI sustainable finance framework",
+      "sector-target-setting-pressure":
+        "{sector} UNEP FI net-zero banking target setting SBTi financial institutions",
     };
     if (bankingTemplates[logicId]) return bankingTemplates[logicId];
   }
@@ -267,6 +440,26 @@ function getLogicSearchTemplate(logicId: string, sectorGroup: string): string {
       "CDP supply chain climate risk losses Scope 3 emissions global",
     "sector-supply-chain-solution":
       "{sector} supply chain decarbonization Scope 3 procurement low carbon solution",
+    "sustainable-finance-market":
+      "{country} {sector} sustainable finance framework market program regulator",
+    "sector-target-setting-pressure":
+      "{sector} science based targets sector pathway transition framework",
+    "market-disclosure-rule":
+      "{country} market regulator exchange ESG disclosure sustainable finance guidance",
+    "country-taxonomy-framework":
+      "{country} sustainable finance taxonomy green finance framework regulator",
+    "financial-supervisor-climate-risk":
+      "{sector} climate risk governance supervisor principles FSB NGFS Basel",
+    "country-adaptation-resilience":
+      "{country} climate adaptation resilience physical risk profile World Bank",
+    "sustainable-capital-access":
+      "{country} sustainable finance capital market green finance framework DFI",
+    "climate-risk-capital-expectations":
+      "{sector} lender investor climate risk governance expectations FSB NGFS",
+    "scope-3-accounting-expectation":
+      "{sector} Scope 3 accounting financed emissions GHG Protocol PCAF",
+    "supplier-disclosure-pressure":
+      "CDP supplier disclosure supply chain Scope 3 engagement framework",
   };
 
   return templates[logicId] || "{country} {sector} ESG sustainability climate";

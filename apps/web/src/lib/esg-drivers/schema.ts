@@ -1,4 +1,39 @@
 import { z } from "zod";
+import {
+  canonicalizeEsgDriverCountry,
+  canonicalizeEsgDriverSector,
+  ESG_DRIVER_COUNTRY_OPTIONS,
+  ESG_DRIVER_SECTOR_OPTIONS,
+} from "./coverage";
+
+export {
+  ESG_DRIVER_COUNTRY_OPTIONS,
+  ESG_DRIVER_SECTOR_OPTIONS,
+} from "./coverage";
+
+const nonBlankString = z.string().trim().min(1);
+const verificationMessageSchema = nonBlankString.max(500);
+
+export const SUPPORTED_ESG_DRIVER_COUNTRIES = ESG_DRIVER_COUNTRY_OPTIONS;
+export const SUPPORTED_ESG_DRIVER_SECTORS = ESG_DRIVER_SECTOR_OPTIONS;
+
+// Any country / any sector is accepted. Known aliases are normalized to the
+// catalog's canonical label (so "UAE" and "United Arab Emirates" behave the
+// same); anything else passes through as typed. The agent selects whichever
+// reviewed archetypes apply (All-scoped drivers always apply).
+const supportedCountrySchema = z
+  .string()
+  .trim()
+  .min(2)
+  .max(120)
+  .transform((value) => canonicalizeEsgDriverCountry(value) || value);
+
+const supportedSectorSchema = z
+  .string()
+  .trim()
+  .min(2)
+  .max(160)
+  .transform((value) => canonicalizeEsgDriverSector(value) || value);
 
 export const driverSectionSchema = z.enum([
   "Global Drivers",
@@ -17,61 +52,121 @@ export const driverTypeSchema = z.enum([
 export const generatedDriverSchema = z.object({
   driverLogicId: z
     .string()
+    .trim()
     .min(3)
     .describe("Driver logic id copied exactly from the provided driver logic plan."),
   driverSection: driverSectionSchema,
   driverType: driverTypeSchema,
-  driverTitle: z.string().min(4),
-  driverText: z.string().min(40),
-  countrySectorRelevance: z.string().min(20),
-  evidenceKpi: z.string().min(8),
+  driverTitle: z.string().trim().min(4).max(160),
+  driverText: z.string().trim().min(40).max(600),
+  countrySectorRelevance: z.string().trim().min(20).max(600),
+  evidenceKpi: z.string().trim().min(8).max(400),
   keySources: z
     .array(
       z
         .string()
+        .trim()
         .min(2)
-        .describe("Exact organization or publisher names from the evidence."),
+        .max(160)
+        .describe(
+          "Distinct exact approved source labels for sourceLinks, in citation order. This redundant metadata is canonicalized from the cited evidence URLs.",
+        ),
     )
     .min(1)
     .max(5),
   sourceLinks: z
-    .array(z.string().min(8).describe("Source URL copied exactly from the evidence list."))
+    .array(
+      z
+        .string()
+        .trim()
+        .min(8)
+        .max(2_048)
+        .describe("Source URL copied exactly from the evidence list."),
+    )
     .min(1)
     .max(5),
   confidence: z.number().min(0).max(100),
-  sourceRefs: z.array(z.string().min(2)).min(1).max(5),
+  sourceRefs: z
+    .array(
+      z
+        .string()
+        .trim()
+        .min(2)
+        .max(120)
+        .describe(
+          "Top-level evidence entry id for a cited sourceLink, not approvedSource.id. This is redundant metadata and is canonicalized from sourceLinks.",
+        ),
+    )
+    .min(1)
+    .max(5),
 });
 
 export const generatedDriverPackSchema = z.object({
   drivers: z.array(generatedDriverSchema).length(12),
-  warnings: z.array(z.string()).max(8),
+  warnings: z.array(verificationMessageSchema).max(8),
 });
 
 export const generatedSingleDriverSchema = generatedDriverSchema.extend({
   sourceLinks: z
-    .array(z.string().min(8).describe("Source URL copied exactly from this driver's evidence pack."))
+    .array(
+      z
+        .string()
+        .trim()
+        .min(8)
+        .max(2_048)
+        .describe("Source URL copied exactly from this driver's evidence pack."),
+    )
     .min(1)
     .max(3),
-  sourceRefs: z.array(z.string().min(2)).min(1).max(3),
+  sourceRefs: z
+    .array(
+      z
+        .string()
+        .trim()
+        .min(2)
+        .max(120)
+        .describe(
+          "Top-level evidence entry id for a cited sourceLink, not approvedSource.id. This redundant metadata is canonicalized from sourceLinks.",
+        ),
+    )
+    .min(1)
+    .max(3),
 });
 
 export const driverQueryPlanSchema = z.object({
   queries: z
-    .array(z.string().min(8).max(180))
+    .array(z.string().trim().min(8).max(180))
     .min(4)
     .max(8)
     .describe("Targeted web search queries for this single ESG driver logic."),
-  rationale: z.string().min(20).max(500),
+  rationale: z.string().trim().min(20).max(500),
 });
 
 export const driverVerificationSchema = z.object({
   passed: z.boolean(),
   score: z.number().min(0).max(100),
-  reasons: z.array(z.string()).max(8),
-  requiredRepairs: z.array(z.string()).max(8),
-  unsupportedMetrics: z.array(z.string()).max(8),
-  sourceIssues: z.array(z.string()).max(8),
-  styleIssues: z.array(z.string()).max(8),
+  reasons: z
+    .array(verificationMessageSchema)
+    .max(8)
+    .describe(
+      "Concise observations explaining the verdict. These may confirm passing checks; every blocking defect must also be placed in its typed issue array and set passed=false.",
+    ),
+  requiredRepairs: z
+    .array(verificationMessageSchema)
+    .max(8)
+    .describe("Blocking semantic or structural repairs only; empty when none."),
+  unsupportedMetrics: z
+    .array(verificationMessageSchema)
+    .max(8)
+    .describe("Blocking unsupported metric/date/target defects only; empty when none."),
+  sourceIssues: z
+    .array(verificationMessageSchema)
+    .max(8)
+    .describe("Blocking citation or source defects only; empty when none."),
+  styleIssues: z
+    .array(verificationMessageSchema)
+    .max(8)
+    .describe("Blocking pitch-readiness defects only; empty when none."),
   recommendedConfidence: z.number().min(0).max(100),
   canRepair: z.boolean(),
 });
@@ -79,12 +174,12 @@ export const driverVerificationSchema = z.object({
 export const deckReviewSchema = z.object({
   passed: z.boolean(),
   score: z.number().min(0).max(100),
-  warnings: z.array(z.string()).max(12),
+  warnings: z.array(verificationMessageSchema).max(12),
 });
 
 export const generateDriversRequestSchema = z.object({
-  country: z.string().trim().min(2).max(120),
-  sector: z.string().trim().min(2).max(160),
+  country: supportedCountrySchema,
+  sector: supportedSectorSchema,
   language: z.string().trim().min(2).max(80).default("English"),
 });
 

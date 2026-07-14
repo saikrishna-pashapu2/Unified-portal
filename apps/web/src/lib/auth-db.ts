@@ -1,6 +1,5 @@
+import { createHash } from "node:crypto";
 import { esgPrisma } from "@esgcredit/db-esg";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/nextauth-options";
 
 // Returns the raw users row (whatever columns exists)
 export async function findUserByEmail(email: string) {
@@ -12,54 +11,31 @@ export async function findUserByEmail(email: string) {
   return rows[0] ?? null;
 }
 
-// Get the authenticated user ID from the session
+export async function findUserAuthStateById(userId: number) {
+  return esgPrisma.users.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      email: true,
+      username: true,
+      first_name: true,
+      last_name: true,
+      password_hash: true,
+      is_admin: true,
+      is_active_db: true,
+      team: true,
+    },
+  });
+}
+
+export function passwordAuthVersion(passwordHash: string): string {
+  return createHash("sha256").update(passwordHash).digest("base64url");
+}
+
+// Backward-compatible entrypoint for routes that have not yet moved to the
+// dedicated session helper. The dynamic import avoids a module cycle because
+// session-user imports findUserAuthStateById from this module.
 export async function ensureUserId(): Promise<number | null> {
-  const session = await getServerSession(authOptions);
-  
-  if (!session?.user) {
-    return null;
-  }
-  
-  // The session includes user.id due to our callback configuration
-  const userWithId = session.user as any;
-  
-  if (!userWithId.id) {
-    return null;
-  }
-  
-  // Convert string ID from session to number
-  const userId = parseInt(userWithId.id, 10);
-  
-  if (isNaN(userId)) {
-    return null;
-  }
-  
-  // Check if user exists in database, if not create them
-  try {
-    const existingUser = await esgPrisma.users.findUnique({
-      where: { id: userId }
-    });
-    
-    if (!existingUser) {
-      // Create user if they don't exist
-      const newUser = await esgPrisma.users.create({
-        data: {
-          id: userId,
-          username: session.user.email?.split('@')[0] || `user_${userId}`,
-          email: session.user.email || null,
-          password_hash: '', // Empty since they're using NextAuth
-          first_name: session.user.name?.split(' ')[0] || null,
-          last_name: session.user.name?.split(' ').slice(1).join(' ') || null,
-          is_admin: false,
-          is_active_db: true,
-        }
-      });
-      console.log('Created new user:', newUser.id);
-    }
-    
-    return userId;
-  } catch (error) {
-    console.error('Error ensuring user exists:', error);
-    return null;
-  }
+  const sessionUser = await import("@/lib/session-user");
+  return sessionUser.ensureUserId();
 }

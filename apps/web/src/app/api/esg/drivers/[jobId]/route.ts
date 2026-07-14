@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ensureUserId } from "@/lib/auth-db";
+import { ensureUserId } from "@/lib/session-user";
 import { deleteEsgDriverJob, isDriverJobId } from "@/lib/esg-drivers";
 
 export const runtime = "nodejs";
@@ -21,10 +21,22 @@ export async function DELETE(
     return NextResponse.json({ error: "Invalid jobId" }, { status: 400 });
   }
 
-  const deleted = await deleteEsgDriverJob(jobId, userId);
-  if (!deleted) {
+  const outcome = await deleteEsgDriverJob(jobId, userId);
+  if (!outcome) {
     return NextResponse.json({ error: "Job not found" }, { status: 404 });
   }
+  if (outcome === "linked") {
+    return NextResponse.json(
+      {
+        error:
+          "This driver pack is the parent of a retry job and must be retained for provenance.",
+      },
+      { status: 409 },
+    );
+  }
 
-  return NextResponse.json({ success: true, jobId });
+  return NextResponse.json(
+    { success: true, jobId, status: outcome },
+    { status: outcome === "cancelling" ? 202 : 200 },
+  );
 }

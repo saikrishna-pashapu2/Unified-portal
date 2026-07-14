@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ensureUserId } from "@/lib/auth-db";
+import { ensureUserId } from "@/lib/session-user";
 import { getEsgDriverJob } from "@/lib/esg-drivers";
 
 export const runtime = "nodejs";

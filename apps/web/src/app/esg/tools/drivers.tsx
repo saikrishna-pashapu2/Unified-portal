@@ -23,6 +23,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
+  Download,
   ExternalLink,
   FileText,
   Globe2,
@@ -31,6 +32,7 @@ import {
   Layers3,
   Loader2,
   Plus,
+  RefreshCw,
   Search,
   ShieldCheck,
   Sparkles,
@@ -44,6 +46,20 @@ import type {
   EsgDriverResult,
   EsgDriverSource,
 } from "@/lib/esg-drivers/types";
+import {
+  ESG_DRIVER_COUNTRY_OPTIONS,
+  ESG_DRIVER_SECTOR_OPTIONS,
+} from "@/lib/esg-drivers/coverage";
+import {
+  canResumePartialDriverJob,
+  driverPollRetryDelay,
+  driverResumePath,
+  isCancellableDriverJob,
+  isCurrentDriverRequest,
+  mergeDriverHistoryPage,
+  shouldPollDriverJob,
+  trackedDriverJobForScreen,
+} from "./drivers-client";
 
 interface DriverStatus {
   jobId: string;
@@ -65,6 +81,7 @@ interface HistoryItem {
   error: string | null;
   latestActivity: EsgDriverJobActivity | null;
   driverCount: number;
+  needsAttention: boolean;
   createdAt: string | null;
   completedAt: string | null;
 }
@@ -109,22 +126,61 @@ export default function EsgDriversTool() {
   const [jobId, setJobId] = useState("");
   const [status, setStatus] = useState<DriverStatus | null>(null);
   const [result, setResult] = useState<EsgDriverResult | null>(null);
+  const [resultJobId, setResultJobId] = useState("");
+  const [resultResumable, setResultResumable] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [historyNextCursor, setHistoryNextCursor] = useState<string | null>(null);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyCompleted, setHistoryCompleted] = useState(0);
+  const [historyNeedsAttention, setHistoryNeedsAttention] = useState(0);
   const [expandedDriverId, setExpandedDriverId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<DriverViewMode>("deck");
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [loadingMoreHistory, setLoadingMoreHistory] = useState(false);
   const [loadingJob, setLoadingJob] = useState(false);
+  const [startingGeneration, setStartingGeneration] = useState(false);
   const [deletingJobId, setDeletingJobId] = useState("");
+  const [exportingJobId, setExportingJobId] = useState("");
+  const [resumingJobId, setResumingJobId] = useState("");
   const [deleteCandidate, setDeleteCandidate] = useState<HistoryItem | null>(null);
   const [historyError, setHistoryError] = useState("");
+  const [historyLoadError, setHistoryLoadError] = useState("");
   const [error, setError] = useState("");
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollAbortRef = useRef<AbortController | null>(null);
+  const pollFailureCountRef = useRef(0);
+  const loadAbortRef = useRef<AbortController | null>(null);
+  const historyAbortRef = useRef<AbortController | null>(null);
+  const historyEpochRef = useRef(0);
+  const activeJobRef = useRef(currentJobId);
+  const runningJobRef = useRef("");
+  const requestEpochRef = useRef(0);
 
   const isRunning = Boolean(
     status && (status.status === "queued" || status.status === "processing"),
   );
+  const shouldPoll = shouldPollDriverJob({
+    jobId,
+    status: status?.status,
+    loadingJob,
+    hasMatchingResult: Boolean(result && resultJobId === jobId),
+  });
+  const canRetryMissingDrivers = Boolean(
+    result &&
+      canResumePartialDriverJob({
+        completion: result.completion,
+        status: status?.status,
+        jobId: currentJobId || jobId,
+        resultJobId,
+        resumable: resultResumable,
+      }),
+  );
   const isRtl = isRtlLanguage(result?.language || language);
+
+  useEffect(() => {
+    runningJobRef.current = isRunning ? jobId : "";
+  }, [isRunning, jobId]);
 
   const evidenceById = useMemo(() => {
     const map = new Map<string, EsgDriverSource>();
@@ -139,10 +195,22 @@ export default function EsgDriversTool() {
     return buildAccuracySummary(result.drivers, evidenceById);
   }, [result, evidenceById]);
 
+  // Drivers are shown in the detail view ordered by confidence (highest first).
+  // The raw `result` order is left untouched for export/history.
+  const sortedDrivers = useMemo(
+    () =>
+      result
+        ? [...result.drivers].sort(
+            (a, b) => (b.confidence ?? 0) - (a.confidence ?? 0),
+          )
+        : [],
+    [result],
+  );
+
   const safeSlideIndex = result
-    ? Math.min(activeSlideIndex, Math.max(result.drivers.length - 1, 0))
+    ? Math.min(activeSlideIndex, Math.max(sortedDrivers.length - 1, 0))
     : 0;
-  const activeDriver = result?.drivers[safeSlideIndex] || null;
+  const activeDriver = sortedDrivers[safeSlideIndex] || null;
   const activeDriverSources = useMemo(
     () => (activeDriver ? getDriverSources(activeDriver, evidenceById) : []),
     [activeDriver, evidenceById],
@@ -167,133 +235,338 @@ export default function EsgDriversTool() {
     [router],
   );
 
-  const loadHistory = useCallback(async () => {
-    setLoadingHistory(true);
-    try {
-      const response = await fetch("/api/esg/drivers/history", {
-        cache: "no-store",
-      });
-      if (!response.ok) return;
-      const data = await response.json();
-      setHistory(Array.isArray(data.jobs) ? data.jobs : []);
-    } finally {
-      setLoadingHistory(false);
-    }
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) clearTimeout(pollRef.current);
+    pollRef.current = null;
+    pollAbortRef.current?.abort();
+    pollAbortRef.current = null;
+    pollFailureCountRef.current = 0;
   }, []);
 
-  const loadResult = useCallback(async (activeJobId: string) => {
-    setError("");
-    const response = await fetch(
-      `/api/esg/drivers/result?jobId=${encodeURIComponent(activeJobId)}`,
-      { cache: "no-store" },
-    );
-    const data = await response.json();
+  const loadHistory = useCallback(
+    async (options: { append?: boolean; cursor?: string | null } = {}) => {
+      const append = Boolean(options.append && options.cursor);
+      historyAbortRef.current?.abort();
+      const controller = new AbortController();
+      historyAbortRef.current = controller;
+      const requestEpoch = historyEpochRef.current + 1;
+      historyEpochRef.current = requestEpoch;
+      if (append) {
+        setLoadingHistory(false);
+        setLoadingMoreHistory(true);
+      } else {
+        setLoadingMoreHistory(false);
+        setLoadingHistory(true);
+      }
+      setHistoryLoadError("");
 
-    if (!response.ok || !data.result) {
-      throw new Error(data.error || "Result is not ready yet.");
-    }
+      try {
+        const params = new URLSearchParams({ limit: "20" });
+        if (append && options.cursor) params.set("cursor", options.cursor);
+        const response = await fetch(`/api/esg/drivers/history?${params.toString()}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(data.error || "Unable to load driver history.");
+        }
+        if (controller.signal.aborted || requestEpoch !== historyEpochRef.current) {
+          return;
+        }
 
-    setResult(data.result);
-    setExpandedDriverId(null);
-    setActiveSlideIndex(0);
-    setViewMode("deck");
-  }, []);
+        const jobs: HistoryItem[] = Array.isArray(data.jobs) ? data.jobs : [];
+        setHistory((current) => {
+          if (!append) return jobs;
+          return mergeDriverHistoryPage(current, jobs);
+        });
+        setHistoryNextCursor(
+          typeof data.nextCursor === "string" && data.nextCursor ? data.nextCursor : null,
+        );
+        setHistoryTotal((current) =>
+          Number.isFinite(Number(data.total))
+            ? Math.max(0, Number(data.total))
+            : append
+              ? current + jobs.length
+              : jobs.length,
+        );
+        if (Number.isFinite(Number(data.completed))) {
+          setHistoryCompleted(Math.max(0, Number(data.completed)));
+        }
+        if (Number.isFinite(Number(data.needsAttention))) {
+          setHistoryNeedsAttention(Math.max(0, Number(data.needsAttention)));
+        }
+      } catch (err: unknown) {
+        if (controller.signal.aborted || requestEpoch !== historyEpochRef.current) {
+          return;
+        }
+        setHistoryLoadError(
+          err instanceof Error ? err.message : "Unable to load driver history.",
+        );
+      } finally {
+        if (historyAbortRef.current === controller) {
+          historyAbortRef.current = null;
+          if (append) setLoadingMoreHistory(false);
+          else setLoadingHistory(false);
+        }
+      }
+    },
+    [],
+  );
+
+  const loadResult = useCallback(
+    async (
+      activeJobId: string,
+      options: { signal?: AbortSignal; requestEpoch?: number } = {},
+    ): Promise<boolean> => {
+      const response = await fetch(
+        `/api/esg/drivers/result?jobId=${encodeURIComponent(activeJobId)}`,
+        { cache: "no-store", signal: options.signal },
+      );
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok || !data.result) {
+        throw new Error(data.error || "Result is not ready yet.");
+      }
+      if (!isCurrentDriverRequest({
+        activeJobId: activeJobRef.current,
+        requestedJobId: activeJobId,
+        activeEpoch: requestEpochRef.current,
+        requestEpoch: options.requestEpoch,
+        aborted: options.signal?.aborted,
+      })) {
+        return false;
+      }
+
+      setResult(data.result);
+      setResultJobId(activeJobId);
+      setResultResumable(data.resumable === true);
+      setExpandedDriverId(null);
+      setActiveSlideIndex(0);
+      setViewMode("deck");
+      setError("");
+      return true;
+    },
+    [],
+  );
 
   const loadJob = useCallback(
-    async (activeJobId: string) => {
+    async (activeJobId: string, requestEpoch: number, signal: AbortSignal) => {
       setLoadingJob(true);
       setError("");
       try {
         const response = await fetch(
           `/api/esg/drivers/status?jobId=${encodeURIComponent(activeJobId)}`,
-          { cache: "no-store" },
+          { cache: "no-store", signal },
         );
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
 
         if (!response.ok) {
           throw new Error(data.error || "Unable to load job status.");
+        }
+        if (!isCurrentDriverRequest({
+          activeJobId: activeJobRef.current,
+          requestedJobId: activeJobId,
+          activeEpoch: requestEpochRef.current,
+          requestEpoch,
+          aborted: signal.aborted,
+        })) {
+          return;
         }
 
         setJobId(activeJobId);
         setStatus(data);
 
         if (data.status === "done") {
-          await loadResult(activeJobId);
+          try {
+            await loadResult(activeJobId, { signal, requestEpoch });
+          } catch (err: unknown) {
+            if (!signal.aborted && activeJobRef.current === activeJobId) {
+              setResult(null);
+              setResultJobId("");
+              setResultResumable(false);
+              setError(
+                err instanceof Error
+                  ? `Generation completed, but the result could not be loaded: ${err.message}`
+                  : "Generation completed, but the result could not be loaded.",
+              );
+            }
+          }
         } else {
           setResult(null);
+          setResultJobId("");
+          setResultResumable(false);
+          if (data.status === "error") {
+            setError(data.error || "Generation failed.");
+          } else if (data.status === "cancelled") {
+            setError(data.error || "Generation was cancelled.");
+          } else {
+            setError("");
+          }
         }
       } catch (err: unknown) {
+        if (signal.aborted || requestEpoch !== requestEpochRef.current) return;
         setResult(null);
+        setResultJobId("");
+        setResultResumable(false);
         setError(err instanceof Error ? err.message : "Failed to load job.");
       } finally {
-        setLoadingJob(false);
+        if (requestEpoch === requestEpochRef.current) setLoadingJob(false);
       }
     },
     [loadResult],
   );
 
   const pollStatus = useCallback(
-    async (activeJobId: string) => {
+    async (activeJobId: string, signal: AbortSignal): Promise<boolean> => {
       const response = await fetch(
         `/api/esg/drivers/status?jobId=${encodeURIComponent(activeJobId)}`,
-        { cache: "no-store" },
+        { cache: "no-store", signal },
       );
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        setError(data.error || "Unable to load job status.");
-        return;
+        if ([401, 403, 404].includes(response.status)) {
+          if (activeJobRef.current === activeJobId) {
+            setError(data.error || "Unable to load job status.");
+          }
+          return false;
+        }
+        throw new Error(data.error || "Unable to load job status.");
+      }
+      if (!isCurrentDriverRequest({
+        activeJobId: activeJobRef.current,
+        requestedJobId: activeJobId,
+        activeEpoch: requestEpochRef.current,
+        aborted: signal.aborted,
+      })) {
+        return false;
       }
 
       setStatus(data);
 
       if (data.status === "done") {
-        if (pollRef.current) clearInterval(pollRef.current);
-        pollRef.current = null;
-        await loadResult(activeJobId);
-        void loadHistory();
-        if (currentJobId !== activeJobId) navigateJob(activeJobId);
+        try {
+          const loaded = await loadResult(activeJobId, { signal });
+          if (loaded) {
+            void loadHistory();
+            if (currentJobId !== activeJobId) navigateJob(activeJobId);
+            return false;
+          }
+          return false;
+        } catch (err: unknown) {
+          if (!signal.aborted && activeJobRef.current === activeJobId) {
+            setError(
+              err instanceof Error
+                ? `Generation completed, but the result could not be loaded: ${err.message}`
+                : "Generation completed, but the result could not be loaded.",
+            );
+          }
+          throw err;
+        }
       }
 
       if (data.status === "error") {
-        if (pollRef.current) clearInterval(pollRef.current);
-        pollRef.current = null;
         setError(data.error || "Generation failed.");
         void loadHistory();
+        return false;
       }
+      if (data.status === "cancelled") {
+        setError(data.error || "Generation was cancelled.");
+        void loadHistory();
+        return false;
+      }
+
+      setError("");
+      return true;
     },
     [currentJobId, loadHistory, loadResult, navigateJob],
   );
 
   useEffect(() => {
-    void loadHistory();
-  }, [loadHistory]);
+    if (screen === "home") void loadHistory();
+    return () => historyAbortRef.current?.abort();
+  }, [loadHistory, screen]);
 
   useEffect(() => {
+    stopPolling();
+    loadAbortRef.current?.abort();
+    const requestEpoch = requestEpochRef.current + 1;
+    requestEpochRef.current = requestEpoch;
+    const trackedJobId = trackedDriverJobForScreen({
+      routeJobId: currentJobId,
+      screen,
+      runningJobId: runningJobRef.current,
+    });
+    activeJobRef.current = trackedJobId;
+
     if (!currentJobId) {
       if (screen === "home") {
         setResult(null);
+        setResultJobId("");
+        setResultResumable(false);
         setStatus(null);
         setJobId("");
         setError("");
+      } else {
+        // Keep an already-running job observable while the setup screen is
+        // open. This prevents the form from becoming permanently disabled
+        // after its poll was stopped during navigation.
+        activeJobRef.current = trackedJobId;
       }
       return;
     }
-    void loadJob(currentJobId);
-  }, [currentJobId, loadJob, screen]);
+    const controller = new AbortController();
+    loadAbortRef.current = controller;
+    void loadJob(currentJobId, requestEpoch, controller.signal);
+    return () => controller.abort();
+  }, [currentJobId, loadJob, screen, stopPolling]);
 
   useEffect(() => {
-    if (!jobId || !isRunning) return;
+    if (!jobId || !shouldPoll || activeJobRef.current !== jobId) {
+      stopPolling();
+      return;
+    }
 
-    pollRef.current = setInterval(() => {
-      void pollStatus(jobId);
-    }, 1600);
+    let disposed = false;
+    const runPoll = async () => {
+      if (disposed || activeJobRef.current !== jobId) return;
+      const controller = new AbortController();
+      pollAbortRef.current = controller;
+      let continuePolling = true;
+      try {
+        continuePolling = await pollStatus(jobId, controller.signal);
+        pollFailureCountRef.current = 0;
+      } catch (err: unknown) {
+        if (!controller.signal.aborted && activeJobRef.current === jobId) {
+          pollFailureCountRef.current += 1;
+          setError(
+            err instanceof Error
+              ? `Status check failed; retrying: ${err.message}`
+              : "Status check failed; retrying.",
+          );
+        }
+      } finally {
+        if (pollAbortRef.current === controller) pollAbortRef.current = null;
+      }
+
+      if (!disposed && continuePolling && activeJobRef.current === jobId) {
+        const retryDelay = driverPollRetryDelay(pollFailureCountRef.current);
+        pollRef.current = setTimeout(() => {
+          void runPoll();
+        }, retryDelay);
+      }
+    };
+
+    pollRef.current = setTimeout(() => {
+      void runPoll();
+    }, 0);
 
     return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-      pollRef.current = null;
+      disposed = true;
+      stopPolling();
     };
-  }, [jobId, isRunning, pollStatus]);
+  }, [jobId, pollStatus, screen, shouldPoll, stopPolling]);
 
   useEffect(() => {
     if (!result) return;
@@ -304,10 +577,21 @@ export default function EsgDriversTool() {
 
   async function startGeneration(event: FormEvent) {
     event.preventDefault();
-    if (!country.trim() || !sector.trim() || !language.trim() || isRunning) return;
+    if (
+      !country.trim() ||
+      !sector.trim() ||
+      !language.trim() ||
+      isRunning ||
+      startingGeneration
+    ) {
+      return;
+    }
 
+    setStartingGeneration(true);
     setError("");
     setResult(null);
+    setResultJobId("");
+    setResultResumable(false);
     setExpandedDriverId(null);
     setActiveSlideIndex(0);
     setStatus(null);
@@ -323,11 +607,15 @@ export default function EsgDriversTool() {
         }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(data.error || "Failed to start generation.");
       }
 
+      stopPolling();
+      loadAbortRef.current?.abort();
+      requestEpochRef.current += 1;
+      activeJobRef.current = data.jobId;
       setJobId(data.jobId);
       setStatus({
         jobId: data.jobId,
@@ -339,15 +627,55 @@ export default function EsgDriversTool() {
       });
       navigateJob(data.jobId);
       void loadHistory();
-      void pollStatus(data.jobId);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to start generation.");
+    } finally {
+      setStartingGeneration(false);
+    }
+  }
+
+  async function cancelActiveGeneration() {
+    if (!jobId || deletingJobId) return;
+    setDeletingJobId(jobId);
+    setError("");
+    try {
+      const response = await fetch(
+        `/api/esg/drivers/${encodeURIComponent(jobId)}`,
+        { method: "DELETE", cache: "no-store" },
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to cancel generation.");
+      }
+      setStatus((current) =>
+        current ? { ...current, stage: "cancelling" } : current,
+      );
+      setError("Cancellation requested. The job will stop shortly.");
+      void loadHistory();
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error ? err.message : "Failed to cancel generation.",
+      );
+    } finally {
+      setDeletingJobId("");
     }
   }
 
   function openHistoryItem(item: HistoryItem) {
+    stopPolling();
+    loadAbortRef.current?.abort();
+    requestEpochRef.current += 1;
+    activeJobRef.current = item.id;
     setError(item.error || "");
+    setResult(null);
+    setResultJobId("");
+    setResultResumable(false);
     setJobId(item.id);
+    // Reflect the opened job's scope so the processing view shows the right
+    // country/sector when a still-running job is reopened from history.
+    if (item.country) setCountry(item.country);
+    if (item.sector) setSector(item.sector);
+    if (item.language) setLanguage(item.language);
     setStatus({
       jobId: item.id,
       status: item.status,
@@ -384,15 +712,41 @@ export default function EsgDriversTool() {
         throw new Error(data.error || "Failed to delete driver pack.");
       }
 
+      if (data.status === "cancelling") {
+        setHistory((current) =>
+          current.map((job) =>
+            job.id === item.id ? { ...job, stage: "cancelling" } : job,
+          ),
+        );
+        setDeleteCandidate(null);
+        if (jobId === item.id || currentJobId === item.id) {
+          setStatus((current) =>
+            current ? { ...current, stage: "cancelling" } : current,
+          );
+          setError("Cancellation requested. The job will remain in history until it stops.");
+        }
+        void loadHistory();
+        return;
+      }
+
       setHistory((current) => current.filter((job) => job.id !== item.id));
+      setHistoryTotal((current) => Math.max(0, current - 1));
+      if (item.status === "done") {
+        setHistoryCompleted((current) => Math.max(0, current - 1));
+      }
+      if (item.needsAttention) {
+        setHistoryNeedsAttention((current) => Math.max(0, current - 1));
+      }
       setDeleteCandidate(null);
 
       if (jobId === item.id || currentJobId === item.id) {
-        if (pollRef.current) clearInterval(pollRef.current);
-        pollRef.current = null;
+        stopPolling();
+        activeJobRef.current = "";
         setJobId("");
         setStatus(null);
         setResult(null);
+        setResultJobId("");
+        setResultResumable(false);
         setError("");
         navigateHome();
       }
@@ -405,22 +759,136 @@ export default function EsgDriversTool() {
     }
   }
 
+  async function exportDriverPack() {
+    const activeJobId = currentJobId || jobId;
+    if (!activeJobId || exportingJobId) return;
+    if (!result || resultJobId !== activeJobId) {
+      setError("The displayed result does not match this job. Reload the job before exporting.");
+      return;
+    }
+
+    setError("");
+    setExportingJobId(activeJobId);
+
+    try {
+      const response = await fetch(
+        `/api/esg/drivers/${encodeURIComponent(activeJobId)}/export`,
+        { cache: "no-store" },
+      );
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to export driver pack.");
+      }
+
+      const blob = await response.blob();
+      const filename =
+        parseDownloadFilename(response.headers.get("content-disposition")) ||
+        buildFallbackExportFilename(result, activeJobId);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to export driver pack.");
+    } finally {
+      setExportingJobId("");
+    }
+  }
+
+  async function retryMissingDrivers() {
+    const parentJobId = currentJobId || jobId;
+    if (
+      resumingJobId ||
+      !result ||
+      !canResumePartialDriverJob({
+        completion: result.completion,
+        status: status?.status,
+        jobId: parentJobId,
+        resultJobId,
+        resumable: resultResumable,
+      })
+    ) {
+      return;
+    }
+
+    setError("");
+    setResumingJobId(parentJobId);
+
+    try {
+      const response = await fetch(driverResumePath(parentJobId), {
+        method: "POST",
+        cache: "no-store",
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to retry missing drivers.");
+      }
+
+      const childJobId = typeof data.jobId === "string" ? data.jobId.trim() : "";
+      if (!childJobId) {
+        throw new Error("The retry job was created without a valid job ID.");
+      }
+
+      stopPolling();
+      loadAbortRef.current?.abort();
+      requestEpochRef.current += 1;
+      activeJobRef.current = childJobId;
+      setResult(null);
+      setResultJobId("");
+      setResultResumable(false);
+      setExpandedDriverId(null);
+      setActiveSlideIndex(0);
+      setJobId(childJobId);
+      setStatus({
+        jobId: childJobId,
+        status: data.job?.status || "queued",
+        progress: data.job?.progress || 0,
+        stage: data.job?.stage || "queued",
+        error: null,
+        activity: Array.isArray(data.job?.activity) ? data.job.activity : [],
+      });
+      navigateJob(childJobId);
+      void loadHistory();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to retry missing drivers.");
+    } finally {
+      setResumingJobId("");
+    }
+  }
+
   return (
     <div className="min-h-[calc(100vh-65px)] bg-[#eef2ee] text-[#172019]">
       <DriversTopBar
         screen={screen}
         result={result}
+        exporting={Boolean(exportingJobId)}
         onBack={navigateHome}
+        onExport={exportDriverPack}
         onNew={navigateNew}
       />
 
       {screen === "home" && (
         <DriversHome
           history={history}
+          historyTotal={historyTotal}
+          historyCompleted={historyCompleted}
+          historyNeedsAttention={historyNeedsAttention}
+          nextCursor={historyNextCursor}
           loadingHistory={loadingHistory}
+          loadingMoreHistory={loadingMoreHistory}
           deletingJobId={deletingJobId}
           deleteError={historyError}
+          loadError={historyLoadError}
           onNew={navigateNew}
+          onLoadMore={() =>
+            void loadHistory({ append: true, cursor: historyNextCursor })
+          }
           onOpenHistoryItem={openHistoryItem}
           onDeleteHistoryItem={requestDeleteHistoryItem}
         />
@@ -433,8 +901,11 @@ export default function EsgDriversTool() {
           language={language}
           status={status}
           error={error}
-          isRunning={isRunning}
+          isRunning={isRunning || startingGeneration}
+          starting={startingGeneration}
+          canceling={Boolean(deletingJobId && deletingJobId === jobId)}
           onBack={navigateHome}
+          onCancel={() => void cancelActiveGeneration()}
           onCountryChange={setCountry}
           onLanguageChange={setLanguage}
           onSectorChange={setSector}
@@ -445,9 +916,15 @@ export default function EsgDriversTool() {
       {screen === "detail" && (
         <DriverDetailPage
           result={result}
+          drivers={sortedDrivers}
           status={status}
           error={error}
           loadingJob={loadingJob}
+          country={country}
+          sector={sector}
+          language={language}
+          canceling={Boolean(deletingJobId && deletingJobId === jobId)}
+          onCancel={() => void cancelActiveGeneration()}
           viewMode={viewMode}
           activeDriver={activeDriver}
           activeDriverSources={activeDriverSources}
@@ -457,8 +934,11 @@ export default function EsgDriversTool() {
           evidenceById={evidenceById}
           isRtl={isRtl}
           accuracySummary={accuracySummary}
+          canRetryMissingDrivers={canRetryMissingDrivers}
+          resumingMissingDrivers={Boolean(resumingJobId)}
           onBack={navigateHome}
           onNew={navigateNew}
+          onRetryMissingDrivers={() => void retryMissingDrivers()}
           onSlideChange={setActiveSlideIndex}
           onViewModeChange={setViewMode}
           onExpandedDriverChange={setExpandedDriverId}
@@ -485,12 +965,16 @@ export default function EsgDriversTool() {
 function DriversTopBar({
   screen,
   result,
+  exporting,
   onBack,
+  onExport,
   onNew,
 }: {
   screen: DriverScreen;
   result: EsgDriverResult | null;
+  exporting: boolean;
   onBack: () => void;
+  onExport: () => void;
   onNew: () => void;
 }) {
   return (
@@ -523,6 +1007,21 @@ function DriversTopBar({
               History
             </button>
           )}
+          {screen === "detail" && result && (
+            <button
+              type="button"
+              onClick={onExport}
+              disabled={exporting}
+              className="inline-flex h-10 items-center gap-2 rounded-[5px] border border-white/15 px-3 text-sm font-bold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {exporting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              Export Excel
+            </button>
+          )}
           <button
             type="button"
             onClick={onNew}
@@ -551,6 +1050,7 @@ function DeleteDriverModal({
   onConfirm: () => void;
 }) {
   if (!item) return null;
+  const isActive = isCancellableDriverJob(item.status);
 
   return (
     <div
@@ -567,13 +1067,13 @@ function DeleteDriverModal({
             </span>
             <div className="min-w-0">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#d6ff66]">
-                Delete driver pack
+                {isActive ? "Cancel generation" : "Delete driver pack"}
               </p>
               <h2
                 id="delete-driver-title"
                 className="mt-1 text-xl font-semibold tracking-tight"
               >
-                Remove this generated deck?
+                {isActive ? "Stop this generation job?" : "Remove this generated deck?"}
               </h2>
             </div>
           </div>
@@ -581,12 +1081,15 @@ function DeleteDriverModal({
 
         <div className="px-5 py-5">
           <p className="text-sm leading-6 text-[#344139]">
-            This will permanently delete the saved ESG driver pack for{" "}
+            {isActive
+              ? "This requests cancellation for the active ESG driver job for "
+              : "This will permanently delete the saved ESG driver pack for "}
             <span className="font-bold text-[#172019]">
               {item.country} / {item.sector}
             </span>
-            . The generated drivers, evidence, and source trace will be removed
-            from history.
+            {isActive
+              ? ". The job remains visible as cancelling until the worker confirms it stopped; you can then delete the cancelled record."
+              : ". The generated drivers, evidence, and source trace will be removed from history."}
           </p>
 
           <div className="mt-4 grid gap-2 rounded-[6px] border border-[#d9e1da] bg-white p-3 text-sm">
@@ -628,7 +1131,7 @@ function DeleteDriverModal({
               ) : (
                 <Trash2 className="h-4 w-4" />
               )}
-              Delete pack
+              {isActive ? "Cancel generation" : "Delete pack"}
             </button>
           </div>
         </div>
@@ -639,23 +1142,35 @@ function DeleteDriverModal({
 
 function DriversHome({
   history,
+  historyTotal,
+  historyCompleted,
+  historyNeedsAttention,
+  nextCursor,
   loadingHistory,
+  loadingMoreHistory,
   deletingJobId,
   deleteError,
+  loadError,
   onNew,
+  onLoadMore,
   onOpenHistoryItem,
   onDeleteHistoryItem,
 }: {
   history: HistoryItem[];
+  historyTotal: number;
+  historyCompleted: number;
+  historyNeedsAttention: number;
+  nextCursor: string | null;
   loadingHistory: boolean;
+  loadingMoreHistory: boolean;
   deletingJobId: string;
   deleteError: string;
+  loadError: string;
   onNew: () => void;
+  onLoadMore: () => void;
   onOpenHistoryItem: (item: HistoryItem) => void;
   onDeleteHistoryItem: (item: HistoryItem) => void;
 }) {
-  const completed = history.filter((item) => item.status === "done").length;
-  const failed = history.filter((item) => item.status === "error").length;
   const latest = history[0];
 
   return (
@@ -683,9 +1198,9 @@ function DriversHome({
         </div>
 
         <div className="grid gap-3 rounded-[8px] border border-[#cfd8d0] bg-[#fbfcf8] p-4">
-          <MetricRow label="Total jobs" value={history.length} />
-          <MetricRow label="Completed" value={completed} />
-          <MetricRow label="Needs attention" value={failed} />
+          <MetricRow label="Total jobs" value={historyTotal} />
+          <MetricRow label="Completed" value={historyCompleted} />
+          <MetricRow label="Needs attention" value={historyNeedsAttention} />
           <div className="border-t border-[#d8e0d9] pt-3">
             <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#68756c]">
               Latest
@@ -717,7 +1232,13 @@ function DriversHome({
           </div>
         )}
 
-        {history.length === 0 ? (
+        {loadError && (
+          <div className="mb-3 rounded-[6px] border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
+            {loadError}
+          </div>
+        )}
+
+        {!loadingHistory && !loadError && history.length === 0 ? (
           <div className="rounded-[8px] border border-dashed border-[#bfcac1] bg-[#fbfcf8] p-10 text-center">
             <FileText className="mx-auto h-9 w-9 text-[#748176]" />
             <p className="mt-3 text-lg font-semibold text-[#172019]">
@@ -728,8 +1249,9 @@ function DriversHome({
             </p>
           </div>
         ) : (
-          <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
-            {history.map((item) => (
+          <>
+            <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+              {history.map((item) => (
               <article
                 key={item.id}
                 className="group rounded-[8px] border border-[#d7dfd8] bg-[#fbfcf8] p-4 text-left transition hover:-translate-y-0.5 hover:border-[#172019] hover:shadow-[0_16px_45px_rgba(28,38,31,0.12)]"
@@ -789,11 +1311,714 @@ function DriversHome({
                   </button>
                 </div>
               </article>
-            ))}
-          </div>
+              ))}
+            </div>
+            {nextCursor && (
+              <div className="mt-5 flex justify-center">
+                <button
+                  type="button"
+                  onClick={onLoadMore}
+                  disabled={loadingMoreHistory}
+                  className="inline-flex h-10 items-center gap-2 rounded-[5px] border border-[#bfcac1] bg-[#fbfcf8] px-4 text-sm font-bold text-[#172019] transition hover:border-[#172019] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {loadingMoreHistory && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Load older jobs
+                </button>
+              </div>
+            )}
+          </>
         )}
       </section>
     </main>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Live processing page — the full-width "agent at work" experience.
+// ---------------------------------------------------------------------------
+
+type ProcessingSlotState =
+  | "queued"
+  | "researching"
+  | "drafting"
+  | "reviewing"
+  | "accepted"
+  | "omitted";
+
+interface ProcessingSlot {
+  number: number;
+  section?: string;
+  title?: string;
+  state: ProcessingSlotState;
+  confidence?: number;
+}
+
+const PROCESSING_SECTION_PLAN: Array<{
+  section: string;
+  label: string;
+  quota: number;
+}> = [
+  { section: "Global Drivers", label: "Global Drivers", quota: 3 },
+  { section: "Regulatory Requirements", label: "Regulatory", quota: 3 },
+  { section: "Climate Risks", label: "Climate Risks", quota: 2 },
+  { section: "Capital Markets", label: "Capital Markets", quota: 2 },
+  { section: "Supply Chain", label: "Supply Chain", quota: 2 },
+];
+
+const PROCESSING_TOTAL_DRIVERS = PROCESSING_SECTION_PLAN.reduce(
+  (sum, item) => sum + item.quota,
+  0,
+);
+
+function slotStateFromKind(
+  kind: EsgDriverActivityKindLike,
+  outcome?: string,
+): ProcessingSlotState | null {
+  switch (kind) {
+    case "accepted":
+      return "accepted";
+    case "omitted":
+      return "omitted";
+    case "review":
+      return "reviewing";
+    case "draft":
+      return "drafting";
+    case "search":
+    case "search-results":
+    case "source":
+    case "selection":
+    case "fallback":
+      return "researching";
+    default:
+      return outcome === "running" ? "researching" : null;
+  }
+}
+
+type EsgDriverActivityKindLike = NonNullable<
+  EsgDriverJobActivity["detail"]
+>["kind"];
+
+interface ProcessingModel {
+  slots: ProcessingSlot[];
+  sections: Array<{
+    section: string;
+    label: string;
+    quota: number;
+    accepted: number;
+    state: "queued" | "researching" | "in progress" | "needs source" | "covered";
+  }>;
+  stats: {
+    searches: number;
+    sourcesApproved: number;
+    reviews: number;
+    accepted: number;
+  };
+  acceptedCount: number;
+  startedAt: number | null;
+}
+
+function deriveProcessingModel(activity: EsgDriverJobActivity[]): ProcessingModel {
+  const slotMap = new Map<number, ProcessingSlot>();
+  const approvedSourceUrls = new Set<string>();
+  let searches = 0;
+  let reviews = 0;
+  let startedAt: number | null = null;
+
+  for (const event of activity) {
+    const parsed = Date.parse(event.timestamp);
+    if (!Number.isNaN(parsed)) {
+      startedAt = startedAt === null ? parsed : Math.min(startedAt, parsed);
+    }
+    const detail = event.detail;
+    if (!detail) continue;
+    if (detail.kind === "search") searches += 1;
+    if (detail.kind === "review") reviews += 1;
+    if (detail.kind === "source" && detail.outcome === "accepted") {
+      for (const result of detail.results || []) {
+        approvedSourceUrls.add(result.url || result.title);
+      }
+    }
+
+    const number = detail.driverNumber;
+    if (typeof number === "number" && number > 0) {
+      const nextState = slotStateFromKind(detail.kind, detail.outcome);
+      const existing = slotMap.get(number);
+      const locked = existing?.state === "accepted" || existing?.state === "omitted";
+      slotMap.set(number, {
+        number,
+        section: detail.section || existing?.section,
+        title: detail.title || existing?.title,
+        confidence:
+          typeof detail.confidence === "number"
+            ? detail.confidence
+            : existing?.confidence,
+        state: locked ? existing!.state : nextState || existing?.state || "queued",
+      });
+    }
+  }
+
+  const slots: ProcessingSlot[] = Array.from(
+    { length: PROCESSING_TOTAL_DRIVERS },
+    (_, index) =>
+      slotMap.get(index + 1) || { number: index + 1, state: "queued" },
+  );
+
+  const sections = PROCESSING_SECTION_PLAN.map((plan) => {
+    const sectionSlots = slots.filter((slot) => slot.section === plan.section);
+    const accepted = sectionSlots.filter((slot) => slot.state === "accepted").length;
+    const researching = sectionSlots.some((slot) => slot.state === "researching");
+    const omitted = sectionSlots.some((slot) => slot.state === "omitted");
+    const state =
+      accepted >= plan.quota
+        ? "covered"
+        : researching
+          ? "researching"
+          : omitted
+            ? "needs source"
+            : accepted > 0
+              ? "in progress"
+              : "queued";
+    return { ...plan, accepted, state } as ProcessingModel["sections"][number];
+  });
+
+  const acceptedCount = slots.filter((slot) => slot.state === "accepted").length;
+
+  return {
+    slots,
+    sections,
+    stats: {
+      searches,
+      sourcesApproved: approvedSourceUrls.size,
+      reviews,
+      accepted: acceptedCount,
+    },
+    acceptedCount,
+    startedAt,
+  };
+}
+
+function activityVisual(kind: EsgDriverActivityKindLike): {
+  Icon: typeof Search;
+  tone: string;
+} {
+  switch (kind) {
+    case "selection":
+      return { Icon: Layers3, tone: "text-[#8fb4ff]" };
+    case "search":
+    case "search-results":
+      return { Icon: Search, tone: "text-[#8fb4ff]" };
+    case "source":
+      return { Icon: BookOpen, tone: "text-[#d6ff66]" };
+    case "draft":
+      return { Icon: FileText, tone: "text-[#e7c86b]" };
+    case "review":
+      return { Icon: ShieldCheck, tone: "text-[#7fd4a3]" };
+    case "fallback":
+      return { Icon: RefreshCw, tone: "text-[#e7c86b]" };
+    case "accepted":
+      return { Icon: CheckCircle2, tone: "text-[#a4f04a]" };
+    case "omitted":
+      return { Icon: AlertTriangle, tone: "text-[#f0a4a4]" };
+    default:
+      return { Icon: Sparkles, tone: "text-[#c8d8cc]" };
+  }
+}
+
+function outcomeBadge(outcome?: string): { label: string; className: string } | null {
+  switch (outcome) {
+    case "accepted":
+    case "passed":
+      return {
+        label: outcome,
+        className: "border-[#a4f04a]/40 bg-[#a4f04a]/10 text-[#c4ff8a]",
+      };
+    case "rejected":
+    case "failed":
+      return {
+        label: outcome,
+        className: "border-[#f0a4a4]/40 bg-[#f0a4a4]/10 text-[#ffc4c4]",
+      };
+    case "found":
+      return {
+        label: "found",
+        className: "border-[#8fb4ff]/40 bg-[#8fb4ff]/10 text-[#bcd3ff]",
+      };
+    case "warning":
+      return {
+        label: "warning",
+        className: "border-[#e7c86b]/40 bg-[#e7c86b]/10 text-[#f5dd94]",
+      };
+    case "running":
+      return {
+        label: "running",
+        className: "border-[#d6ff66]/40 bg-[#d6ff66]/10 text-[#d6ff66]",
+      };
+    default:
+      return null;
+  }
+}
+
+function relativeTimeLabel(timestamp: string, now: number): string {
+  const parsed = Date.parse(timestamp);
+  if (Number.isNaN(parsed)) return "";
+  const seconds = Math.max(0, Math.round((now - parsed) / 1000));
+  if (seconds < 5) return "just now";
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ago`;
+}
+
+function formatElapsed(startedAt: number | null, now: number): string {
+  if (startedAt === null) return "0:00";
+  const totalSeconds = Math.max(0, Math.floor((now - startedAt) / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+const SLOT_STATE_STYLE: Record<
+  ProcessingSlotState,
+  { label: string; dot: string; text: string }
+> = {
+  queued: { label: "Queued", dot: "bg-white/25", text: "text-[#8fa093]" },
+  researching: { label: "Researching", dot: "bg-[#8fb4ff] animate-pulse", text: "text-[#bcd3ff]" },
+  drafting: { label: "Drafting", dot: "bg-[#e7c86b] animate-pulse", text: "text-[#f5dd94]" },
+  reviewing: { label: "Reviewing", dot: "bg-[#7fd4a3] animate-pulse", text: "text-[#a6ecc6]" },
+  accepted: { label: "Accepted", dot: "bg-[#a4f04a]", text: "text-[#c4ff8a]" },
+  omitted: { label: "No source", dot: "bg-[#f0a4a4]", text: "text-[#ffc4c4]" },
+};
+
+function ProgressRing({ progress }: { progress: number }) {
+  const clamped = Math.max(0, Math.min(100, Math.round(progress)));
+  const radius = 34;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (clamped / 100) * circumference;
+  return (
+    <div className="relative h-[92px] w-[92px] flex-none">
+      <svg viewBox="0 0 80 80" className="h-full w-full -rotate-90">
+        <circle
+          cx="40"
+          cy="40"
+          r={radius}
+          fill="none"
+          stroke="rgba(255,255,255,0.12)"
+          strokeWidth="7"
+        />
+        <circle
+          cx="40"
+          cy="40"
+          r={radius}
+          fill="none"
+          stroke="#d6ff66"
+          strokeWidth="7"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          className="transition-[stroke-dashoffset] duration-700 ease-out"
+        />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className="font-mono text-lg font-bold text-white">{clamped}%</span>
+      </div>
+    </div>
+  );
+}
+
+function ProcessingStatTile({
+  label,
+  value,
+  Icon,
+}: {
+  label: string;
+  value: string | number;
+  Icon: typeof Search;
+}) {
+  return (
+    <div className="rounded-[6px] border border-white/10 bg-white/[0.04] px-3.5 py-3">
+      <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#8fa093]">
+        <Icon className="h-3.5 w-3.5" />
+        {label}
+      </span>
+      <span className="mt-1 block font-mono text-xl font-bold text-white">
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function ProcessingView({
+  country,
+  sector,
+  language,
+  status,
+  error,
+  starting,
+  canceling,
+  onCancel,
+}: {
+  country: string;
+  sector: string;
+  language: string;
+  status: DriverStatus | null;
+  error: string;
+  starting: boolean;
+  canceling: boolean;
+  onCancel: () => void;
+}) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const activity = useMemo(() => status?.activity ?? [], [status?.activity]);
+  const model = useMemo(() => deriveProcessingModel(activity), [activity]);
+  const progress = status?.progress ?? 0;
+  const stage = status?.stage || (starting ? "Starting generation" : "Working");
+  const isCancelling = status?.stage === "cancelling" || canceling;
+
+  const timeline = useMemo(
+    () => [...activity].slice(-80).reverse(),
+    [activity],
+  );
+  const latest = timeline[0];
+
+  return (
+    <main className="px-5 py-6 xl:px-7">
+      <div className="mx-auto max-w-[1400px] space-y-5">
+        {/* Hero */}
+        <section className="overflow-hidden rounded-[10px] border border-[#243026] bg-gradient-to-br from-[#101a13] to-[#172019] text-white">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 px-6 py-5">
+            <div className="flex items-center gap-4">
+              <ProgressRing progress={progress} />
+              <div className="min-w-0">
+                <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#d6ff66]">
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#d6ff66] opacity-70" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-[#d6ff66]" />
+                  </span>
+                  {isCancelling ? "Cancelling" : "Agent working"}
+                </p>
+                <h2 className="mt-1.5 truncate text-2xl font-semibold tracking-tight">
+                  {stage}
+                </h2>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                  <ScopeChip icon={<Globe2 className="h-3.5 w-3.5" />} value={country} />
+                  <ScopeChip icon={<BriefcaseBusiness className="h-3.5 w-3.5" />} value={sector} />
+                  <ScopeChip icon={<Languages className="h-3.5 w-3.5" />} value={language} />
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.05] px-2.5 py-1 font-mono text-[#c8d8cc]">
+                    <Clock3 className="h-3.5 w-3.5" />
+                    {formatElapsed(model.startedAt, now)}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="text-right">
+                <span className="block font-mono text-2xl font-bold text-[#d6ff66]">
+                  {model.acceptedCount}
+                  <span className="text-base text-[#8fa093]">/{PROCESSING_TOTAL_DRIVERS}</span>
+                </span>
+                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#8fa093]">
+                  Drivers ready
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={onCancel}
+                disabled={canceling || isCancelling}
+                className="inline-flex h-10 items-center gap-2 rounded-[5px] border border-red-300/30 bg-red-500/10 px-4 text-sm font-bold text-red-100 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {canceling ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <AlertTriangle className="h-4 w-4" />
+                )}
+                {isCancelling ? "Stopping…" : "Stop"}
+              </button>
+            </div>
+          </div>
+
+          {/* Progress bar */}
+          <div className="px-6 py-4">
+            <div className="h-2 overflow-hidden rounded-full bg-white/10">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-[#89c94a] to-[#d6ff66] transition-all duration-700 ease-out"
+                style={{ width: `${Math.max(3, Math.min(100, progress))}%` }}
+              />
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <ProcessingStatTile label="Searches" value={model.stats.searches} Icon={Search} />
+              <ProcessingStatTile label="Sources kept" value={model.stats.sourcesApproved} Icon={BookOpen} />
+              <ProcessingStatTile label="Reviews" value={model.stats.reviews} Icon={ShieldCheck} />
+              <ProcessingStatTile label="Accepted" value={`${model.stats.accepted}/${PROCESSING_TOTAL_DRIVERS}`} Icon={CheckCircle2} />
+            </div>
+          </div>
+        </section>
+
+        {error && !isCancelling && (
+          <div className="flex items-start gap-2 rounded-[8px] border border-red-300/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+            <AlertCircle className="mt-0.5 h-4 w-4 flex-none" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+          {/* Live thinking timeline */}
+          <section className="rounded-[10px] border border-[#243026] bg-[#101a13] text-white">
+            <div className="flex items-center justify-between border-b border-white/10 px-5 py-3.5">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#d6ff66]">
+                Agent activity
+              </p>
+              <span className="font-mono text-[10px] uppercase tracking-wider text-[#8fa093]">
+                {activity.length} steps
+              </span>
+            </div>
+            {latest && (
+              <div className="border-b border-white/10 bg-white/[0.03] px-5 py-3">
+                <p className="flex items-center gap-2 text-sm text-[#e7f0e8]">
+                  <Loader2 className="h-4 w-4 flex-none animate-spin text-[#d6ff66]" />
+                  <span className="truncate">
+                    {latest.detail?.title || latest.stage}
+                  </span>
+                </p>
+              </div>
+            )}
+            <div className="max-h-[620px] overflow-y-auto px-5 py-4">
+              {timeline.length === 0 ? (
+                <p className="flex items-center gap-2 py-8 text-sm text-[#8fa093]">
+                  <Loader2 className="h-4 w-4 animate-spin text-[#d6ff66]" />
+                  Waiting for the agent to begin research…
+                </p>
+              ) : (
+                <ol className="relative space-y-1">
+                  {timeline.map((event, index) => (
+                    <ProcessingTimelineEvent
+                      key={event.id || `${event.timestamp}-${index}`}
+                      event={event}
+                      now={now}
+                      isLast={index === timeline.length - 1}
+                    />
+                  ))}
+                </ol>
+              )}
+            </div>
+          </section>
+
+          {/* Overview column */}
+          <div className="space-y-5">
+            <section className="rounded-[10px] border border-[#243026] bg-[#101a13] p-5 text-white">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#d6ff66]">
+                Section coverage
+              </p>
+              <div className="mt-3 space-y-2">
+                {model.sections.map((section) => (
+                  <ProcessingSectionRow key={section.section} section={section} />
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-[10px] border border-[#243026] bg-[#101a13] p-5 text-white">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#d6ff66]">
+                Driver slots
+              </p>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {model.slots.map((slot) => (
+                  <ProcessingSlotCard key={slot.number} slot={slot} />
+                ))}
+              </div>
+              <p className="mt-4 text-xs leading-5 text-[#8fa093]">
+                The full driver page opens automatically when generation finishes.
+              </p>
+            </section>
+          </div>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function ScopeChip({ icon, value }: { icon: ReactNode; value: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.05] px-2.5 py-1 font-semibold text-white">
+      <span className="text-[#8fb49a]">{icon}</span>
+      {value || "—"}
+    </span>
+  );
+}
+
+function ProcessingSectionRow({
+  section,
+}: {
+  section: ProcessingModel["sections"][number];
+}) {
+  const pct = Math.min(100, Math.round((section.accepted / section.quota) * 100));
+  const stateStyle: Record<string, string> = {
+    covered: "text-[#c4ff8a]",
+    researching: "text-[#bcd3ff]",
+    "in progress": "text-[#f5dd94]",
+    "needs source": "text-[#ffc4c4]",
+    queued: "text-[#8fa093]",
+  };
+  return (
+    <div>
+      <div className="flex items-center justify-between text-xs">
+        <span className="font-semibold text-[#e7f0e8]">{section.label}</span>
+        <span className={`font-mono ${stateStyle[section.state]}`}>
+          {section.accepted}/{section.quota}
+        </span>
+      </div>
+      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/10">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${
+            section.state === "covered" ? "bg-[#a4f04a]" : "bg-[#d6ff66]/70"
+          }`}
+          style={{ width: `${Math.max(section.state === "queued" ? 0 : 6, pct)}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ProcessingSlotCard({ slot }: { slot: ProcessingSlot }) {
+  const style = SLOT_STATE_STYLE[slot.state];
+  return (
+    <div className="rounded-[6px] border border-white/10 bg-white/[0.03] px-3 py-2.5">
+      <div className="flex items-center justify-between">
+        <span className="font-mono text-[11px] font-bold text-[#8fa093]">
+          D{slot.number}
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
+          <span className={`text-[10px] font-bold uppercase tracking-wider ${style.text}`}>
+            {style.label}
+          </span>
+        </span>
+      </div>
+      <p className="mt-1.5 line-clamp-2 min-h-[2.2rem] text-[11px] leading-[1.1rem] text-[#c8d8cc]">
+        {slot.title || (slot.section ? slot.section : "Awaiting selection")}
+      </p>
+      {typeof slot.confidence === "number" && slot.state === "accepted" && (
+        <span className="mt-1 inline-block font-mono text-[10px] text-[#a4f04a]">
+          {Math.round(slot.confidence)}% confidence
+        </span>
+      )}
+    </div>
+  );
+}
+
+function ProcessingTimelineEvent({
+  event,
+  now,
+  isLast,
+}: {
+  event: EsgDriverJobActivity;
+  now: number;
+  isLast: boolean;
+}) {
+  const detail = event.detail;
+  const kind = detail?.kind || "system";
+  const { Icon, tone } = activityVisual(kind);
+  const badge = outcomeBadge(detail?.outcome);
+  const results = (detail?.results || []).slice(0, 4);
+  const reasons = (detail?.reasons || []).slice(0, 3);
+
+  return (
+    <li className="relative flex gap-3 pb-4">
+      {!isLast && (
+        <span className="absolute left-[13px] top-7 h-[calc(100%-1rem)] w-px bg-white/10" />
+      )}
+      <span
+        className={`relative z-10 flex h-[26px] w-[26px] flex-none items-center justify-center rounded-full border border-white/10 bg-[#172019] ${tone}`}
+      >
+        <Icon className="h-3.5 w-3.5" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-3">
+          <p className="text-sm font-semibold leading-5 text-[#e7f0e8]">
+            {detail?.title || event.stage}
+          </p>
+          <span className="mt-0.5 flex-none font-mono text-[10px] text-[#748076]">
+            {relativeTimeLabel(event.timestamp, now)}
+          </span>
+        </div>
+
+        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+          {typeof detail?.driverNumber === "number" && (
+            <span className="rounded border border-white/10 bg-white/[0.05] px-1.5 py-0.5 font-mono text-[10px] text-[#8fa093]">
+              D{detail.driverNumber}
+            </span>
+          )}
+          {detail?.section && (
+            <span className="text-[10px] font-medium text-[#8fa093]">
+              {detail.section}
+            </span>
+          )}
+          {badge && (
+            <span
+              className={`rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${badge.className}`}
+            >
+              {badge.label}
+            </span>
+          )}
+          {typeof detail?.confidence === "number" && (
+            <span className="font-mono text-[10px] text-[#a4f04a]">
+              {Math.round(detail.confidence)}%
+            </span>
+          )}
+        </div>
+
+        {detail?.detail && (
+          <p className="mt-1.5 text-xs leading-5 text-[#a9bcae]">{detail.detail}</p>
+        )}
+
+        {detail?.query && (
+          <p className="mt-1.5 flex items-start gap-1.5 rounded-[4px] border border-white/10 bg-black/20 px-2 py-1 font-mono text-[11px] text-[#bcd3ff]">
+            <Search className="mt-0.5 h-3 w-3 flex-none" />
+            <span className="break-words">{detail.query}</span>
+          </p>
+        )}
+
+        {results.length > 0 && (
+          <ul className="mt-1.5 space-y-1">
+            {results.map((result, index) => (
+              <li
+                key={`${result.url || result.title}-${index}`}
+                className="flex items-center gap-1.5 text-[11px] text-[#c8d8cc]"
+              >
+                <span
+                  className={`h-1 w-1 flex-none rounded-full ${
+                    result.outcome === "accepted"
+                      ? "bg-[#a4f04a]"
+                      : result.outcome === "rejected"
+                        ? "bg-[#f0a4a4]"
+                        : "bg-white/30"
+                  }`}
+                />
+                <span className="truncate">
+                  {result.domain && (
+                    <span className="text-[#8fb49a]">{result.domain} · </span>
+                  )}
+                  {result.title}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {reasons.length > 0 && (
+          <ul className="mt-1.5 space-y-0.5">
+            {reasons.map((reason, index) => (
+              <li key={index} className="text-[11px] leading-4 text-[#c1a3a3]">
+                — {reason}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </li>
   );
 }
 
@@ -804,7 +2029,10 @@ function NewDriverPage({
   status,
   error,
   isRunning,
+  starting,
+  canceling,
   onBack,
+  onCancel,
   onCountryChange,
   onLanguageChange,
   onSectorChange,
@@ -816,15 +2044,39 @@ function NewDriverPage({
   status: DriverStatus | null;
   error: string;
   isRunning: boolean;
+  starting: boolean;
+  canceling: boolean;
   onBack: () => void;
+  onCancel: () => void;
   onCountryChange: (value: string) => void;
   onLanguageChange: (value: string) => void;
   onSectorChange: (value: string) => void;
   onSubmit: (event: FormEvent) => void;
 }) {
+  const jobActive =
+    starting ||
+    (status?.status === "queued" || status?.status === "processing");
+
+  // While the agent is working, take over the full width with a dedicated
+  // processing page instead of a cramped status sidebar.
+  if (jobActive) {
+    return (
+      <ProcessingView
+        country={country}
+        sector={sector}
+        language={language}
+        status={status}
+        error={error}
+        starting={starting}
+        canceling={canceling}
+        onCancel={onCancel}
+      />
+    );
+  }
+
   return (
     <main className="px-5 py-6 xl:px-7">
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+      <div className="mx-auto max-w-3xl">
         <section className="rounded-[8px] border border-[#222d25] bg-[#fbfcf8] p-6">
           <button
             type="button"
@@ -853,6 +2105,7 @@ function NewDriverPage({
               value={country}
               onChange={onCountryChange}
               placeholder="UAE"
+              options={ESG_DRIVER_COUNTRY_OPTIONS}
               disabled={isRunning}
             />
             <SetupField
@@ -861,6 +2114,7 @@ function NewDriverPage({
               value={sector}
               onChange={onSectorChange}
               placeholder="Banking"
+              options={ESG_DRIVER_SECTOR_OPTIONS}
               disabled={isRunning}
             />
             <SetupField
@@ -869,14 +2123,15 @@ function NewDriverPage({
               value={language}
               onChange={onLanguageChange}
               placeholder="English"
-              list="driver-languages"
+              options={LANGUAGE_OPTIONS}
               disabled={isRunning}
             />
-            <datalist id="driver-languages">
-              {LANGUAGE_OPTIONS.map((option) => (
-                <option key={option} value={option} />
-              ))}
-            </datalist>
+
+            <p className="text-xs leading-5 text-[#68756c]">
+              Type any country and sector. The agent builds the deck from the
+              reviewed workbook sources — global drivers apply everywhere, and
+              country- or sector-specific drivers are added when they match.
+            </p>
 
             <button
               type="submit"
@@ -893,36 +2148,14 @@ function NewDriverPage({
               Generate driver pack
             </button>
           </form>
-        </section>
-
-        <aside className="rounded-[8px] border border-[#cfd8d0] bg-[#172019] p-5 text-white">
-          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#d6ff66]">
-            Generation status
-          </p>
-          {status ? (
-	            <div className="mt-4">
-	              <ProgressStrip status={status} />
-	              <LiveActivityFeed
-	                activity={status.activity}
-	                className="mt-4"
-	                tone="dark"
-	              />
-	              <p className="mt-4 text-sm leading-6 text-[#c8d8cc]">
-	                When generation completes, the full driver page opens automatically.
-              </p>
-            </div>
-          ) : (
-            <p className="mt-4 text-sm leading-6 text-[#c8d8cc]">
-              No active generation. Submit the details to start research and drafting.
-            </p>
-          )}
 
           {error && (
-            <div className="mt-4 rounded-[5px] border border-red-300/40 bg-red-500/15 px-3 py-2 text-sm text-red-100">
-              {error}
+            <div className="mt-6 flex items-start gap-2 rounded-[5px] border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">
+              <AlertCircle className="mt-0.5 h-4 w-4 flex-none" />
+              <span>{error}</span>
             </div>
           )}
-        </aside>
+        </section>
       </div>
     </main>
   );
@@ -930,9 +2163,15 @@ function NewDriverPage({
 
 function DriverDetailPage({
   result,
+  drivers,
   status,
   error,
   loadingJob,
+  country,
+  sector,
+  language,
+  canceling,
+  onCancel,
   viewMode,
   activeDriver,
   activeDriverSources,
@@ -942,16 +2181,25 @@ function DriverDetailPage({
   evidenceById,
   isRtl,
   accuracySummary,
+  canRetryMissingDrivers,
+  resumingMissingDrivers,
   onBack,
   onNew,
+  onRetryMissingDrivers,
   onSlideChange,
   onViewModeChange,
   onExpandedDriverChange,
 }: {
   result: EsgDriverResult | null;
+  drivers: EsgDriver[];
   status: DriverStatus | null;
   error: string;
   loadingJob: boolean;
+  country: string;
+  sector: string;
+  language: string;
+  canceling: boolean;
+  onCancel: () => void;
   viewMode: DriverViewMode;
   activeDriver: EsgDriver | null;
   activeDriverSources: EsgDriverSource[];
@@ -961,8 +2209,11 @@ function DriverDetailPage({
   evidenceById: Map<string, EsgDriverSource>;
   isRtl: boolean;
   accuracySummary: AccuracySummary | null;
+  canRetryMissingDrivers: boolean;
+  resumingMissingDrivers: boolean;
   onBack: () => void;
   onNew: () => void;
+  onRetryMissingDrivers: () => void;
   onSlideChange: (index: number) => void;
   onViewModeChange: (mode: DriverViewMode) => void;
   onExpandedDriverChange: (driverId: string | null) => void;
@@ -980,13 +2231,42 @@ function DriverDetailPage({
   }
 
   if (!result || !activeDriver || !activeAccuracyReview) {
+    const jobStatus = status?.status;
+    // While the job is still running, show the full processing view (never the
+    // legacy status panel). A finished job with the result still loading gets a
+    // brief loading state; anything else is a terminal message.
+    if (jobStatus === "queued" || jobStatus === "processing") {
+      return (
+        <ProcessingView
+          country={country}
+          sector={sector}
+          language={language}
+          status={status}
+          error={error}
+          starting={false}
+          canceling={canceling}
+          onCancel={onCancel}
+        />
+      );
+    }
+    if (jobStatus === "done") {
+      return <LoadingState label="Loading driver pack" />;
+    }
     return (
       <main className="px-5 py-6 xl:px-7">
-        <PendingJob status={status} error={error} onBack={onBack} />
+        <EmptyError
+          error={error || status?.stage || "Driver pack is not available."}
+          onBack={onBack}
+          onNew={onNew}
+        />
       </main>
     );
   }
 
+  const expectedDriverCount = result.expectedDriverCount ?? 12;
+  const omittedDriverIds = (result.slotFailures || [])
+    .map((failure) => failure.driverId)
+    .join(", ");
   return (
     <main className="grid min-h-[calc(100vh-151px)] grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(0,1fr)_360px]">
       <aside className="border-b border-[#d7ddd6] bg-[#f8faf5] lg:border-b-0 lg:border-r">
@@ -994,7 +2274,7 @@ function DriverDetailPage({
           <DeckBrief result={result} summary={accuracySummary} />
           <ViewToggle viewMode={viewMode} onViewModeChange={onViewModeChange} />
           <SlideRail
-            drivers={result.drivers}
+            drivers={drivers}
             evidenceById={evidenceById}
             activeSlideIndex={activeSlideIndex}
             onSlideChange={onSlideChange}
@@ -1003,20 +2283,57 @@ function DriverDetailPage({
       </aside>
 
       <section className="min-w-0 bg-[#eef2ee]">
+        {result.completion === "partial" && (
+          <div className="border-b border-amber-300 bg-amber-50 px-5 py-3 text-sm text-amber-950">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="max-w-4xl leading-5">
+                <span className="font-bold">Partial approved-source pack:</span>{" "}
+                {result.drivers.length} of {expectedDriverCount} drivers were generated.
+                {omittedDriverIds ? ` Omitted: ${omittedDriverIds}.` : ""} Every
+                displayed driver passed the individual source and quality gates.
+                {canRetryMissingDrivers && (
+                  <span className="mt-1 block text-xs text-amber-800">
+                    Retrying creates a new job and keeps this approved pack unchanged.
+                  </span>
+                )}
+              </div>
+              {canRetryMissingDrivers && (
+                <button
+                  type="button"
+                  onClick={onRetryMissingDrivers}
+                  disabled={resumingMissingDrivers}
+                  className="inline-flex h-10 flex-none items-center justify-center gap-2 rounded-[5px] bg-[#172019] px-4 text-sm font-bold text-white transition hover:bg-[#2a382e] disabled:cursor-wait disabled:opacity-65"
+                >
+                  {resumingMissingDrivers ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                  {resumingMissingDrivers ? "Creating retry job" : "Retry missing drivers"}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+        {error && (
+          <div className="border-b border-red-200 bg-red-50 px-5 py-3 text-sm font-semibold text-red-700">
+            {error}
+          </div>
+        )}
         {viewMode === "deck" ? (
           <DeckCanvas
             activeDriver={activeDriver}
             activeDriverSources={activeDriverSources}
             activeReview={activeAccuracyReview}
             activeSlideIndex={activeSlideIndex}
-            drivers={result.drivers}
+            drivers={drivers}
             isRtl={isRtl}
             showEmbeddedEvidence={false}
             onSlideChange={onSlideChange}
           />
         ) : (
           <DriversMatrix
-            drivers={result.drivers}
+            drivers={drivers}
             evidenceById={evidenceById}
             expandedDriverId={expandedDriverId}
             isRtl={isRtl}
@@ -1043,7 +2360,7 @@ function SetupField({
   onChange,
   placeholder,
   disabled,
-  list,
+  options,
 }: {
   icon: ReactNode;
   label: string;
@@ -1051,7 +2368,7 @@ function SetupField({
   onChange: (value: string) => void;
   placeholder: string;
   disabled: boolean;
-  list?: string;
+  options?: readonly string[];
 }) {
   return (
     <label className="block">
@@ -1059,137 +2376,36 @@ function SetupField({
         {icon}
         {label}
       </span>
-      <input
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-12 w-full rounded-[5px] border border-[#cfd8d0] bg-white px-3 text-base font-semibold text-[#172019] outline-none transition focus:border-[#172019] focus:ring-2 focus:ring-[#d6ff66]/40"
-        placeholder={placeholder}
-        list={list}
-        disabled={disabled}
-      />
-    </label>
-  );
-}
-
-function ProgressStrip({ status }: { status: DriverStatus }) {
-  const Icon =
-    status.status === "done"
-      ? CheckCircle2
-      : status.status === "error"
-        ? AlertCircle
-        : Search;
-
-  return (
-    <div className="grid gap-2 rounded-[5px] border border-white/10 bg-white/[0.06] p-3">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2 text-sm font-semibold text-white">
-          <Icon className="h-4 w-4 flex-none text-[#d6ff66]" />
-          <span className="truncate">{status.stage}</span>
-        </div>
-        <span className="font-mono text-xs text-[#d6ff66]">{status.progress}%</span>
-      </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-white/15">
-        <div
-          className="h-full rounded-full bg-[#d6ff66] transition-all"
-          style={{ width: `${status.progress}%` }}
+      {options ? (
+        <>
+          {/* Free text with suggestions: any country/sector is allowed; the
+              reviewed options are offered as autocomplete hints only. */}
+          <input
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            list={`${label}-options`}
+            className="h-12 w-full rounded-[5px] border border-[#cfd8d0] bg-white px-3 text-base font-semibold text-[#172019] outline-none transition focus:border-[#172019] focus:ring-2 focus:ring-[#d6ff66]/40"
+            placeholder={placeholder}
+            disabled={disabled}
+            aria-label={label}
+            autoComplete="off"
+          />
+          <datalist id={`${label}-options`}>
+            {options.map((option) => (
+              <option key={option} value={option} />
+            ))}
+          </datalist>
+        </>
+      ) : (
+        <input
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="h-12 w-full rounded-[5px] border border-[#cfd8d0] bg-white px-3 text-base font-semibold text-[#172019] outline-none transition focus:border-[#172019] focus:ring-2 focus:ring-[#d6ff66]/40"
+          placeholder={placeholder}
+          disabled={disabled}
         />
-      </div>
-    </div>
-  );
-}
-
-function LiveActivityFeed({
-  activity,
-  tone = "light",
-  className = "",
-}: {
-  activity: EsgDriverJobActivity[];
-  tone?: "light" | "dark";
-  className?: string;
-}) {
-  const visibleActivity = activity.slice(-8).reverse();
-  const isDark = tone === "dark";
-
-  if (visibleActivity.length === 0) {
-    return (
-      <div
-        className={`${className} rounded-[6px] border ${
-          isDark
-            ? "border-white/10 bg-white/[0.04] text-[#c8d8cc]"
-            : "border-[#d7dfd8] bg-[#fbfcf8] text-[#68756c]"
-        } p-3 text-sm`}
-      >
-        Waiting for agent activity.
-      </div>
-    );
-  }
-
-  return (
-    <section
-      className={`${className} rounded-[6px] border ${
-        isDark ? "border-white/10 bg-white/[0.04]" : "border-[#d7dfd8] bg-[#fbfcf8]"
-      } p-3`}
-    >
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <p
-          className={`text-[10px] font-bold uppercase tracking-[0.16em] ${
-            isDark ? "text-[#d6ff66]" : "text-[#536156]"
-          }`}
-        >
-          Agent activity
-        </p>
-        <span
-          className={`font-mono text-[10px] ${
-            isDark ? "text-[#9bb7a3]" : "text-[#7b897f]"
-          }`}
-        >
-          live
-        </span>
-      </div>
-
-      <ol className="space-y-2">
-        {visibleActivity.map((event, index) => {
-          const active = index === 0 && event.status !== "done" && event.status !== "error";
-          return (
-            <li key={event.id} className="grid grid-cols-[18px_minmax(0,1fr)] gap-2">
-              <span
-                className={`mt-0.5 flex h-[18px] w-[18px] items-center justify-center rounded-full ${
-                  active
-                    ? "bg-[#d6ff66] text-[#172019]"
-                    : isDark
-                      ? "bg-white/10 text-[#d6ff66]"
-                      : "bg-[#e7ede7] text-[#2f6f46]"
-                }`}
-              >
-                {active ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <CheckCircle2 className="h-3 w-3" />
-                )}
-              </span>
-              <span className="min-w-0">
-                <span
-                  className={`block truncate text-sm font-semibold ${
-                    isDark ? "text-white" : "text-[#172019]"
-                  }`}
-                >
-                  {event.stage}
-                </span>
-                <span
-                  className={`mt-0.5 flex items-center gap-2 text-[11px] ${
-                    isDark ? "text-[#9fb3a6]" : "text-[#77867b]"
-                  }`}
-                >
-                  <Clock3 className="h-3 w-3" />
-                  {formatActivityTime(event.timestamp)}
-                  <span className="font-mono">{event.progress}%</span>
-                </span>
-              </span>
-            </li>
-          );
-        })}
-      </ol>
-    </section>
+      )}
+    </label>
   );
 }
 
@@ -1213,7 +2429,14 @@ function DeckBrief({
       </p>
 
       <div className="mt-4 grid grid-cols-3 gap-2">
-        <MetricTile label="Drivers" value={result.drivers.length} />
+        <MetricTile
+          label="Drivers"
+          value={
+            result.completion === "partial"
+              ? `${result.drivers.length}/${result.expectedDriverCount ?? 12}`
+              : result.drivers.length
+          }
+        />
         <MetricTile label="Sources" value={result.evidence.length} />
         <MetricTile label="Avg" value={averageConfidence(result.drivers)} />
       </div>
@@ -1235,7 +2458,7 @@ function DeckBrief({
   );
 }
 
-function MetricTile({ label, value }: { label: string; value: number }) {
+function MetricTile({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="border-l border-[#cdd6ce] pl-2">
       <p className="font-mono text-lg font-bold text-[#172019]">{value}</p>
@@ -1364,13 +2587,23 @@ function SlideRail({
                     selected ? "text-[#d6ff66]" : "text-[#75857a]"
                   }`}
                 >
-                  {driver.driverSection}
+                  {driver.driverSection} / {driver.driverType}
                 </span>
                 <span className="mt-0.5 line-clamp-2 text-sm font-semibold leading-5">
                   {driver.driverTitle}
                 </span>
               </span>
-              <StatusDot review={review} />
+              <span className="flex flex-col items-end gap-1">
+                <span
+                  className={`font-mono text-[10px] font-bold ${
+                    selected ? "text-[#d6ff66]" : "text-[#667468]"
+                  }`}
+                  title="Confidence"
+                >
+                  {Math.round(driver.confidence)}%
+                </span>
+                <StatusDot review={review} />
+              </span>
             </button>
           );
         })}
@@ -1605,6 +2838,9 @@ function EvidenceInspector({
             <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#6b786d]">
               Driver
             </p>
+            <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.12em] text-[#6b786d]">
+              {driver.driverSection} / {driver.driverType}
+            </p>
             <p className="mt-2 text-sm font-semibold leading-5 text-[#172019]">
               {driver.driverTitle}
             </p>
@@ -1704,7 +2940,10 @@ function DriversMatrix({
                         className="w-60 px-3 py-3 font-semibold text-[#172019]"
                         dir={isRtl ? "rtl" : "ltr"}
                       >
-                        {driver.driverTitle}
+                        <span className="block text-[10px] font-bold uppercase tracking-[0.12em] text-[#75857a]">
+                          {driver.driverSection} / {driver.driverType}
+                        </span>
+                        <span className="mt-1 block">{driver.driverTitle}</span>
                       </td>
                       <td
                         className="w-[300px] px-3 py-3 leading-6 text-[#344139]"
@@ -1764,46 +3003,6 @@ function DriversMatrix({
   );
 }
 
-function PendingJob({
-  status,
-  error,
-  onBack,
-}: {
-  status: DriverStatus | null;
-  error: string;
-  onBack: () => void;
-}) {
-  return (
-    <div className="rounded-[8px] border border-[#cfd8d0] bg-[#172019] p-6 text-white">
-      <button
-        type="button"
-        onClick={onBack}
-        className="mb-5 inline-flex items-center gap-2 text-sm font-bold text-[#c8d8cc] hover:text-white"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back to generated drivers
-      </button>
-      <h2 className="text-2xl font-semibold">
-        {status?.status === "error" ? "Generation failed" : "Driver pack is processing"}
-      </h2>
-      <p className="mt-2 text-sm text-[#c8d8cc]">
-        {status?.stage || "Waiting for job status."}
-      </p>
-	      {status && (
-	        <div className="mt-5 space-y-4">
-	          <ProgressStrip status={status} />
-	          <LiveActivityFeed activity={status.activity} tone="dark" />
-	        </div>
-	      )}
-      {error && (
-        <div className="mt-5 rounded-[5px] border border-red-300/40 bg-red-500/15 px-3 py-2 text-sm text-red-100">
-          {error}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function EmptyError({
   error,
   onBack,
@@ -1859,6 +3058,8 @@ function StatusPill({ status }: { status: EsgDriverJobStatus }) {
       ? "bg-[#e0f5e6] text-[#16734a]"
       : status === "error"
         ? "bg-[#ffe3e1] text-[#a33d35]"
+        : status === "cancelled"
+          ? "bg-[#ece7f6] text-[#5f4c8a]"
         : "bg-[#e6edf8] text-[#315a91]";
 
   return (
@@ -2000,6 +3201,11 @@ function SourceDetail({
             <span className="mt-1 block text-xs text-[#68756c]">
               {source.domain} - Updated {sourceDisplayDate(source)}
             </span>
+            {source.approvalId && (
+              <span className="mt-2 inline-flex rounded-[4px] bg-[#e0f5e6] px-2 py-1 text-[11px] font-bold text-[#16734a]">
+                Approved source
+              </span>
+            )}
           </span>
         </button>
         <a
@@ -2236,6 +3442,50 @@ function averageConfidence(drivers: EsgDriver[]): number {
   return Math.round(
     drivers.reduce((sum, driver) => sum + driver.confidence, 0) / drivers.length,
   );
+}
+
+function parseDownloadFilename(contentDisposition: string | null): string {
+  if (!contentDisposition) return "";
+  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1].replace(/^"|"$/g, ""));
+    } catch {
+      return utf8Match[1].replace(/^"|"$/g, "");
+    }
+  }
+
+  const match = contentDisposition.match(/filename="([^"]+)"/i);
+  return match?.[1] || "";
+}
+
+function buildFallbackExportFilename(
+  result: EsgDriverResult | null,
+  jobId: string,
+): string {
+  if (!result) return `esg-drivers-${jobId}.xlsx`;
+  const generatedDate = result.generatedAt.slice(0, 10) || new Date().toISOString().slice(0, 10);
+  const parts = [
+    "esg-drivers",
+    result.country,
+    result.sector,
+    result.language,
+    generatedDate,
+    jobId.slice(0, 8),
+  ]
+    .map(slugifyFilenamePart)
+    .filter(Boolean);
+  return `${parts.join("-") || `esg-drivers-${jobId}`}.xlsx`;
+}
+
+function slugifyFilenamePart(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
 }
 
 function makeDriversHref(params?: { view?: "new"; jobId?: string }): string {

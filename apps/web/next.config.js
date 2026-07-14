@@ -1,6 +1,12 @@
 /** @type {import('next').NextConfig} */
+const path = require('node:path');
+
 const nextConfig = {
-  // output: 'standalone', // Disabled for now - enable for Docker deployment
+  output: 'standalone',
+  outputFileTracingRoot: path.join(__dirname, '../..'),
+  outputFileTracingIncludes: {
+    '/*': ['./node_modules/pdfjs-dist/standard_fonts/**/*'],
+  },
   transpilePackages: ['@esgcredit/db-esg', '@esgcredit/db-credit'],
   serverExternalPackages: [
     '@prisma/client',
