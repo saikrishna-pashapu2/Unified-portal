@@ -26,6 +26,32 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    # `next build` prerenders DB-backed pages (e.g. /credit/publications runs
+    # prisma.$queryRaw), and both Prisma clients throw at import time when their
+    # URL is unset. So the build needs a real, migrated Postgres - this is a
+    # throwaway one. Production data is never involved: every DB-backed page is
+    # server-rendered on demand, so nothing from this database is baked into the
+    # artifact.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      ESG_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/portal_esg
+      CREDIT_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/portal_credit
+
     steps:
       - uses: actions/checkout@v4
 
@@ -51,6 +77,20 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
+
+      - name: Create build databases
+        run: |
+          psql postgresql://postgres:postgres@127.0.0.1:5432/postgres -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE DATABASE portal_esg;
+          CREATE DATABASE portal_credit;
+          SQL
+
+      # The schema must exist or the build-time queries fail on missing tables.
+      # NODE_ENV is intentionally not "production" here: that would make
+      # db:migrate:deploy demand the *_MIGRATION_DATABASE_URL production
+      # identities, which must never exist in CI.
+      - name: Apply migrations to the build databases
+        run: pnpm db:migrate:deploy
 
       - name: Build web
         env:
