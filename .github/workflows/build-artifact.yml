@@ -1,0 +1,102 @@
+name: Build artifact
+
+# Builds apps/web/.next in CI and publishes it as a GitHub Release asset so the
+# production server never has to run `next build`. The EC2 box only downloads
+# the artifact that matches its checked-out commit (scripts/fetch-build.sh).
+#
+# Required repository variable (Settings -> Secrets and variables -> Actions -> Variables):
+#   NEXT_PUBLIC_API_URL - the PRODUCTION value. Next inlines NEXT_PUBLIC_* at
+#   build time, so a wrong/missing value here silently ships to users.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-artifact-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require production public env
+        env:
+          NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
+        run: |
+          if [ -z "$NEXT_PUBLIC_API_URL" ]; then
+            echo "::error::Repository variable NEXT_PUBLIC_API_URL is not set."
+            echo "::error::Next.js inlines NEXT_PUBLIC_* at build time. Without it this artifact would ship http://localhost:3000 to production."
+            exit 1
+          fi
+          echo "Building with NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.18.1
+
+      # Must match the Node major running on the server (see engines: >=22.12.0).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build web
+        env:
+          NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
+          NEXT_TELEMETRY_DISABLED: "1"
+        run: pnpm build
+
+      - name: Package .next
+        run: |
+          # Ship only what `next start` actually reads.
+          #   .next/cache      (~970 MB) local build cache - never ship.
+          #   .next/standalone (~170 MB) only used by the Docker/standalone
+          #                    runtime; PM2 runs `next start`, which ignores it.
+          tar -czf web-next.tar.gz \
+            -C apps/web \
+            --exclude='./.next/cache' \
+            --exclude='./.next/standalone' \
+            ./.next
+          sha256sum web-next.tar.gz | tee web-next.tar.gz.sha256
+          ls -lh web-next.tar.gz
+
+      - name: Write build info
+        run: |
+          cat > build-info.json <<EOF
+          {
+            "commit": "${GITHUB_SHA}",
+            "ref": "${GITHUB_REF}",
+            "node": "$(node --version)",
+            "pnpm": "$(pnpm --version)",
+            "nextPublicApiUrl": "${{ vars.NEXT_PUBLIC_API_URL }}",
+            "builtAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "runId": "${GITHUB_RUN_ID}"
+          }
+          EOF
+          cat build-info.json
+
+      - name: Publish release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="build-${GITHUB_SHA:0:12}"
+          FILES="web-next.tar.gz web-next.tar.gz.sha256 build-info.json"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG exists; replacing assets."
+            gh release upload "$TAG" $FILES --clobber
+          else
+            gh release create "$TAG" $FILES \
+              --title "$TAG" \
+              --notes "Prebuilt apps/web/.next for ${GITHUB_SHA}. Fetch on the server with: pnpm deploy:fetch-build" \
+              --latest
+          fi
+          echo "Published $TAG"

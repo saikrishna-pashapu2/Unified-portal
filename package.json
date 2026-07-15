@@ -11,7 +11,8 @@
   ],
   "scripts": {
     "dev": "pnpm -C apps/web dev",
-    "build": "pnpm db:generate && pnpm -C apps/web build",
+    "build": "node scripts/build.mjs",
+    "deploy:fetch-build": "bash scripts/fetch-build.sh",
     "start": "pnpm -C apps/web start",
     "worker": "pnpm -C apps/web worker",
     "catalog:generate": "pnpm -C apps/web catalog:generate",
