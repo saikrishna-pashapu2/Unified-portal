@@ -26,6 +26,32 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    # `next build` prerenders DB-backed pages (e.g. /credit/publications runs
+    # prisma.$queryRaw), and both Prisma clients throw at import time when their
+    # URL is unset. So the build needs a real, migrated Postgres - this is a
+    # throwaway one. Production data is never involved: every DB-backed page is
+    # server-rendered on demand, so nothing from this database is baked into the
+    # artifact.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      ESG_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/portal_esg
+      CREDIT_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/portal_credit
+
     steps:
       - uses: actions/checkout@v4
 
@@ -52,10 +78,50 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Create build databases
+        run: |
+          psql postgresql://postgres:postgres@127.0.0.1:5432/postgres -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE DATABASE portal_esg;
+          CREATE DATABASE portal_credit;
+          SQL
+
+      # The schema must exist or the build-time queries fail on missing tables.
+      # NODE_ENV is intentionally not "production" here: that would make
+      # db:migrate:deploy demand the *_MIGRATION_DATABASE_URL production
+      # identities, which must never exist in CI.
+      - name: Apply migrations to the build databases
+        run: pnpm db:migrate:deploy
+
       - name: Build web
         env:
+          # The only value that truly matters: Next INLINES NEXT_PUBLIC_* into
+          # the bundle at build time, so this must be the real production URL.
           NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
           NEXT_TELEMETRY_DISABLED: "1"
+
+          # Everything below is a build-time placeholder, never a real secret.
+          # Several modules construct API clients at module scope (5x
+          # `new OpenAI(...)`, plus both Prisma clients), and `next build`
+          # imports every route while collecting page data - so these must be
+          # PRESENT or the build throws. They are never used: no network call
+          # happens during a build.
+          #
+          # These cannot leak into the artifact. Next only inlines NEXT_PUBLIC_*;
+          # every other value stays a runtime `process.env` lookup, so the server
+          # reads the real values from its own .env when it starts.
+          OPENAI_API_KEY: build-placeholder-not-used
+          OPENAI_ESG_DRIVERS_MODEL: gpt-5.4-mini
+          GOOGLE_API_KEY_2: build-placeholder-not-used
+          GOOGLE_CSE_ID_2: build-placeholder-not-used
+          TAVILY_API_KEY: build-placeholder-not-used
+          NEXTAUTH_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
+          NEXTAUTH_SECRET: build-placeholder-secret-with-at-least-32-chars
+          CRON_SECRET: build-placeholder-secret-with-at-least-32-chars
+          MAIL_SERVER: smtp.example.test
+          MAIL_PORT: "587"
+          MAIL_USERNAME: build@example.test
+          MAIL_PASSWORD: build-placeholder-not-used
+          MAIL_FROM: build@example.test
         run: pnpm build
 
       - name: Package .next
