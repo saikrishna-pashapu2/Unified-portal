@@ -10,11 +10,11 @@
 # The artifact is published by .github/workflows/build-artifact.yml as a public
 # GitHub Release asset tagged build-<short-sha>, so no auth is needed.
 #
-# Override the repo with REPO=owner/name if the remote ever changes.
+# The repo is derived from the git remote so a rename or fork keeps working.
+# Override with REPO=owner/name if needed.
 
 set -euo pipefail
 
-REPO="${REPO:-bullhunter6/Unified-portal}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
@@ -22,6 +22,22 @@ if ! command -v git >/dev/null 2>&1; then
   echo "error: git is required" >&2
   exit 1
 fi
+
+detect_repo() {
+  local url
+  url="$(git config --get remote.origin.url 2>/dev/null || true)"
+  # Strip suffixes first: bash uses POSIX ERE, which has no lazy quantifier.
+  url="${url%/}"
+  url="${url%.git}"
+  # https://github.com/OWNER/REPO or git@github.com:OWNER/REPO
+  if [[ "$url" =~ github\.com[:/]([^/]+)/([^/]+)$ ]]; then
+    echo "${BASH_REMATCH[1]}/${BASH_REMATCH[2]}"
+  else
+    echo "saikrishna-pashapu2/Unified-portal"
+  fi
+}
+
+REPO="${REPO:-$(detect_repo)}"
 
 SHA="$(git rev-parse HEAD)"
 SHORT="${SHA:0:12}"

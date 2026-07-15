@@ -20,7 +20,7 @@ This guide documents the complete deployment process for the ESG/Credit Portal o
 ## Prerequisites
 
 ### Local Machine
-- Git repository: https://github.com/bullhunter6/Unified-portal.git
+- Git repository: https://github.com/saikrishna-pashapu2/Unified-portal.git
 - All environment variables ready (database URLs, API keys, etc.)
 
 ### AWS EC2 Instance
@@ -124,7 +124,7 @@ cd /var/www
 
 ### 7. Clone Repository (First Time)
 ```bash
-sudo git clone https://github.com/bullhunter6/Unified-portal.git portal-v1.0.0
+sudo git clone https://github.com/saikrishna-pashapu2/Unified-portal.git portal-v1.0.0
 sudo chown -R ubuntu:ubuntu portal-v1.0.0
 cd portal-v1.0.0
 ```
@@ -228,14 +228,17 @@ pnpm -C apps/web worker:check-db
 `deploy:fetch-build` downloads the artifact matching **this checkout's commit**
 (`build-<short-sha>`), verifies its SHA-256, and extracts it to
 `apps/web/.next`. If it reports that no artifact exists, the
-[Build artifact workflow](https://github.com/bullhunter6/Unified-portal/actions/workflows/build-artifact.yml)
+[Build artifact workflow](https://github.com/saikrishna-pashapu2/Unified-portal/actions/workflows/build-artifact.yml)
 has not finished for that commit yet - wait for it rather than building locally.
 
-This should complete successfully with output like:
+The fetch should complete with output like:
 ```
-✓ Compiled successfully
-✓ Linting and checking validity of types
-✓ Generating static pages (36/36)
+==> Commit:   a1b2c3d4...
+==> Artifact: build-a1b2c3d4e5f6
+==> Verifying checksum
+web-next.tar.gz: OK
+==> Extracting to apps/web/.next
+==> Done. apps/web/.next is ready (BUILD_ID: IApaods-hSSCQY2jFL5EK)
 ```
 
 ---
@@ -383,7 +386,7 @@ git push origin main
 #### 2. On EC2 - Clone New Version
 ```bash
 cd /var/www
-sudo git clone https://github.com/bullhunter6/Unified-portal.git portal-v1.0.6
+sudo git clone https://github.com/saikrishna-pashapu2/Unified-portal.git portal-v1.0.6
 sudo chown -R ubuntu:ubuntu portal-v1.0.6
 cd portal-v1.0.6
 ```
@@ -407,7 +410,7 @@ pnpm db:generate
 #### 6. Fetch the Prebuilt Application
 
 > Never run `pnpm build` here - see step 13. Make sure the
-> [Build artifact workflow](https://github.com/bullhunter6/Unified-portal/actions/workflows/build-artifact.yml)
+> [Build artifact workflow](https://github.com/saikrishna-pashapu2/Unified-portal/actions/workflows/build-artifact.yml)
 > has finished for the commit you just cloned.
 
 ```bash
@@ -771,7 +774,7 @@ du -sh /var/www/current/logs/*
 
 ## Contact & Support
 
-- **Repository**: https://github.com/bullhunter6/Unified-portal
+- **Repository**: https://github.com/saikrishna-pashapu2/Unified-portal
 - **EC2 Instance**: Ubuntu 22.04 LTS
 - **Application URL**: http://YOUR_EC2_IP:3000
 
