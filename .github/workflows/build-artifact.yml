@@ -11,6 +11,9 @@ name: Build artifact
 on:
   push:
     branches: [main]
+  # Pull requests build and package too, so the pipeline is proven before it is
+  # merged. Only pushes to main publish a Release.
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -84,7 +87,19 @@ jobs:
           EOF
           cat build-info.json
 
+      - name: Upload artifact for inspection (pull requests)
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-next-${{ github.sha }}
+          path: |
+            web-next.tar.gz
+            web-next.tar.gz.sha256
+            build-info.json
+          retention-days: 7
+
       - name: Publish release asset
+        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
