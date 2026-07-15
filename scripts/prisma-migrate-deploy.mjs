@@ -29,11 +29,17 @@ const databases = {
     runtime: "ESG_DATABASE_URL",
     migration: "ESG_MIGRATION_DATABASE_URL",
     schema: "packages/db-esg/prisma/schema.prisma",
+    // The prisma CLI is a devDependency of this package, not of the workspace
+    // root, and pnpm does not hoist. `pnpm exec prisma` from the root therefore
+    // fails with "Command \"prisma\" not found", so every invocation must be
+    // scoped to the package that owns the CLI.
+    package: "packages/db-esg",
   },
   credit: {
     runtime: "CREDIT_DATABASE_URL",
     migration: "CREDIT_MIGRATION_DATABASE_URL",
     schema: "packages/db-credit/prisma/schema.prisma",
+    package: "packages/db-credit",
   },
 };
 
@@ -55,7 +61,16 @@ for (const name of requested) {
   const command = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
   const result = spawnSync(
     command,
-    ["exec", "prisma", "migrate", "deploy", "--schema", path.join(root, database.schema)],
+    [
+      "-C",
+      path.join(root, database.package),
+      "exec",
+      "prisma",
+      "migrate",
+      "deploy",
+      "--schema",
+      path.join(root, database.schema),
+    ],
     {
       cwd: root,
       env: { ...process.env, DATABASE_URL: databaseUrl },
