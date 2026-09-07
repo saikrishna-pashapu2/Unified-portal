@@ -30,7 +30,17 @@ export function looksDefinitelyEnglish(text: string): boolean {
   return english >= 2 || (english === 1 && words.length <= 4);
 }
 
-export function enforceEnglishProtection(layout: PdfPageLayout): PdfPageLayout {
+export function looksDefinitelyRussian(text: string): boolean {
+  if (/[ўқғҳ]/i.test(text) || /\b(?:yil|bilan|uchun|bo'yicha)\b/i.test(text)) return false;
+  const words = text.toLowerCase().match(/[а-яё]+/g) ?? [];
+  // Uzbek written with only shared Cyrillic letters must NOT be protected.
+  if (words.some((word) => ['йил', 'йилда', 'билан', 'учун', 'бош', 'буйича', 'ва', 'сони', 'нафар', 'лавозим'].includes(word))) return false;
+  return words.filter((word) => ['общество', 'работников', 'работник', 'должности', 'сотрудников', 'количество', 'утвердить', 'приказ', 'настоящего', 'настоящий', 'соответствии', 'предприятия', 'организации', 'директора', 'подразделений', 'должностей', 'штатное', 'расписание', 'составляет', 'рублей', 'решение'].includes(word)).length >= 2;
+}
+
+export function enforceEnglishProtection(layout: PdfPageLayout, targetLanguage?: string): PdfPageLayout {
+  const protectedText = (text: string) => looksDefinitelyEnglish(text) ||
+    (targetLanguage === 'Russian' && looksDefinitelyRussian(text));
   return {
     ...layout,
     elements: layout.elements.map((element) => {
@@ -39,7 +49,7 @@ export function enforceEnglishProtection(layout: PdfPageLayout): PdfPageLayout {
           ...row,
           cells: row.cells.map((cell) => ({
             ...cell,
-            translate: cell.translate && !looksDefinitelyEnglish(cell.text),
+            translate: cell.translate && !protectedText(cell.text),
           })),
         }));
         return {
@@ -56,7 +66,7 @@ export function enforceEnglishProtection(layout: PdfPageLayout): PdfPageLayout {
       }
       return {
         ...element,
-        translate: element.translate && !looksDefinitelyEnglish(element.text),
+        translate: element.translate && !protectedText(element.text),
       };
     }),
   };

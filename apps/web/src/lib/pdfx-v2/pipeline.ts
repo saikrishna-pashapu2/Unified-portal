@@ -23,7 +23,9 @@ import {
   buildDocumentContext,
   extractPageWithOpenAi,
   translatePageWithOpenAi,
+  defaultPdfxV2Requester,
 } from './openai';
+import { budgetedRequester, emptyRequestLedger, type RequestLedger } from './request-budget';
 import { renderPdfxV2Document } from './render';
 import { mergePageTranslation, pageLayoutToPlainText } from './serialize';
 import type { PdfxV2JobPayload, PdfxV2Stage } from './types';
@@ -36,6 +38,7 @@ import {
 } from './constants';
 
 type StoredMetrics = {
+  requestLedger?: RequestLedger;
   requiredPipelineVersion?: string;
   requiredModel?: string;
   pipelineVersion?: string;
@@ -47,10 +50,8 @@ type StoredMetrics = {
   contextResponseId?: string;
 };
 
-// Translation validation and transient OpenAI failures are recoverable from
-// page checkpoints. Keep retrying until the user cancels instead of turning a
-// difficult but valid document into a terminal error after three worker runs.
-export const PDF_TRANSLATION_MAX_ATTEMPTS = 1_000;
+// Worker replays cannot extend the durable per-page API allowance.
+export const PDF_TRANSLATION_MAX_ATTEMPTS = 3;
 
 function jsonValue(value: unknown): any {
   return JSON.parse(JSON.stringify(value));
@@ -84,10 +85,12 @@ async function splitPdfPages(input: Buffer): Promise<SplitPdfPage[]> {
     const [page] = await document.copyPages(source, [index]);
     document.addPage(page);
     const size = source.getPage(index).getSize();
+    const sourceRotation = source.getPage(index).getRotation().angle;
+    const sideways = Math.abs(sourceRotation % 180) === 90;
     pages.push({
       pdf: Buffer.from(await document.save({ useObjectStreams: false })),
-      pageWidthPoints: size.width,
-      pageHeightPoints: size.height,
+      pageWidthPoints: sideways ? size.height : size.width,
+      pageHeightPoints: sideways ? size.width : size.height,
     });
   }
   return pages;
@@ -198,6 +201,7 @@ export async function processPdfTranslationV2Job(
     priorMetrics.model === PDFX_V2_MODEL;
   let storedMetrics: StoredMetrics = {
     ...(checkpointCompatible ? priorMetrics : {}),
+    requestLedger: priorMetrics.requestLedger ?? emptyRequestLedger(),
     requiredPipelineVersion: PDFX_V2_PIPELINE_VERSION,
     requiredModel: PDFX_V2_MODEL,
     pipelineVersion: PDFX_V2_PIPELINE_VERSION,
@@ -206,6 +210,28 @@ export async function processPdfTranslationV2Job(
 
   const workDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'pdfx-v2-'));
   const outputPath = path.join(workDirectory, `${job.id}-translated.pdf`);
+  const requester = budgetedRequester(defaultPdfxV2Requester, storedMetrics.requestLedger!, async (ledger, response) => {
+    await throwIfJobCancelled(job.id, job.leaseOwner);
+    storedMetrics.requestLedger = ledger;
+    if (response?.stage === 'context') {
+      storedMetrics.contextInputTokens = (storedMetrics.contextInputTokens ?? 0) + response.inputTokens;
+      storedMetrics.contextOutputTokens = (storedMetrics.contextOutputTokens ?? 0) + response.outputTokens;
+    }
+    const operations: any[] = [esgPrisma.pdf_translation_v2_jobs.updateMany({
+      where: { id: job.id, user_id: job.userId, status: 'processing' },
+      data: { metrics: jsonValue(storedMetrics) },
+    })];
+    if (response && response.page > 0) {
+      operations.push(esgPrisma.pdf_translation_v2_pages.upsert({
+        where: { job_id_page_number: { job_id: job.id, page_number: response.page } },
+        create: { job_id: job.id, page_number: response.page, status: 'extracting', warnings: [],
+          input_tokens: response.inputTokens, output_tokens: response.outputTokens },
+        update: { input_tokens: { increment: response.inputTokens }, output_tokens: { increment: response.outputTokens } },
+      }));
+    }
+    const [saved] = await esgPrisma.$transaction(operations);
+    if ((saved as { count: number }).count !== 1) throw new Error('Translation is no longer active');
+  });
 
   const reportProgress = async (
     progress: number,
@@ -293,6 +319,7 @@ export async function processPdfTranslationV2Job(
           pagePdfs[index].pdf,
           pageNumber,
           job.payload.targetLang,
+          requester,
         );
       } catch (error) {
         await esgPrisma.pdf_translation_v2_pages.upsert({
@@ -324,8 +351,6 @@ export async function processPdfTranslationV2Job(
           source_text: pageLayoutToPlainText(extractedLayout),
           extraction_model: extracted.model,
           extraction_attempts: extracted.attempts,
-          input_tokens: extracted.inputTokens,
-          output_tokens: extracted.outputTokens,
           warnings: jsonValue(extractedLayout.warnings),
         },
         update: {
@@ -334,8 +359,6 @@ export async function processPdfTranslationV2Job(
           source_text: pageLayoutToPlainText(extractedLayout),
           extraction_model: extracted.model,
           extraction_attempts: extracted.attempts,
-          input_tokens: extracted.inputTokens,
-          output_tokens: extracted.outputTokens,
           warnings: jsonValue(extractedLayout.warnings),
           error_message: null,
         },
@@ -348,12 +371,13 @@ export async function processPdfTranslationV2Job(
       const contextResult = await buildDocumentContext(
         sourceLayouts,
         job.payload.targetLang,
+        requester,
       );
       context = contextResult.context;
       storedMetrics = {
         ...storedMetrics,
-        contextInputTokens: contextResult.inputTokens,
-        contextOutputTokens: contextResult.outputTokens,
+        contextInputTokens: storedMetrics.contextInputTokens ?? contextResult.inputTokens,
+        contextOutputTokens: storedMetrics.contextOutputTokens ?? contextResult.outputTokens,
         contextModel: contextResult.model,
         contextResponseId: contextResult.responseId,
       };
@@ -392,6 +416,7 @@ export async function processPdfTranslationV2Job(
           source,
           context,
           job.payload.targetLang,
+          requester,
         );
       } catch (error) {
         await esgPrisma.pdf_translation_v2_pages.update({
@@ -414,8 +439,6 @@ export async function processPdfTranslationV2Job(
           translated_text: pageLayoutToPlainText(merged),
           translation_model: translated.model,
           translation_attempts: translated.attempts,
-          input_tokens: { increment: translated.inputTokens },
-          output_tokens: { increment: translated.outputTokens },
           validation: jsonValue(translated.validation),
           warnings: jsonValue(merged.warnings),
           error_message: null,

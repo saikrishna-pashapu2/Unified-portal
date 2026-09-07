@@ -477,14 +477,14 @@ export async function completePdfTranslationV2Job(
 export async function failBackgroundJob(
   job: ClaimedBackgroundJob,
   error: string,
-  options: { minimumAttempts?: number; keepRetrying?: boolean } = {},
+  options: { minimumAttempts?: number; keepRetrying?: boolean; maximumAttempts?: number; forceTerminal?: boolean } = {},
 ): Promise<BackgroundJobTransition> {
-  const effectiveMaxAttempts = Math.max(
+  const effectiveMaxAttempts = Math.min(options.maximumAttempts ?? Infinity, Math.max(
     job.maxAttempts,
     Math.max(1, Math.floor(options.minimumAttempts ?? job.maxAttempts)),
     options.keepRetrying ? job.attempts + 2 : 1,
-  );
-  const retry = job.attempts < effectiveMaxAttempts;
+  ));
+  const retry = !options.forceTerminal && job.attempts < effectiveMaxAttempts;
   const delaySeconds = Math.min(300, 5 * 2 ** Math.max(0, job.attempts - 1));
   const rows = await esgPrisma.$queryRaw<Array<{ status: BackgroundJobStatus }>>`
     UPDATE background_jobs

@@ -112,6 +112,19 @@ export function validateExtractedPage(
 ): PdfxV2Validation {
   const failures: string[] = [];
   const warnings = [...layout.warnings];
+  if (warnings.some((warning) => /(?:table|printed|typed).*(?:unreadable|illegible|omitted|incomplete|difficult to distinguish|cannot read|could not read)|(?:omitted|incomplete|unreadable).*(?:table|rows|cells|printed)/i.test(warning))) {
+    failures.push('OCR reported incomplete printed content; re-read the detailed page views instead of accepting missing text');
+  }
+  if (!layout.elements.some((element) => element.text.trim() || allCells(element).some((cell) => cell.text.trim())) &&
+      layout.warnings.some((warning) => /unreadable|illegible|unable|cannot read|could not|неразборчив/i.test(warning))) {
+    failures.push('OCR reported unreadable content; an empty extraction is not a completed page');
+  }
+  if ((layout.graphics?.length ?? 0) > 2000) failures.push('too many structural graphics');
+  for (const graphic of layout.graphics ?? []) {
+    if (graphic.kind === 'rect' && !validBBox(graphic.bbox)) failures.push('invalid diagram rectangle');
+    if (graphic.kind === 'polyline' && (graphic.points.length < 2 || graphic.points.length > 100 ||
+        graphic.points.some((point) => !Number.isFinite(point.x) || !Number.isFinite(point.y) || point.x < 0 || point.x > 1000 || point.y < 0 || point.y > 1000))) failures.push('invalid diagram connector');
+  }
   if (layout.pageNumber !== expectedPageNumber) {
     failures.push(`expected page ${expectedPageNumber}, received page ${layout.pageNumber}`);
   }

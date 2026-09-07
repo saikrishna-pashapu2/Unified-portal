@@ -26,7 +26,7 @@ async function createPdfJsCanvas(width: number, height: number): Promise<RasterC
  * input times out, giving the vision request a much smaller, deterministic
  * fallback payload.
  */
-export async function rasterizePdfPage(pdf: Buffer, pageNumber: number): Promise<Buffer> {
+export async function rasterizePdfPage(pdf: Buffer, pageNumber: number, clockwiseRotation = 0): Promise<Buffer> {
   if (!Number.isSafeInteger(pageNumber) || pageNumber < 1) {
     throw new Error(`Invalid PDF page number: ${pageNumber}`);
   }
@@ -44,12 +44,13 @@ export async function rasterizePdfPage(pdf: Buffer, pageNumber: number): Promise
       throw new Error(`PDF page ${pageNumber} does not exist; document has ${document.numPages} pages`);
     }
     const page = await document.getPage(pageNumber);
-    const baseViewport = page.getViewport({ scale: 1 });
+    const rotation = (page.rotate + clockwiseRotation) % 360;
+    const baseViewport = page.getViewport({ scale: 1, rotation });
     const scale = Math.max(
       1,
       Math.min(3, MAX_RASTER_DIMENSION / Math.max(baseViewport.width, baseViewport.height)),
     );
-    const viewport = page.getViewport({ scale });
+    const viewport = page.getViewport({ scale, rotation });
     const canvas = await createPdfJsCanvas(
       Math.ceil(viewport.width),
       Math.ceil(viewport.height),
@@ -69,6 +70,20 @@ export async function rasterizePdfPage(pdf: Buffer, pageNumber: number): Promise
   }
 }
 
-export async function rasterizeSinglePagePdf(pagePdf: Buffer): Promise<Buffer> {
-  return rasterizePdfPage(pagePdf, 1);
+export async function rasterizeSinglePagePdf(pagePdf: Buffer, clockwiseRotation = 0): Promise<Buffer> {
+  return rasterizePdfPage(pagePdf, 1, clockwiseRotation);
+}
+
+/** Overlapping horizontal detail strips retain legible small spreadsheet text.
+ * They are extra views in ONE request, not per-cell validation API calls. */
+export async function rasterDetailStrips(png: Buffer): Promise<{ png: Buffer; top: number; bottom: number }[]> {
+  const { createCanvas, loadImage } = await import('@napi-rs/canvas');
+  const source = await loadImage(png);
+  return [0, 0.3, 0.6].map((fraction) => {
+    const top = Math.floor(fraction * source.height);
+    const bottom = Math.min(source.height, Math.ceil((fraction + 0.4) * source.height));
+    const canvas = createCanvas(source.width, bottom - top);
+    canvas.getContext('2d').drawImage(source, 0, top, source.width, bottom - top, 0, 0, source.width, bottom - top);
+    return { png: canvas.toBuffer('image/png'), top: top / source.height * 1000, bottom: bottom / source.height * 1000 };
+  });
 }

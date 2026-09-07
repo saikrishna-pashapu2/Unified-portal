@@ -3,6 +3,7 @@
 import { useLayoutEffect, useRef, type CSSProperties } from 'react';
 import type { PdfElement, StoredPdfPageLayout } from '@/lib/pdfx-v2/schemas';
 import { listTextWithMarkers } from '@/lib/pdfx-v2/serialize';
+import { pageCanvasGeometry, diagramLines } from '@/lib/pdfx-v2/diagram-geometry';
 import {
   fitLayoutFontSize,
   normalizedBox,
@@ -241,6 +242,7 @@ export function PdfLayoutCanvas({
   }
 
   const size = resolvePageSize(layout);
+  const canvas = pageCanvasGeometry(size.width, size.height, layout.rotation);
   const elements = [...layout.elements]
     .filter((element) => !VISUAL_KINDS.has(element.kind))
     .sort((left, right) => left.order - right.order || left.id.localeCompare(right.id));
@@ -256,23 +258,29 @@ export function PdfLayoutCanvas({
         viewBox={`0 0 ${size.width} ${size.height}`}
       >
         <rect fill="#ffffff" height={size.height} width={size.width} x={0} y={0} />
+        <g transform={canvas.transform}>
+        {diagramLines(layout.graphics, canvas.width, canvas.height).map((line, index) => (
+          <line key={`line-${index}`} x1={line.x1} y1={line.y1} x2={line.x2} y2={line.y2}
+            stroke="#101827" strokeWidth={0.65} strokeDasharray={line.dashed ? '3 2' : undefined} />
+        ))}
         {elements.map((element) => element.kind === 'table'
           ? (
               <TableBlock
                 key={element.id}
                 element={element}
-                pageHeight={size.height}
-                pageWidth={size.width}
+                pageHeight={canvas.height}
+                pageWidth={canvas.width}
               />
             )
           : (
               <TextBlock
                 key={element.id}
                 element={element}
-                pageHeight={size.height}
-                pageWidth={size.width}
+                pageHeight={canvas.height}
+                pageWidth={canvas.width}
               />
             ))}
+        </g>
       </svg>
     </div>
   );

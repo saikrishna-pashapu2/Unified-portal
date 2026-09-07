@@ -59,6 +59,7 @@ vi.mock('@/lib/jobs/queue', async () => {
   };
 });
 vi.mock('../openai', () => ({
+  defaultPdfxV2Requester: {},
   extractPageWithOpenAi: mocks.extract,
   buildDocumentContext: mocks.context,
   translatePageWithOpenAi: mocks.translate,
@@ -106,7 +107,7 @@ describe('PDF Translator pipeline', () => {
     expect(queueArgs?.data).toEqual(expect.objectContaining({
       id: jobId,
       job_type: 'pdf_translation_v5',
-      max_attempts: 1_000,
+      max_attempts: 3,
       input_data: inputBuffer,
     }));
     const domainArgs = mocks.createDomain.mock.calls[0]?.[0] as
@@ -226,6 +227,7 @@ describe('PDF Translator pipeline', () => {
       }),
       documentContext,
       'Russian',
+      expect.objectContaining({ extract: expect.any(Function), translate: expect.any(Function) }),
     );
     expect(mocks.render.mock.calls[0][0]).toEqual([
       expect.objectContaining({

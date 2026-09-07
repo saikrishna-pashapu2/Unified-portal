@@ -160,7 +160,7 @@ describe('PDF Translator OpenAI retry ladder', () => {
       'Ознакомить работников с настоящим постановлением.',
     ]);
     expect(result.validation.warnings.join(' ')).toMatch(/fragments/i);
-    expect(translate).toHaveBeenCalledTimes(8);
+    expect(translate).toHaveBeenCalledTimes(5);
   });
 
   it('stops after one permanent provider error instead of multiplying calls', async () => {

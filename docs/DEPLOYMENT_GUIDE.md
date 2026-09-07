@@ -322,10 +322,6 @@ MAIL_FROM=
 
 OPENAI_API_KEY=
 OPENAI_ESG_DRIVERS_MODEL=gpt-5.4-mini
-OPENAI_PDFX2_EXTRACT_MODEL=gpt-5.6-terra
-OPENAI_PDFX2_TRANSLATE_MODEL=gpt-5.6-terra
-OPENAI_PDFX2_RETRY_MODEL=gpt-5.6-sol
-OPENAI_PDFX2_VALIDATE_MODEL=gpt-5.6-terra
 GOOGLE_API_KEY_2=
 GOOGLE_CSE_ID_2=
 TAVILY_API_KEY=
@@ -339,11 +335,44 @@ PDF Translator requires all ESG migrations, including
 `20260819090000_pdf_translation_v2` and
 `20260819170000_remove_legacy_pdf_translator`, before the web or worker is
 restarted.
+New submissions use the `pdf_translation_v5` queue type while retaining the
+existing `pdf_translation_v2_jobs` domain tables. This intentionally prevents
+an older worker process from claiming a new job. After deployment, the worker
+startup line must list `pdf_translation_v5`; if it does not, the old worker is
+still running. The current worker also continues to drain historical v2-v4
+queue rows.
 It uses OpenAI PDF vision inputs and Structured Outputs one source page at a
 time; it does not require OCRmyPDF/Tesseract, but the worker must have access to
-the configured OpenAI models. Terra is the accuracy-first default, with Sol as
-the final per-page recovery model. Set all four variables explicitly if the
-account uses different approved model aliases.
+`gpt-5.6-luna`. Luna is pinned in code for every extraction, translation,
+retry, and validation request; there is no model environment override and no
+higher-cost recovery model.
+Rejected page drafts are retried with their exact validation feedback and the
+previous draft, large tables fall back to row-preserving fragment translation,
+and extraction alternates the one-page PDF text layer with a locally rasterized
+PNG and overlapping detail strips when correction is needed. Recoverable jobs
+retain compatible page checkpoints. The v5 safeguards cap automatic worker
+attempts at three, extraction-stage calls at four per page (including
+orientation), translation/review calls at twelve per page, and document-context
+calls at two. Durable request reservations survive worker restarts; exhausted
+budgets are terminal rather than restarting the full retry ladder. The output
+allowance is 60,000 tokens per page and 4,000 for context, including reservations
+for requests whose usage was not returned. These are per-job recovery safeguards,
+not daily document quotas or an exact dollar-price guarantee.
+
+The release adds table-index correction, rotated-page layout support and local
+chart-rule detection. These are incremental improvements, not a guarantee of an
+exact source replica. The tested sample still had an OCR numeric error, and its
+dense page-6 table did not complete the live verification test. Automatic
+orientation classification also still needs live verification. Review important
+figures and chart details against the source before relying on a translation.
+
+The application accepts PDF files up to 512 MiB (shown as 512 MB in the UI),
+with 4 MiB of multipart overhead. The nginx example below therefore allows
+`516M` requests specifically at `/api/pdfx-v2/upload`, while other endpoints
+retain their existing `50M` proxy limit. Queue recovery
+blobs expire after seven days by default (`WORKER_PDF_BLOB_RETENTION_HOURS`).
+The v7 usage-event migration and automatic document-retention cleanup are not
+part of this baseline.
 
 The removal migration permanently deletes Translator 1 queue records, output
 PDFs, and legacy translation history. Back up those tables before deployment
@@ -412,8 +441,23 @@ server {
     listen 80;
     server_name unifiedportal.duckdns.org;
 
-    # PDF / workbook uploads; nginx defaults to 1M and would 413.
+    # Default for other uploads; PDF Translator overrides this below.
     client_max_body_size 50M;
+
+    # PDF Translator: 512 MiB file + 4 MiB multipart envelope.
+    # Keep this exception restricted to the authenticated translator endpoint.
+    location = /api/pdfx-v2/upload {
+        client_max_body_size 516M;
+        client_body_timeout 300s;
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
 
     location / {
         proxy_pass http://127.0.0.1:3000;
@@ -435,6 +479,43 @@ sudo nginx -t
 sudo systemctl enable --now nginx
 curl -I http://127.0.0.1 -H "Host: unifiedportal.duckdns.org"   # 307 -> /esg
 ```
+
+#### Existing production server: enable 512 MB PDF uploads
+
+Editing this guide or pulling Git changes does **not** update the running nginx
+configuration. No application release/version change is required for this proxy
+setting when the deployed application already has the 512 MiB file limit.
+
+1. Inspect the active configuration with `sudo nginx -T`. Identify the portal's
+   active HTTPS `server` block and its configuration file; after Certbot, it may
+   differ from the original HTTP block.
+2. Back up that file, then add the exact-match
+   `location = /api/pdfx-v2/upload` block from the example above **inside the
+   active HTTPS server block**. Update an existing exact-match upload location
+   instead of adding a duplicate. Keep its proxy headers/upstream consistent
+   with the portal's existing configuration. Leave other routes at `50M`.
+3. Validate, then reload only if validation succeeds:
+
+   ```bash
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+
+4. Verify an authenticated PDF upload larger than 50 MiB reaches the application
+   without an nginx 413. Remember that submitting it creates a real translation
+   job and incurs API charges. Do not trigger a full-size translation merely
+   as a configuration smoke test without approval.
+
+`client_max_body_size` limits the **whole request body**, so `512M` at the proxy
+would leave no room for a maximum-size PDF's multipart envelope. The application
+still rejects individual files larger than 512 MiB.
+See [nginx request body size documentation](https://nginx.org/en/docs/http/ngx_http_core_module.html#client_max_body_size).
+
+Any upstream proxy/CDN must also permit a 516 MiB request. This size setting is
+not a capacity guarantee: nginx may spool uploads to temporary disk, and the
+current application buffers the PDF in memory. Profile available RAM, temporary
+disk and the web process's PM2 memory threshold before accepting concurrent
+maximum-size uploads; the example `1G` web restart threshold above has not been
+load-tested for 512 MiB PDFs. Do not disable request-size limits globally.
 
 ### 5.2 DuckDNS
 

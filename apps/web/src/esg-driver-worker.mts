@@ -30,6 +30,7 @@ import {
   processPdfTranslationV2Job,
 } from "@/lib/pdfx-v2/pipeline";
 import { isPdfxV2QueueJobType } from "@/lib/pdfx-v2/constants";
+import { isPdfxBudgetError } from "@/lib/pdfx-v2/request-budget";
 import {
   createTransientPollState,
   pollWithTransientBackoff,
@@ -209,8 +210,8 @@ async function executeJob(job: ClaimedBackgroundJob): Promise<void> {
           retryable: isRetryableEsgDriverFailure(error),
         })
       : await failBackgroundJob(job, message, {
-          minimumAttempts: PDF_TRANSLATION_MAX_ATTEMPTS,
-          keepRetrying: true,
+          maximumAttempts: PDF_TRANSLATION_MAX_ATTEMPTS,
+          forceTerminal: isPdfxBudgetError(error),
         });
     if (!transition.transitioned) {
       console.warn(`[esg-driver-worker] failure lease lost for ${job.id}`);
