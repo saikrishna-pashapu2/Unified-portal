@@ -313,6 +313,21 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "1; mode=block" always;
 
+    # PDF Translator: 512 MiB file + 4 MiB multipart envelope.
+    # Keep this exception restricted to the authenticated translator endpoint.
+    location = /api/pdfx-v2/upload {
+        client_max_body_size 516M;
+        client_body_timeout 300s;
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+
     # Proxy to Next.js
     location / {
         proxy_pass http://localhost:3000;

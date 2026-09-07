@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { zodTextFormat } from 'openai/helpers/zod';
 import {
   DocumentContextSchema,
-  PdfPageLayoutSchema,
+  PdfPageExtractionSchema as PdfPageLayoutSchema,
   PdfPageReviewSchema,
   PdfPageTranslationSchema,
 } from '../schemas';

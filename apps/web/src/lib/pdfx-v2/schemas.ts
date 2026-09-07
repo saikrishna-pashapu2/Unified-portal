@@ -64,6 +64,21 @@ export const PdfPageLayoutSchema = z.object({
   sourceScript: z.string(),
   elements: z.array(PdfElementSchema),
   warnings: z.array(z.string()),
+  // Canonical upright coordinates, rotated clockwise to match the source.
+  rotation: z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]).optional(),
+  graphics: z.array(z.object({
+    kind: z.enum(['rect', 'polyline']),
+    bbox: BBoxSchema,
+    points: z.array(z.object({ x: z.number(), y: z.number() })),
+    arrowEnd: z.boolean(),
+    dashed: z.boolean(),
+  })).optional(),
+});
+
+// Required on new model responses; optional only for historical v5 checkpoints.
+export const PdfPageExtractionSchema = PdfPageLayoutSchema.extend({
+  rotation: PdfPageLayoutSchema.shape.rotation.unwrap(),
+  graphics: PdfPageLayoutSchema.shape.graphics.unwrap(),
 });
 
 export const DocumentContextSchema = z.object({

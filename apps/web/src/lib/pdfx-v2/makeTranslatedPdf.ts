@@ -1,4 +1,4 @@
-import { PDFDocument, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
+import { PDFDocument, rgb, degrees, type PDFFont, type PDFPage } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import bidiFactory from 'bidi-js';
 import fs from 'node:fs/promises';
@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { PdfElement, PdfPageLayout } from './schemas';
 import { listTextWithMarkers } from './serialize';
+import { pageCanvasGeometry, diagramLines } from './diagram-geometry';
 import type { SourcePageMapping, TranslatedPdfResult } from './types';
 import { PdfxV2ValidationError, validateExtractedPage } from './validation';
 
@@ -339,14 +340,23 @@ export async function makeTranslatedPdfBytes(
       );
     }
     const sourceSize = source.getPage(layout.pageNumber - 1).getSize();
-    const page = output.addPage([sourceSize.width, sourceSize.height]);
+    if (Math.abs(source.getPage(layout.pageNumber - 1).getRotation().angle % 180) === 90) {
+      [sourceSize.width, sourceSize.height] = [sourceSize.height, sourceSize.width];
+    }
+    const canvas = pageCanvasGeometry(sourceSize.width, sourceSize.height, layout.rotation);
+    const page = output.addPage([canvas.width, canvas.height]);
+    page.setRotation(degrees(layout.rotation ?? 0));
     page.drawRectangle({
       x: 0,
       y: 0,
-      width: sourceSize.width,
-      height: sourceSize.height,
+      width: canvas.width,
+      height: canvas.height,
       color: rgb(1, 1, 1),
     });
+    for (const line of diagramLines(layout.graphics, canvas.width, canvas.height)) {
+      page.drawLine({ start: { x: line.x1, y: canvas.height - line.y1 }, end: { x: line.x2, y: canvas.height - line.y2 },
+        color: rgb(0.063, 0.094, 0.153), thickness: 0.65, dashArray: line.dashed ? [3, 2] : undefined });
+    }
     for (const element of [...layout.elements].sort(
       (left, right) => left.order - right.order || left.id.localeCompare(right.id),
     )) {
