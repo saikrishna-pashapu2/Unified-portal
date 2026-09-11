@@ -1,4 +1,4 @@
-import { beforeEach, describe, it, expect, vi } from "vitest";
+import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import { PDFDocument } from "pdf-lib";
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
@@ -16,7 +16,8 @@ vi.mock("@/lib/jobs/queue", () => ({
   JobConcurrencyLimitError: class extends Error {},
 }));
 import { POST } from "../pdfx-v2/upload/route";
-async function upload(bytes: Uint8Array, name: string, expectedKind: string) {
+afterEach(() => vi.unstubAllEnvs());
+async function upload(bytes: Uint8Array, name: string, expectedKind: string, origin?: string) {
   const form = new FormData();
   form.set(
     "file",
@@ -30,6 +31,7 @@ async function upload(bytes: Uint8Array, name: string, expectedKind: string) {
     new Request("http://localhost/api/pdfx-v2/upload", {
       method: "POST",
       body: form,
+      headers: origin ? { origin } : undefined,
     }),
   );
 }
@@ -40,6 +42,21 @@ beforeEach(() => {
   mocks.excel.mockResolvedValue({ jobId: "excel-job", kind: "xlsx" });
 });
 describe("Unified upload routing", () => {
+  it("accepts the production public origin through an internal proxy URL", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXTAUTH_URL", "https://unifiedportal.duckdns.org");
+    const response = await upload(new Uint8Array([80, 75, 3, 4, 0]), "book.xlsx", "xlsx", "https://unifiedportal.duckdns.org");
+    expect(response.status).toBe(200);
+    expect(mocks.excel).toHaveBeenCalledOnce();
+  });
+  it("rejects cross-origin upload before inspecting or queuing a document", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXTAUTH_URL", "https://unifiedportal.duckdns.org");
+    const response = await upload(new Uint8Array([80, 75, 3, 4, 0]), "book.xlsx", "xlsx", "https://attacker.example");
+    expect(response.status).toBe(403);
+    expect(mocks.excel).not.toHaveBeenCalled();
+    expect(mocks.pdf).not.toHaveBeenCalled();
+  });
   it("routes genuine PDF bytes to the existing PDF flow despite generic MIME", async () => {
     const p = await PDFDocument.create();
     p.addPage();

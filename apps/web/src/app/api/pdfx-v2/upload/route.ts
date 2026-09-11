@@ -8,6 +8,7 @@ import { startPdfTranslationV2Job } from '@/lib/pdfx-v2/pipeline';
 import { isPdfxV2TargetLanguage } from '@/lib/pdfx-v2/types';
 import { createExcelDraft } from '@/lib/xlsx-translator/jobs';
 import { WorkbookInputError } from '@/lib/xlsx-translator/workbook';
+import { isTranslatorRequestOriginAllowed } from '@/lib/document-translator/request-origin';
 
 export const runtime = 'nodejs';
 
@@ -45,8 +46,7 @@ export async function POST(request: Request) {
   try {
     const auth = await requirePdfxUser();
     if (auth.response) return auth.response;
-    const origin=request.headers.get('origin');
-    if(origin && origin!==new URL(request.url).origin)return NextResponse.json({error:'Invalid request origin'},{status:403});
+    if(!isTranslatorRequestOriginAllowed(request))return NextResponse.json({error:'Invalid request origin'},{status:403});
 
     const contentLength = request.headers.get('content-length');
     if (contentLength !== null) {
