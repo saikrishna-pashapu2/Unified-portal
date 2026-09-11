@@ -32,6 +32,11 @@ import {
 import { isPdfxV2QueueJobType } from "@/lib/pdfx-v2/constants";
 import { isPdfxBudgetError } from "@/lib/pdfx-v2/request-budget";
 import {
+  ExcelRequestBudgetError,
+  ExcelSelectionError,
+  processExcelTranslation,
+} from "@/lib/xlsx-translator/jobs";
+import {
   createTransientPollState,
   pollWithTransientBackoff,
 } from "@/lib/jobs/worker-resilience";
@@ -57,7 +62,7 @@ async function main(): Promise<void> {
   await connectEsgWithRetry();
   await verifyWorkerSchema();
   await reconcileTerminalDomainJobs();
-  console.log(`[esg-driver-worker] started ${workerId} (concurrency=${concurrency})`);
+  console.log(`[esg-driver-worker] started ${workerId} (concurrency=${concurrency}, translatorJobTypes=xlsx_translation_v1,pdf_translation_v2,pdf_translation_v3,pdf_translation_v4,pdf_translation_v5)`);
 
   const activeJobs = new Set<Promise<void>>();
   const claimPollState = createTransientPollState();
@@ -75,6 +80,7 @@ async function main(): Promise<void> {
             90,
             [
               "esg_driver",
+              "xlsx_translation_v1",
               "pdf_translation_v2",
               "pdf_translation_v3",
               "pdf_translation_v4",
@@ -172,12 +178,14 @@ async function executeJob(job: ClaimedBackgroundJob): Promise<void> {
   try {
     const output = job.jobType === "esg_driver"
       ? await runEsgDriverGenerationJob(job as any)
-      : isPdfxV2QueueJobType(job.jobType)
+      : job.jobType === "xlsx_translation_v1"
+        ? await processExcelTranslation(job)
+        : isPdfxV2QueueJobType(job.jobType)
         ? await processPdfTranslationV2Job(job as any)
         : (() => {
             throw new Error(`Unsupported job type for worker: ${job.jobType}`);
           })();
-    if (output.queueCompleted) return;
+    if ("queueCompleted" in output && output.queueCompleted) return;
     if (heartbeatObservedLeaseLoss) {
       await throwIfJobCancelled(job.id, job.leaseOwner);
     }
@@ -209,10 +217,18 @@ async function executeJob(job: ClaimedBackgroundJob): Promise<void> {
       ? await failEsgDriverJob(job, message, {
           retryable: isRetryableEsgDriverFailure(error),
         })
-      : await failBackgroundJob(job, message, {
-          maximumAttempts: PDF_TRANSLATION_MAX_ATTEMPTS,
-          forceTerminal: isPdfxBudgetError(error),
-        });
+      : await failBackgroundJob(
+          job,
+          message,
+          isPdfxV2QueueJobType(job.jobType)
+            ? {
+                maximumAttempts: PDF_TRANSLATION_MAX_ATTEMPTS,
+                forceTerminal: isPdfxBudgetError(error),
+              }
+            : error instanceof ExcelRequestBudgetError || error instanceof ExcelSelectionError
+              ? { forceTerminal: true }
+              : undefined,
+        );
     if (!transition.transitioned) {
       console.warn(`[esg-driver-worker] failure lease lost for ${job.id}`);
       return;

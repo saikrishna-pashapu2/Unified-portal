@@ -14,10 +14,6 @@ describe("env config", () => {
       OLLAMA_HOST: "https://ollama.com",
       OLLAMA_MODEL: "minimax-m2.5:cloud",
       OPENAI_ESG_DRIVERS_MODEL: "gpt-5.4-mini",
-      OPENAI_PDFX2_EXTRACT_MODEL: "gpt-5.6-terra",
-      OPENAI_PDFX2_TRANSLATE_MODEL: "gpt-5.6-terra",
-      OPENAI_PDFX2_RETRY_MODEL: "gpt-5.6-sol",
-      OPENAI_PDFX2_VALIDATE_MODEL: "gpt-5.6-terra",
     });
   });
 
@@ -59,20 +55,6 @@ describe("env config", () => {
     expect(loadEnv({ OLLAMA_HOST: "   ", OLLAMA_MODEL: " custom-model " })).toMatchObject({
       OLLAMA_HOST: "https://ollama.com",
       OLLAMA_MODEL: "custom-model",
-    });
-  });
-
-  it("allows PDF translator models to be overridden and trims them", () => {
-    expect(loadEnv({
-      OPENAI_PDFX2_EXTRACT_MODEL: " gpt-5.6-luna ",
-      OPENAI_PDFX2_TRANSLATE_MODEL: " gpt-5.6-terra ",
-      OPENAI_PDFX2_RETRY_MODEL: " gpt-5.6-sol ",
-      OPENAI_PDFX2_VALIDATE_MODEL: " gpt-5.6-luna ",
-    })).toMatchObject({
-      OPENAI_PDFX2_EXTRACT_MODEL: "gpt-5.6-luna",
-      OPENAI_PDFX2_TRANSLATE_MODEL: "gpt-5.6-terra",
-      OPENAI_PDFX2_RETRY_MODEL: "gpt-5.6-sol",
-      OPENAI_PDFX2_VALIDATE_MODEL: "gpt-5.6-luna",
     });
   });
 

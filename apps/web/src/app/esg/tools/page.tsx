@@ -59,10 +59,10 @@ const TOOLS: ToolConfig[] = [
   },
   {
     id: "pdfx",
-    label: "PDF Translator",
+    label: "PDF & Excel Translator",
     icon: ScanText,
     component: () => null,
-    description: "High-accuracy OpenAI translation with visual table recovery",
+    description: "Translate PDFs or selected Excel tables while retaining the workbook",
     href: "/esg/tools/pdf-translator-2"
   }
 ];

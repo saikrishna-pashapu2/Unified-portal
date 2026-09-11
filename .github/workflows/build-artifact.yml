@@ -100,6 +100,16 @@ jobs:
           OPENAI_API_KEY: build-placeholder-not-used
         run: pnpm -C apps/web worker:check-db
 
+      - name: Test PDF and Excel translator contracts
+        env:
+          OPENAI_API_KEY: build-placeholder-not-used
+        run: >-
+          pnpm -C apps/web exec vitest run
+          src/lib/xlsx-translator src/components/xlsx-translator
+          src/app/api/xlsx-translator src/app/api/admin/xlsx-translator
+          src/app/api/document-translator src/lib/pdfx-v2
+          src/components/pdfx-v2 src/app/api/pdfx-v2 src/lib/__tests__/env.test.ts
+
       - name: Build web
         env:
           # The only value that truly matters: Next INLINES NEXT_PUBLIC_* into

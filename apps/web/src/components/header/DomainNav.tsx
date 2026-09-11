@@ -11,7 +11,7 @@ const itemsByDomain = {
     { href: "/esg/publications", label: "Publications" },
     { href: "/esg/tools", label: "All Tools" },
     { href: "/esg/tools?tool=drivers", label: "Driver Agent" },
-    { href: "/esg/tools/pdf-translator-2", label: "PDF Translate" },
+    { href: "/esg/tools/pdf-translator-2", label: "PDF & Excel" },
   ],
   credit: [
     { href: "/credit", label: "Home" },

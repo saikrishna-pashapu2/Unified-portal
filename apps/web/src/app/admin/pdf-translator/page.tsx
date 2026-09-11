@@ -1,5 +1,7 @@
 'use client';
 
+import ExcelUsageCard from '@/components/xlsx-translator/ExcelUsageCard';
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Activity,
@@ -322,6 +324,7 @@ export default function PdfTranslatorAdminPage() {
       </section>
 
       <main className="mx-auto max-w-[1500px] space-y-6 px-6 pt-7 sm:px-8 lg:px-10">
+        <ExcelUsageCard period={period} />
         {error && (
           <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             <AlertTriangle className="h-4 w-4 shrink-0" /> Refresh failed; showing the last successful snapshot.
