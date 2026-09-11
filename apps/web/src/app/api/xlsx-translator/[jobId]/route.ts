@@ -34,6 +34,7 @@ import {
 } from "@/lib/xlsx-translator/types";
 import { z } from "zod";
 import { buildJobPlan } from "@/lib/xlsx-translator/job-plan";
+import { isTranslatorRequestOriginAllowed } from "@/lib/document-translator/request-origin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,12 +46,6 @@ const json = (data: unknown, status = 200) =>
   });
 const missingResultsAdvice =
   "Some selected cells have no saved translation results. Their original text is shown and a complete download is unavailable. Only eligible cells can be selected again; cells already in the target language or protected by workbook rules require support review of this saved job.";
-function sameOrigin(request: Request) {
-  return (
-    !request.headers.get("origin") ||
-    request.headers.get("origin") === new URL(request.url).origin
-  );
-}
 async function body(request: Request) {
   const reader = request.body?.getReader();
   if (!reader) throw new WorkbookInputError("Missing request body.");
@@ -236,7 +231,7 @@ export async function GET(request: Request, context: Context) {
 export async function POST(request: Request, context: Context) {
   const auth = await requirePdfxUser();
   if (auth.response) return auth.response;
-  if (!sameOrigin(request))
+  if (!isTranslatorRequestOriginAllowed(request))
     return json({ error: "Invalid request origin." }, 403);
   try {
     const payload = z
@@ -334,7 +329,7 @@ export async function POST(request: Request, context: Context) {
 export async function DELETE(request: Request, context: Context) {
   const auth = await requirePdfxUser();
   if (auth.response) return auth.response;
-  if (!sameOrigin(request))
+  if (!isTranslatorRequestOriginAllowed(request))
     return json({ error: "Invalid request origin." }, 403);
   try {
     const { jobId } = await context.params;

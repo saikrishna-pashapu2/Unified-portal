@@ -1,4 +1,4 @@
-import { beforeEach, describe, it, expect, vi } from "vitest";
+import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   owned: vi.fn(),
   auth: vi.fn(),
@@ -42,12 +42,37 @@ import { buildJobPlan } from "@/lib/xlsx-translator/job-plan";
 import { strToU8, unzipSync, zipSync } from "fflate";
 const id = "11111111-1111-4111-8111-111111111111",
   context = { params: Promise.resolve({ jobId: id }) };
+afterEach(() => vi.unstubAllEnvs());
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.auth.mockResolvedValue({ userId: 7 });
   mocks.owned.mockResolvedValue(null);
 });
 describe("Excel API access controls", () => {
+  it("accepts a same-portal mutation through Next's private production URL", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXTAUTH_URL", "https://unifiedportal.duckdns.org");
+    mocks.owned.mockResolvedValue({ status: "processing" });
+    mocks.cancel.mockResolvedValue("cancelling");
+    const response = await POST(new Request(`https://localhost:3000/api/xlsx-translator/${id}`, {
+      method: "POST",
+      headers: { origin: "https://unifiedportal.duckdns.org" },
+      body: JSON.stringify({ action: "cancel" }),
+    }), context);
+    expect(response.status).toBe(200);
+    expect(mocks.cancel).toHaveBeenCalledWith(id, 7);
+  });
+  it("accepts a same-portal terminal deletion through the production proxy", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXTAUTH_URL", "https://unifiedportal.duckdns.org");
+    mocks.remove.mockResolvedValue({ count: 1 });
+    const response = await DELETE(new Request(`https://localhost:3000/api/xlsx-translator/${id}`, {
+      method: "DELETE",
+      headers: { origin: "https://unifiedportal.duckdns.org" },
+    }), context);
+    expect(response.status).toBe(200);
+    expect(mocks.remove).toHaveBeenCalledOnce();
+  });
   it("explains support review for missing legacy results now identified as already in the target language", async () => {
     const parts = unzipSync(incrementalInput());
     const text =
