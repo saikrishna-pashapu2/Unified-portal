@@ -6,6 +6,8 @@ import { requirePdfxUser } from '@/lib/pdfx-v2/auth';
 import { normalizePdfDisplayName } from '@/lib/pdfx-v2/file-policy';
 import { startPdfTranslationV2Job } from '@/lib/pdfx-v2/pipeline';
 import { isPdfxV2TargetLanguage } from '@/lib/pdfx-v2/types';
+import { createExcelDraft } from '@/lib/xlsx-translator/jobs';
+import { WorkbookInputError } from '@/lib/xlsx-translator/workbook';
 
 export const runtime = 'nodejs';
 
@@ -43,6 +45,8 @@ export async function POST(request: Request) {
   try {
     const auth = await requirePdfxUser();
     if (auth.response) return auth.response;
+    const origin=request.headers.get('origin');
+    if(origin && origin!==new URL(request.url).origin)return NextResponse.json({error:'Invalid request origin'},{status:403});
 
     const contentLength = request.headers.get('content-length');
     if (contentLength !== null) {
@@ -71,23 +75,26 @@ export async function POST(request: Request) {
     const file = form.get('file');
     const targetLang = String(form.get('targetLang') ?? 'English');
     if (!(file instanceof File)) {
-      return NextResponse.json({ error: 'No PDF uploaded' }, { status: 400 });
+      return NextResponse.json({ error: 'No document uploaded' }, { status: 400 });
     }
     if (!isPdfxV2TargetLanguage(targetLang)) {
       return NextResponse.json({ error: 'Unsupported target language' }, { status: 400 });
     }
     if (file.size < 1 || file.size > MAX_PDF_UPLOAD_BYTES) {
       const status = file.size > MAX_PDF_UPLOAD_BYTES ? 413 : 400;
-      return NextResponse.json({ error: 'PDF must be between 1 byte and 512 MB' }, { status });
+      return NextResponse.json({ error: 'Document must be between 1 byte and 512 MB' }, { status });
     }
-    if (file.type && file.type !== 'application/pdf') {
-      return NextResponse.json({ error: 'Only PDF files are accepted' }, { status: 415 });
-    }
-    if (Buffer.from(await file.slice(0, 5).arrayBuffer()).toString('ascii') !== '%PDF-') {
-      return NextResponse.json({ error: 'Uploaded file is not a valid PDF' }, { status: 415 });
-    }
-
     const inputBuffer = Buffer.from(await file.arrayBuffer());
+    const expectedKind=form.get('expectedKind');
+    if(expectedKind!==null && expectedKind!=='pdf' && expectedKind!=='xlsx')return NextResponse.json({error:'Invalid document type'},{status:400});
+    if (inputBuffer.length >= 4 && inputBuffer.readUInt32LE(0) === 0x04034b50) {
+      if(expectedKind==='pdf')return NextResponse.json({error:'The file contains a workbook, not a PDF. Upload it with the .xlsx extension.'},{status:422});
+      return NextResponse.json({success:true,...await createExcelDraft(auth.userId,file.name,inputBuffer,targetLang)});
+    }
+    if (inputBuffer.subarray(0,5).toString('ascii') !== '%PDF-') {
+      return NextResponse.json({ error: 'Upload an unencrypted PDF or XLSX workbook. Old XLS files are not supported.' }, { status: 415 });
+    }
+    if(expectedKind==='xlsx')return NextResponse.json({error:'The file contains a PDF, not an Excel workbook. Upload it with the .pdf extension to start PDF translation.'},{status:422});
     let pageCount = 0;
     try {
       pageCount = (await PDFDocument.load(inputBuffer, { updateMetadata: false })).getPageCount();
@@ -106,10 +113,11 @@ export async function POST(request: Request) {
       pageCount,
       inputBuffer,
     });
-    return NextResponse.json({ success: true, jobId, pageCount });
+    return NextResponse.json({ success: true, kind: 'pdf', jobId, pageCount });
   } catch (error) {
+    if (error instanceof WorkbookInputError) return NextResponse.json({error:error.message},{status:422});
     if (error instanceof PdfRequestTooLargeError) {
-      return NextResponse.json({ error: 'PDF exceeds the 512 MB upload maximum' }, { status: 413 });
+      return NextResponse.json({ error: 'Document exceeds the 512 MB upload maximum' }, { status: 413 });
     }
     if (error instanceof JobConcurrencyLimitError) {
       return NextResponse.json({ error: error.message }, { status: 429 });

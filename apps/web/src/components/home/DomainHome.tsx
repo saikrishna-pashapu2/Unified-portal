@@ -92,8 +92,8 @@ const domainThemes: Record<Domain, DomainTheme> = {
       },
       {
         href: "/esg/tools/pdf-translator-2",
-        label: "PDF translation",
-        description: "Translate normal and scanned documents with structured tables.",
+        label: "PDF & Excel translation",
+        description: "Translate PDF documents or selected tables from an Excel workbook.",
         icon: Languages,
       },
     ],

@@ -29,10 +29,6 @@ export const envSchema = z
     OLLAMA_MODEL: optionalString,
     OPENAI_API_KEY: optionalString,
     OPENAI_ESG_DRIVERS_MODEL: optionalString,
-    OPENAI_PDFX2_EXTRACT_MODEL: optionalString,
-    OPENAI_PDFX2_TRANSLATE_MODEL: optionalString,
-    OPENAI_PDFX2_RETRY_MODEL: optionalString,
-    OPENAI_PDFX2_VALIDATE_MODEL: optionalString,
     OPENAI_ORG_ID: optionalString,
     SPGLOBAL_SEARCH_TOKEN: optionalString,
     TAVILY_API_KEY: optionalString,
@@ -67,10 +63,6 @@ export interface EnvConfig {
   OLLAMA_MODEL: string;
   OPENAI_API_KEY?: string;
   OPENAI_ESG_DRIVERS_MODEL: string;
-  OPENAI_PDFX2_EXTRACT_MODEL: string;
-  OPENAI_PDFX2_TRANSLATE_MODEL: string;
-  OPENAI_PDFX2_RETRY_MODEL: string;
-  OPENAI_PDFX2_VALIDATE_MODEL: string;
   OPENAI_ORG_ID?: string;
   SPGLOBAL_SEARCH_TOKEN?: string;
   TAVILY_API_KEY?: string;
@@ -116,14 +108,6 @@ export function loadEnv(rawEnv: RawEnv): Readonly<EnvConfig> {
     OLLAMA_MODEL: (raw.OLLAMA_MODEL ?? "").trim() || "minimax-m2.5:cloud",
     OPENAI_API_KEY: raw.OPENAI_API_KEY,
     OPENAI_ESG_DRIVERS_MODEL: raw.OPENAI_ESG_DRIVERS_MODEL || "gpt-5.4-mini",
-    OPENAI_PDFX2_EXTRACT_MODEL:
-      (raw.OPENAI_PDFX2_EXTRACT_MODEL ?? "").trim() || "gpt-5.6-terra",
-    OPENAI_PDFX2_TRANSLATE_MODEL:
-      (raw.OPENAI_PDFX2_TRANSLATE_MODEL ?? "").trim() || "gpt-5.6-terra",
-    OPENAI_PDFX2_RETRY_MODEL:
-      (raw.OPENAI_PDFX2_RETRY_MODEL ?? "").trim() || "gpt-5.6-sol",
-    OPENAI_PDFX2_VALIDATE_MODEL:
-      (raw.OPENAI_PDFX2_VALIDATE_MODEL ?? "").trim() || "gpt-5.6-terra",
     OPENAI_ORG_ID: raw.OPENAI_ORG_ID || undefined,
     SPGLOBAL_SEARCH_TOKEN: raw.SPGLOBAL_SEARCH_TOKEN,
     TAVILY_API_KEY: raw.TAVILY_API_KEY,

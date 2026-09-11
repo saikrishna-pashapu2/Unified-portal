@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { esgPrisma } from "@esgcredit/db-esg";
 
 export const BACKGROUND_JOB_TYPES = [
+  "xlsx_translation_v1",
   "pdf_translation_v2",
   "pdf_translation_v3",
   "pdf_translation_v4",
