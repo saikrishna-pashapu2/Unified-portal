@@ -107,7 +107,7 @@ export function loadEnv(rawEnv: RawEnv): Readonly<EnvConfig> {
     OLLAMA_HOST: (raw.OLLAMA_HOST ?? "").trim() || "https://ollama.com",
     OLLAMA_MODEL: (raw.OLLAMA_MODEL ?? "").trim() || "minimax-m2.5:cloud",
     OPENAI_API_KEY: raw.OPENAI_API_KEY,
-    OPENAI_ESG_DRIVERS_MODEL: raw.OPENAI_ESG_DRIVERS_MODEL || "gpt-5.4-mini",
+    OPENAI_ESG_DRIVERS_MODEL: raw.OPENAI_ESG_DRIVERS_MODEL || "gpt-5.6-luna",
     OPENAI_ORG_ID: raw.OPENAI_ORG_ID || undefined,
     SPGLOBAL_SEARCH_TOKEN: raw.SPGLOBAL_SEARCH_TOKEN,
     TAVILY_API_KEY: raw.TAVILY_API_KEY,

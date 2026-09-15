@@ -15,6 +15,7 @@
     "deploy:fetch-build": "bash scripts/fetch-build.sh",
     "start": "pnpm -C apps/web start",
     "worker": "pnpm -C apps/web worker",
+    "worker:esg-drivers": "pnpm -C apps/web worker:esg-drivers",
     "catalog:generate": "pnpm -C apps/web catalog:generate",
     "catalog:check": "pnpm -C apps/web catalog:check",
     "lint": "pnpm -C apps/web lint",

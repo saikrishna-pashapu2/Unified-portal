@@ -16,17 +16,9 @@ describe("ESG driver request coverage", () => {
     ).toEqual({ country: "UAE", sector: "Banking", language: "Arabic" });
   });
 
-  it("accepts any country and sector, passing unknown values through as typed", () => {
-    const parsed = generateDriversRequestSchema.parse({
-      country: "Germany",
-      sector: "Aviation",
-      language: "English",
-    });
-    expect(parsed).toEqual({
-      country: "Germany",
-      sector: "Aviation",
-      language: "English",
-    });
+  it("rejects countries and sectors not present in the workbook", () => {
+    expect(generateDriversRequestSchema.safeParse({ country: "Germany", sector: "Aviation", language: "English" }).success).toBe(false);
+    expect(generateDriversRequestSchema.safeParse({ country: "UAE", sector: "Construction", language: "English" }).success).toBe(false);
   });
 
   it("still enforces a minimum length for country and sector", () => {

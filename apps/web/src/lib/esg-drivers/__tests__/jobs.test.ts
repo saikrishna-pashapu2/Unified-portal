@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { rankedWorkbookResultFixture, workbookResultFixture } from "./workbook-result.fixture";
+import { selectRankedDrivers } from '../ranking-policy';
 
 const mocks = vi.hoisted(() => {
   const statements: Array<{ sql: string; values: unknown[] }> = [];
@@ -28,7 +30,7 @@ const mocks = vi.hoisted(() => {
     }
     if (sql.includes("SELECT user_id, status")) return state.queueRows;
     if (sql.includes("SELECT status FROM background_jobs")) return state.queueRows;
-    if (sql.includes("SELECT status FROM esg_driver_jobs")) return state.domainRows;
+    if ((sql.includes("SELECT status FROM esg_driver_jobs") || sql.includes("SELECT status, checkpoint_json FROM esg_driver_jobs"))) return state.domainRows;
     if (sql.includes("SET checkpoint_json =")) return state.checkpointRows;
     if (sql.includes("checkpoint_json") && sql.includes("LIMIT 1")) {
       return state.jobRows;
@@ -76,6 +78,53 @@ afterEach(() => {
 describe("ESG driver durable job lifecycle", () => {
   const id = "4c4ebf2b-a9e5-4f40-b633-740ee43ea7ec";
 
+  it('returns compact ranked progress metadata without loading the full checkpoint', async () => {
+    const { getEsgDriverJob } = await import('../jobs');
+    mocks.state.jobRows = [{ ...jobRow(id, ''), checkpoint_json: null,
+      checkpoint_summary: { selectionPolicy: 'relevance-top15-v1', candidateCount: 52, candidateAssessedCount: 21 } }];
+    await expect(getEsgDriverJob(id, 7)).resolves.toMatchObject({
+      checkpoint: null, selectionPolicy: 'relevance-top15-v1', candidateCount: 52,
+      candidateAssessedCount: 21, publishedDriverCount: 0, expectedDriverCount: 15,
+    });
+  });
+
+  it('does not count retained old-policy rows as relevance-assessed in an upgraded retry', async () => {
+    const { getEsgDriverJob } = await import('../jobs');
+    const { checkpoint: saved } = rankedWorkbookResultFixture(3);
+    delete saved.slots[0].driver.relevance;
+    delete saved.slots[1].driver.relevance!.assessmentVersion;
+    mocks.state.jobRows = [{ ...jobRow(id, ''), checkpoint_json: saved }];
+    await expect(getEsgDriverJob(id, 7, { includeCheckpoint: true })).resolves.toMatchObject({ candidateCount: 3, candidateAssessedCount: 1 });
+    expect(mocks.statements[0].sql).toContain("assessed.slot->'driver'->'relevance'->>'policyVersion'");
+  });
+  it('counts a durably rejected relevance assessment as assessed without publishing a score', async () => {
+    const { getEsgDriverJob } = await import('../jobs');
+    const { checkpoint: saved } = rankedWorkbookResultFixture(1);
+    const driver = saved.slots[0].driver;
+    driver.relevance!.review!.checks.noBorrowedObligations = false;
+    driver.relevanceFailure = { assessment: driver.relevance!, reasons: ['The quoted mandate concerns another driver.'] };
+    delete driver.relevance;
+    mocks.state.jobRows = [{ ...jobRow(id, ''), checkpoint_json: saved }];
+    await expect(getEsgDriverJob(id, 7, { includeCheckpoint: true })).resolves.toMatchObject({ candidateAssessedCount: 1, publishedDriverCount: 0 });
+    expect(mocks.statements[0].sql).toContain("'relevanceFailure'->'assessment'->>'assessmentVersion'");
+  });
+
+  it('allows research-gap retries even when a ranked report already publishes 15', async () => {
+    const { isResumableEsgDriverJob, createEsgDriverResumeJob } = await import('../jobs');
+    const { checkpoint: saved, result } = rankedWorkbookResultFixture(52);
+    const missing = rankedWorkbookResultFixture(52, true);
+    result.candidatePool![51] = missing.result.candidatePool![51];
+    saved.slots[51] = missing.checkpoint.slots[51];
+    Object.assign(result, selectRankedDrivers(result.candidatePool!, result.generatedAt));
+    result.warnings = ['One candidate has no verified source update.'];
+    const parent = { ...mappedJob(id), checkpoint: saved, result };
+    expect(isResumableEsgDriverJob(parent)).toBe(true);
+    mocks.state.resumeParentRows = [{ ...resumeParentRow(id), checkpoint_json: saved, result_json: result }];
+    mocks.state.jobRows = [jobRow('9320f9d0-1091-4484-9b56-e6e695bcf653', id)];
+    await expect(createEsgDriverResumeJob(7, parent)).resolves.toBeDefined();
+    expect(isResumableEsgDriverJob({ ...parent, result: rankedWorkbookResultFixture(52).result })).toBe(false);
+  });
+
   it("rejects malformed and oversized pagination cursors before querying", async () => {
     const {
       InvalidEsgDriverJobsCursorError,
@@ -91,6 +140,13 @@ describe("ESG driver durable job lifecycle", () => {
     expect(mocks.queryRaw).not.toHaveBeenCalled();
   });
 
+  it('marks stale workbook output as an error in history even after an old worker overwrote catalog_version', async () => {
+    const { listEsgDriverJobsPage } = await import('../jobs');
+    mocks.state.jobRows = [{ ...jobRow(id, ''), status: 'done', checkpoint_json: null, catalog_version: 'old-catalog', checkpoint_catalog_version: 'excel-v2.pinned', result_json: emptyResult() }];
+    mocks.queryRaw.mockImplementationOnce(async () => mocks.state.jobRows).mockImplementationOnce(async () => [{ total: 1, completed: 1, needs_attention: 1 }]);
+    const page = await listEsgDriverJobsPage(7);
+    expect(page.jobs[0]).toMatchObject({ status: 'error', result: null, stage: 'result failed verification' });
+  });
   it("locks a processing queue row before requesting cancellation", async () => {
     const { deleteEsgDriverJob } = await import("../jobs");
     mocks.state.queueRows = [{ status: "processing" }];
@@ -138,20 +194,10 @@ describe("ESG driver durable job lifecycle", () => {
       status: "processing",
       user_id: 7,
     }];
-    mocks.state.domainRows = [{ status: "processing" }];
-
-    const completed = await completeEsgDriverJob(id, "lease-token-a", {
-      country: "United Arab Emirates",
-      sector: "Banking",
-      language: "English",
-      catalogVersion: "2026-07-14",
-      generatedAt: new Date().toISOString(),
-      drivers: [],
-      evidence: [],
-      warnings: [],
-      trace: {} as any,
-    });
-
+    const { checkpoint: saved, result } = workbookResultFixture();
+    mocks.state.domainRows = [{ status: "processing", checkpoint_json: saved }];
+    const completed = await completeEsgDriverJob(id, "lease-token-a", result);
+    expect(mocks.transaction).toHaveBeenLastCalledWith(expect.any(Function), { timeout: 30_000 });
     expect(completed).toBe(true);
     expect(mocks.transaction).toHaveBeenCalledTimes(1);
     expect(mocks.statements.some(({ sql }) => sql.includes("SET status = 'done', progress = 100"))).toBe(true);
@@ -172,28 +218,13 @@ describe("ESG driver durable job lifecycle", () => {
       status: "processing",
       user_id: 7,
     }];
-    mocks.state.domainRows = [{ status: "processing" }];
-
-    const completed = await completeEsgDriverJob(id, "lease-token-a", {
-      ...emptyResult(),
-      completion: "partial",
-      expectedDriverCount: 12,
-      slotFailures: [
-        {
-          driverId: "D7",
-          driverNumber: 7,
-          originalDriverLogicId: "global-climate-macro-risk",
-          attemptedDriverLogicIds: ["global-climate-macro-risk"],
-          reasons: ["No candidate passed"],
-          createdAt: "2026-07-14T00:00:00.000Z",
-        },
-      ],
-    });
-
+    const { checkpoint: saved, result } = workbookResultFixture(2, true);
+    mocks.state.domainRows = [{ status: "processing", checkpoint_json: saved }];
+    const completed = await completeEsgDriverJob(id, "lease-token-a", result);
     expect(completed).toBe(true);
     expect(
       mocks.statements.some(({ values }) =>
-        values.includes("complete with omissions"),
+        values.includes("complete with unavailable updates"),
       ),
     ).toBe(true);
     expect(
@@ -222,6 +253,7 @@ describe("ESG driver durable job lifecycle", () => {
     expect(statement?.sql).toContain("AND lease_expires_at >= now()");
     expect(statement?.sql).toContain("AND cancel_requested = FALSE");
     expect(statement?.sql).toContain("AND domain.status IN ('queued', 'processing')");
+    expect(statement?.sql).toContain("domain.checkpoint_json->>'selectionPolicy' IS NOT DISTINCT FROM");
     expect(statement?.values).toContain("2026-07-14");
   });
 
@@ -249,6 +281,8 @@ describe("ESG driver durable job lifecycle", () => {
       sql.includes("INSERT INTO esg_driver_jobs"),
     );
     expect(domainInsert?.values).toContain(id);
+    expect(domainInsert?.values.some((value) => typeof value === 'string' && value.includes('"selectionPolicy":"relevance-top15-v1"'))).toBe(true);
+    expect(mocks.statements.some(({ sql, values }) => sql.includes('INSERT INTO background_jobs') && values.includes('esg_driver_excel_v4'))).toBe(true);
     expect(
       domainInsert?.values.some(
         (value) =>
@@ -270,6 +304,33 @@ describe("ESG driver durable job lifecycle", () => {
     expect(
       mocks.statements.some(({ sql }) => sql.includes("INSERT INTO esg_driver_jobs")),
     ).toBe(false);
+  });
+
+  it('creates a selected audit recheck without mutating the parent or retrying unrelated unavailable rows', async () => {
+    const { createEsgDriverResumeJob } = await import('../jobs');
+    const fixture = workbookResultFixture(3);
+    const missing = workbookResultFixture(3, true);
+    fixture.result.drivers[2] = missing.result.drivers[2];
+    fixture.checkpoint.slots[2] = missing.checkpoint.slots[2];
+    fixture.result.verifiedDriverCount = 2;
+    fixture.result.completion = 'partial';
+    const parent = { ...resumeParentRow(id), checkpoint_json: fixture.checkpoint, result_json: fixture.result };
+    const before = JSON.stringify(parent);
+    mocks.state.resumeParentRows = [parent];
+    mocks.state.jobRows = [jobRow('9320f9d0-1091-4484-9b56-e6e695bcf653', id)];
+    await createEsgDriverResumeJob(7, mappedJob(id), { recheckDriverIds: [fixture.result.drivers[0].id] });
+    const insert = mocks.statements.find(({ sql }) => sql.includes('INSERT INTO esg_driver_jobs'))!;
+    const saved = JSON.parse(insert.values.find((v) => typeof v === 'string' && v.includes('"slots"')) as string);
+    expect(saved.slots.map((s: { driver: { id: string } }) => s.driver.id)).toEqual(fixture.result.drivers.slice(1).map((d) => d.id));
+    expect(saved.definitions).toEqual(fixture.checkpoint.definitions);
+    expect(JSON.stringify(parent)).toBe(before);
+  });
+
+  it('rejects audit rechecks for unknown rows before enqueueing a child', async () => {
+    const { createEsgDriverResumeJob, EsgDriverResumeConflictError } = await import('../jobs');
+    mocks.state.resumeParentRows = [resumeParentRow(id)];
+    await expect(createEsgDriverResumeJob(7, mappedJob(id), { recheckDriverIds: ['not-a-workbook-row'] })).rejects.toBeInstanceOf(EsgDriverResumeConflictError);
+    expect(mocks.statements.some(({ sql }) => sql.includes('INSERT INTO esg_driver_jobs'))).toBe(false);
   });
 
   it("rechecks resumability while holding the parent lock", async () => {
@@ -320,13 +381,14 @@ describe("ESG driver durable job lifecycle", () => {
       status: "processing",
       user_id: 7,
     }];
-    mocks.state.domainRows = [{ status: "processing" }];
+    const { checkpoint: saved, result } = workbookResultFixture();
+    mocks.state.domainRows = [{ status: "processing", checkpoint_json: saved }];
     mocks.executeRaw.mockResolvedValueOnce(0);
 
     const completed = await completeEsgDriverJob(
       id,
       "lease-token-a",
-      emptyResult(),
+      result,
     );
 
     expect(completed).toBe(false);
@@ -355,6 +417,18 @@ describe("ESG driver durable job lifecycle", () => {
           sql.includes("stage ="),
       ),
     ).toBe(true);
+  });
+
+  it('blocks a stale worker result before either domain or queue completion is written', async () => {
+    const { completeEsgDriverJob, isRetryableEsgDriverFailure } = await import('../jobs');
+    const { EsgDriverQualityGateError } = await import('../result-integrity');
+    const { checkpoint: saved, result } = workbookResultFixture(52);
+    mocks.state.queueRows = [lockedQueueRow()];
+    mocks.state.domainRows = [{ status: 'processing', checkpoint_json: saved }];
+    result.drivers = result.drivers.slice(0, 12);
+    await expect(completeEsgDriverJob(id, 'lease-token-a', result)).rejects.toBeInstanceOf(EsgDriverQualityGateError);
+    expect(mocks.executeRaw).not.toHaveBeenCalled();
+    expect(isRetryableEsgDriverFailure(new EsgDriverQualityGateError(['Wrong worker']))).toBe(false);
   });
 
   it("classifies global budget failures as terminal worker errors", async () => {
@@ -442,7 +516,11 @@ function emptyResult() {
 
 function checkpoint() {
   return {
-    version: 1 as const,
+    version: 2 as const,
+    workflow: "excel-sources" as const,
+    workbook: "ESG_Drivers_September.xlsx", workbookSha256: "test",
+    input: { country: "UAE", sector: "Banking", language: "English" },
+    definitions: [], allowedSources: [], slots: [],
     catalogVersion: "2026-07-14",
     selectionPlan: {} as any,
     canonicalDrivers: [],
@@ -464,7 +542,7 @@ function mappedJob(id: string) {
     language: "English",
     status: "done" as const,
     progress: 100,
-    stage: "complete with omissions",
+    stage: "complete with unavailable updates",
     error: null,
     result: { ...emptyResult(), completion: "partial" as const },
     evidence: [],

@@ -16,13 +16,22 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Missing jobId" }, { status: 400 });
   }
 
-  const job = await getEsgDriverJob(jobId, userId);
+  const job = await getEsgDriverJob(jobId, userId, { includeCheckpoint: true });
   if (!job) {
     return NextResponse.json({ error: "Job not found" }, { status: 404 });
   }
 
   return NextResponse.json({
     jobId: job.id,
+    country: job.country,
+    sector: job.sector,
+    language: job.language,
+    selectionPolicy: job.selectionPolicy,
+    candidateCount: job.candidateCount,
+    candidateAssessedCount: job.candidateAssessedCount,
+    publishedDriverCount: job.publishedDriverCount,
+    expectedDriverCount: job.expectedDriverCount,
+    driverPlan: job.checkpoint?.version === 2 ? job.checkpoint.definitions.map((d, index) => ({ id: d.id, number: index + 1, title: d.name, section: d.section })) : undefined,
     status: job.status,
     progress: job.progress,
     stage: job.stage,

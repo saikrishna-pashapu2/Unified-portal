@@ -45,6 +45,16 @@ describe("ESG driver history route", () => {
     expect(listEsgDriverJobsPage).not.toHaveBeenCalled();
   });
 
+  it('exposes published and candidate counts and research gaps on a complete ranked report', async () => {
+    const { listEsgDriverJobsPage, route } = await loadHistoryRoute();
+    listEsgDriverJobsPage.mockResolvedValue({ jobs: [{ id: 'ranked', status: 'done', activity: [],
+      selectionPolicy: 'relevance-top15-v1', candidateCount: 52, publishedDriverCount: 15,
+      result: { drivers: Array.from({ length: 15 }, () => ({})), completion: 'complete', selection: { excluded: [{ reason: 'unavailable' }] } },
+    }], nextCursor: null, total: 1, completed: 1, needsAttention: 1 });
+    const response = await route.GET(new Request('http://localhost/api/esg/drivers/history'));
+    expect((await response.json()).jobs[0]).toMatchObject({ selectionPolicy: 'relevance-top15-v1', candidateCount: 52, publishedDriverCount: 15, driverCount: 15, needsAttention: true });
+  });
+
   it("returns an ownership-scoped cursor page and aggregate counts", async () => {
     const { listEsgDriverJobsPage, route } = await loadHistoryRoute();
     listEsgDriverJobsPage.mockResolvedValue({

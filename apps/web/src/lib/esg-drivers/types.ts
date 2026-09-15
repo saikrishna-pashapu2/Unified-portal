@@ -2,6 +2,7 @@ import type {
   CatalogSourceStatus,
   DriverSelectionPlan,
 } from "./catalog/types";
+import type { WorkbookDriver, WorkbookSource } from './workbook-types';
 
 export type EsgDriverJobStatus =
   | "queued"
@@ -46,7 +47,8 @@ export interface EsgDriverProgressDetail {
   outcome?: EsgDriverActivityOutcome;
   driverId?: string;
   driverNumber?: number;
-  section?: EsgDriverSection;
+  section?: string;
+  driverPlan?: Array<{ id: string; number: number; title: string; section: string }>;
   candidateId?: string;
   query?: string;
   resultCount?: number;
@@ -101,10 +103,16 @@ export interface EsgDriverSource {
   updatedDate: string | null;
   lastModified: string | null;
   retrievedAt: string;
+  /** Date of this document/page itself, with evidence; never an incidental event or HTTP timestamp. */
+  sourceDate?: { value: string; kind: 'published' | 'updated' | 'version-issued'; evidence: string; location: string } | null;
   authorityScore: number;
   freshnessScore: number;
   relevanceScore: number;
   sourceScore: number;
+  passages?: Array<{ id: string; text: string; location: string }>;
+  documentDates?: import('./excel-source-metadata').SourceDocumentDate[];
+  retrievalMethod?: 'direct' | 'tavily-extract';
+  directRetrievalError?: string;
   approvalId?: string;
   approvalLabel?: string;
   approvalUsage?: "direct" | "context";
@@ -244,10 +252,39 @@ export interface HarnessTrace {
   warnings: string[];
 }
 
+export type DriverRelevanceDimension = 'country' | 'sector' | 'businessImpact' | 'urgency';
+export interface DriverRelevance {
+  assessmentVersion?: 'driver-specific-v2';
+  review?: {
+    reviewer: { model: string; responseId: string | null };
+    checks: { exactDriverSupport: boolean; noBorrowedObligations: boolean; urgencySupported: boolean; ratingsProportionate: boolean };
+  };
+  policyVersion: 'relevance-top15-v1';
+  score: number;
+  band: 'high' | 'medium' | 'low';
+  dimensions: Record<DriverRelevanceDimension, { rating: number; reason: string; passageIds: string[] }>;
+  rationale: string;
+  assessedAt: string;
+  evidenceFingerprint: string;
+  assessor: { model: string; responseId: string | null };
+}
+
+export interface DriverSelection {
+  policyVersion: 'relevance-top15-v1';
+  requestedCount: 15;
+  minimumScore: 50;
+  candidateCount: number;
+  supportedCandidateCount: number;
+  eligibleCandidateCount: number;
+  publishedDriverIds: string[];
+  excluded: Array<{ driverId: string; reason: 'unavailable' | 'unscored' | 'below-threshold' | 'duplicate' | 'below-cutoff'; duplicateOf?: string }>;
+  assessedAt: string;
+}
+
 export interface EsgDriver {
   id: string;
-  driverSection: EsgDriverSection;
-  driverType: EsgDriverType;
+  driverSection: string;
+  driverType: string;
   driverTitle: string;
   driverText: string;
   countrySectorRelevance: string;
@@ -260,6 +297,31 @@ export interface EsgDriver {
   driverLogicId?: string;
   driverLogic?: string;
   validationWarnings?: string[];
+  generationStatus?: 'verified' | 'unavailable';
+  evidenceStatus?: import('./quality-policy').DriverEvidenceStatus;
+  evidenceDate?: string | null;
+  evidenceLimitation?: string;
+  relevance?: DriverRelevance;
+  relevanceFailure?: { assessment: DriverRelevance; reasons: string[] };
+  statusReason?: string;
+  workbookRow?: number;
+  workbookSheet?: string;
+  baseline?: { logic: string; evidenceKpi: string; keySources: string };
+  citations?: Array<{ sourceId: string; passageId: string; quote: string; location: string }>;
+  verification?: {
+    contract: 'excel-evidence-v3';
+    writer: { model: string; responseId: string | null };
+    reviewer: { model: string; responseId: string | null };
+    reviewedAt: string;
+    citedPassagesOnly: true;
+    checks: { supported: boolean; directDriverEvidence: boolean; sameDriver: boolean; correctLanguage: boolean; allClaimsSupported: boolean; metricsMatchScopeUnitAndPeriod: boolean; usesLatestSupportedInformation: boolean };
+    editorial?: {
+      policyVersion: '2026-09-editorial-v1' | '2026-09-editorial-v2';
+      reviewer: { model: string; responseId: string | null };
+      consideredPassageIds: string[];
+      checks: { factualEvidenceKpi: boolean; latestRelevantEvidenceUsed: boolean; countrySectorGrounded: boolean; coherentDriver: boolean; evidenceStatusAccurate: boolean };
+    };
+  };
 }
 
 export interface EsgDriverResult {
@@ -269,6 +331,9 @@ export interface EsgDriverResult {
   catalogVersion: string;
   generatedAt: string;
   drivers: EsgDriver[];
+  /** Ranked reports publish drivers above; the immutable full workbook assessment remains in original order here. */
+  candidatePool?: EsgDriver[];
+  selection?: DriverSelection;
   evidence: EsgDriverSource[];
   warnings: string[];
   /** Absent on legacy saved packs created before partial completion support. */
@@ -276,6 +341,11 @@ export interface EsgDriverResult {
   expectedDriverCount?: number;
   slotFailures?: EsgDriverSlotFailure[];
   trace?: HarnessTrace;
+  workflow?: 'excel-sources';
+  workbook?: string;
+  verifiedDriverCount?: number;
+  provenance?: { contract: 'excel-evidence-v3'; configuredModel: string; actualModels: string[] };
+  sourceChecks?: Array<{ url: string; status: 'retrieved' | 'unavailable'; reason?: string }>;
 }
 
 export interface EsgDriverCheckpointSlotState {
@@ -323,8 +393,40 @@ export interface GenerateEsgDriverHarnessOptions {
   onCheckpoint?: (checkpoint: EsgDriverCheckpoint) => Promise<void>;
 }
 
+export interface EsgWorkbookCheckpoint {
+  version: 2;
+  evidenceContract?: 'excel-evidence-v3';
+  qualityPolicy?: '2026-09-editorial-v1' | '2026-09-editorial-v2';
+  /** Absent on existing full-workbook jobs; new jobs explicitly opt into the ranked report contract. */
+  selectionPolicy?: 'relevance-top15-v1';
+  workflow: 'excel-sources';
+  catalogVersion: string;
+  workbook: string;
+  workbookSha256: string;
+  input: GenerateEsgDriversInput;
+  definitions: WorkbookDriver[];
+  allowedSources: WorkbookSource[];
+  slots: Array<{ driver: EsgDriver; sources: EsgDriverSource[] }>;
+  sourceChecks?: EsgDriverResult['sourceChecks'];
+  updatedAt: string;
+  resume?: { parentJobId: string; requestedAt: string; revalidateAcceptedSources: true };
+}
+
+export type AnyEsgDriverCheckpoint = EsgDriverCheckpoint | EsgWorkbookCheckpoint;
+
+export interface GenerateEsgDriverOptions {
+  onProgress?: GenerateEsgDriverHarnessOptions['onProgress'];
+  checkpoint?: AnyEsgDriverCheckpoint;
+  onCheckpoint?: (checkpoint: AnyEsgDriverCheckpoint) => Promise<void>;
+}
+
 export interface EsgDriverJob {
   id: string;
+  selectionPolicy?: 'relevance-top15-v1';
+  candidateCount?: number;
+  candidateAssessedCount?: number;
+  publishedDriverCount?: number;
+  expectedDriverCount?: number;
   userId: number | null;
   country: string;
   sector: string;
@@ -335,7 +437,7 @@ export interface EsgDriverJob {
   error: string | null;
   result: EsgDriverResult | null;
   evidence: EsgDriverSource[];
-  checkpoint: EsgDriverCheckpoint | null;
+  checkpoint: AnyEsgDriverCheckpoint | null;
   catalogVersion: string | null;
   parentJobId: string | null;
   activity: EsgDriverJobActivity[];

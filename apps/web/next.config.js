@@ -13,6 +13,12 @@ const nextConfig = {
     'prisma',
     'pdfjs-dist',
     '@napi-rs/canvas',
+    // lib/workbook.ts passes `require.resolve('xlsx')` into a worker thread.
+    // When xlsx is bundled, webpack rewrites that to a numeric module id, and
+    // the worker (a plain Node context) then does require(78365) and throws
+    // `The "id" argument must be of type string. Received type number`.
+    // Keeping xlsx external makes require.resolve return a real file path.
+    'xlsx',
     '@langchain/core',
     '@langchain/openai',
     'langchain',

@@ -51,9 +51,12 @@ export async function GET(request: Request) {
       error: job.error,
       latestActivity: job.activity[job.activity.length - 1] || null,
       driverCount: job.result?.drivers.length || 0,
+      selectionPolicy: job.selectionPolicy,
+      candidateCount: job.candidateCount,
+      publishedDriverCount: job.publishedDriverCount,
       needsAttention:
         job.status === "error" ||
-        (job.status === "done" && job.result?.completion === "partial"),
+        (job.status === "done" && Boolean(job.result?.completion === "partial" || job.result?.selection?.excluded.some((item) => item.reason === 'unavailable' || item.reason === 'unscored'))),
       createdAt: job.createdAt,
       updatedAt: job.updatedAt,
       completedAt: job.completedAt,

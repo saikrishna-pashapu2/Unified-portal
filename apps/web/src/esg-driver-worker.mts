@@ -21,6 +21,7 @@ import {
   JobCancelledError,
   JobLeaseLostError,
   markBackgroundJobCancelled,
+  reconcileEsgDriverDomainJobs,
   reconcileTerminalDomainJobs,
   throwIfJobCancelled,
   type ClaimedBackgroundJob,
@@ -44,9 +45,21 @@ import {
 const workerId = `${os.hostname()}:${process.pid}:${randomUUID().slice(0, 8)}`;
 const runOnce = process.argv.includes("--once");
 const checkDatabasesOnly = process.argv.includes("--check-db");
+const esgDriversOnly = process.argv.includes("--esg-drivers-only");
 const concurrency = boundedInteger(process.env.WORKER_CONCURRENCY, 2, 1, 10);
 const emailPollMs = boundedInteger(process.env.WORKER_EMAIL_POLL_MS, 5_000, 1_000, 60_000);
 const esgEventsDigestPollMs = 60_000;
+const esgDriverJobTypes = ["esg_driver", "esg_driver_excel_v3", "esg_driver_excel_v4"] as const;
+const enabledJobTypes = esgDriversOnly
+  ? (["esg_driver_excel_v4"] as const)
+  : [
+      ...esgDriverJobTypes,
+      "xlsx_translation_v1",
+      "pdf_translation_v2",
+      "pdf_translation_v3",
+      "pdf_translation_v4",
+      "pdf_translation_v5",
+    ] as const;
 let stopping = false;
 let lastEmailPoll = 0;
 let lastEsgEventsDigestPoll = 0;
@@ -61,8 +74,9 @@ process.on("SIGTERM", () => {
 async function main(): Promise<void> {
   await connectEsgWithRetry();
   await verifyWorkerSchema();
-  await reconcileTerminalDomainJobs();
-  console.log(`[esg-driver-worker] started ${workerId} (concurrency=${concurrency}, translatorJobTypes=xlsx_translation_v1,pdf_translation_v2,pdf_translation_v3,pdf_translation_v4,pdf_translation_v5)`);
+  if (esgDriversOnly) await reconcileEsgDriverDomainJobs();
+  else await reconcileTerminalDomainJobs();
+  console.log(`[esg-driver-worker] started ${workerId} (concurrency=${concurrency}, jobTypes=${enabledJobTypes.join(",")})`);
 
   const activeJobs = new Set<Promise<void>>();
   const claimPollState = createTransientPollState();
@@ -78,14 +92,7 @@ async function main(): Promise<void> {
             workerId,
             availableSlots,
             90,
-            [
-              "esg_driver",
-              "xlsx_translation_v1",
-              "pdf_translation_v2",
-              "pdf_translation_v3",
-              "pdf_translation_v4",
-              "pdf_translation_v5",
-            ],
+            enabledJobTypes,
             "generic",
           ),
           isTransientPrismaConnectivityError,
@@ -117,7 +124,7 @@ async function main(): Promise<void> {
       }
     }
 
-    if (!emailWork && Date.now() - lastEmailPoll >= emailPollMs) {
+    if (!esgDriversOnly && !emailWork && Date.now() - lastEmailPoll >= emailPollMs) {
       lastEmailPoll = Date.now();
       emailWork = processEmailQueue(`${workerId}:email`, 10)
         .then(() => undefined)
@@ -127,6 +134,7 @@ async function main(): Promise<void> {
         });
     }
     if (
+      !esgDriversOnly &&
       !esgEventsDigestWork &&
       Date.now() - lastEsgEventsDigestPoll >= esgEventsDigestPollMs
     ) {
@@ -176,7 +184,7 @@ async function executeJob(job: ClaimedBackgroundJob): Promise<void> {
   heartbeat.unref();
 
   try {
-    const output = job.jobType === "esg_driver"
+    const output = isEsgDriverJobType(job.jobType)
       ? await runEsgDriverGenerationJob(job as any)
       : job.jobType === "xlsx_translation_v1"
         ? await processExcelTranslation(job)
@@ -196,7 +204,7 @@ async function executeJob(job: ClaimedBackgroundJob): Promise<void> {
     }
   } catch (error) {
     if (error instanceof JobCancelledError) {
-      const transitioned = job.jobType === "esg_driver"
+      const transitioned = isEsgDriverJobType(job.jobType)
         ? await markEsgDriverJobCancelled(job.id, job.leaseOwner)
         : await markBackgroundJobCancelled(job.id, job.leaseOwner);
       if (transitioned && isPdfxV2QueueJobType(job.jobType)) {
@@ -213,7 +221,7 @@ async function executeJob(job: ClaimedBackgroundJob): Promise<void> {
     }
 
     const message = error instanceof Error ? error.message : "Worker failure";
-    const transition = job.jobType === "esg_driver"
+    const transition = isEsgDriverJobType(job.jobType)
       ? await failEsgDriverJob(job, message, {
           retryable: isRetryableEsgDriverFailure(error),
         })
@@ -254,8 +262,7 @@ async function verifyWorkerSchema(): Promise<void> {
   const requiredTables = [
     "background_jobs",
     "esg_driver_jobs",
-    "pdf_translation_v2_jobs",
-    "pdf_translation_v2_pages",
+    ...(esgDriversOnly ? [] : ["pdf_translation_v2_jobs", "pdf_translation_v2_pages"]),
     "api_usage_buckets",
     "alert_history",
     "email_queue",
@@ -285,6 +292,10 @@ async function verifyWorkerSchema(): Promise<void> {
       ].join(", ")}). Run pnpm db:migrate:deploy.`,
     );
   }
+}
+
+function isEsgDriverJobType(jobType: string): boolean {
+  return jobType === "esg_driver" || jobType === "esg_driver_excel_v3" || jobType === "esg_driver_excel_v4";
 }
 
 async function synchronizePdfV2DomainJob(

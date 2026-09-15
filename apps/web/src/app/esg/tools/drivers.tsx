@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { EVIDENCE_STATUS_LABELS } from '@/lib/esg-drivers/quality-policy';
 import {
   AlertCircle,
   AlertTriangle,
@@ -45,10 +46,14 @@ import type {
   EsgDriverJobStatus,
   EsgDriverResult,
   EsgDriverSource,
+  DriverRelevance,
 } from "@/lib/esg-drivers/types";
 import {
   ESG_DRIVER_COUNTRY_OPTIONS,
   ESG_DRIVER_SECTOR_OPTIONS,
+  workbookDriverCount,
+  canonicalizeEsgDriverCountry,
+  canonicalizeEsgDriverSector,
 } from "@/lib/esg-drivers/coverage";
 import {
   canResumePartialDriverJob,
@@ -62,12 +67,22 @@ import {
 } from "./drivers-client";
 
 interface DriverStatus {
+  country?: string;
+  sector?: string;
+  language?: string;
+  driverPlan?: Array<{ id: string; number: number; title: string; section: string }>;
   jobId: string;
   status: EsgDriverJobStatus;
   progress: number;
   stage: string;
   error: string | null;
   activity: EsgDriverJobActivity[];
+  /** Optional ranked-report telemetry returned by newer status endpoints. */
+  selectionPolicy?: "relevance-top15-v1";
+  candidateCount?: number;
+  candidateAssessedCount?: number;
+  publishedDriverCount?: number;
+  expectedDriverCount?: number;
 }
 
 interface HistoryItem {
@@ -84,6 +99,9 @@ interface HistoryItem {
   needsAttention: boolean;
   createdAt: string | null;
   completedAt: string | null;
+  selectionPolicy?: "relevance-top15-v1";
+  candidateCount?: number;
+  publishedDriverCount?: number;
 }
 
 type DriverViewMode = "deck" | "matrix";
@@ -108,6 +126,16 @@ interface AccuracySummary {
 }
 
 const LANGUAGE_OPTIONS = ["English", "Russian", "Arabic"];
+const RANKED_SELECTION_POLICY = "relevance-top15-v1" as const;
+const RELEVANCE_WEIGHTS: Record<
+  keyof DriverRelevance["dimensions"],
+  number
+> = {
+  country: 30,
+  sector: 30,
+  businessImpact: 25,
+  urgency: 15,
+};
 
 export default function EsgDriversTool() {
   const router = useRouter();
@@ -168,8 +196,8 @@ export default function EsgDriversTool() {
   });
   const canRetryMissingDrivers = Boolean(
     result &&
-      canResumePartialDriverJob({
-        completion: result.completion,
+      canRetryDriverResult({
+        result,
         status: status?.status,
         jobId: currentJobId || jobId,
         resultJobId,
@@ -177,6 +205,7 @@ export default function EsgDriversTool() {
       }),
   );
   const isRtl = isRtlLanguage(result?.language || language);
+  const isRankedResult = result?.selection?.policyVersion === RANKED_SELECTION_POLICY;
 
   useEffect(() => {
     runningJobRef.current = isRunning ? jobId : "";
@@ -195,17 +224,17 @@ export default function EsgDriversTool() {
     return buildAccuracySummary(result.drivers, evidenceById);
   }, [result, evidenceById]);
 
-  // Drivers are shown in the detail view ordered by confidence (highest first).
-  // The raw `result` order is left untouched for export/history.
-  const sortedDrivers = useMemo(
-    () =>
-      result
-        ? [...result.drivers].sort(
-            (a, b) => (b.confidence ?? 0) - (a.confidence ?? 0),
-          )
-        : [],
-    [result],
-  );
+  const sortedDrivers = useMemo(() => {
+    if (!result) return [];
+    // Ranked reports arrive in their stored relevance order. Legacy packs
+    // retain the historical confidence ordering used by the full workbook UI.
+    if (result.selection?.policyVersion === RANKED_SELECTION_POLICY) {
+      return result.drivers;
+    }
+    return [...result.drivers].sort(
+      (a, b) => (b.confidence ?? 0) - (a.confidence ?? 0),
+    );
+  }, [result]);
 
   const safeSlideIndex = result
     ? Math.min(activeSlideIndex, Math.max(sortedDrivers.length - 1, 0))
@@ -225,6 +254,9 @@ export default function EsgDriversTool() {
   }, [router]);
 
   const navigateNew = useCallback(() => {
+    setCountry((value) => canonicalizeEsgDriverCountry(value) || "UAE");
+    setSector((value) => canonicalizeEsgDriverSector(value) || "Banking");
+    setLanguage((value) => LANGUAGE_OPTIONS.includes(value) ? value : "English");
     router.push(makeDriversHref({ view: "new" }));
   }, [router]);
 
@@ -376,6 +408,9 @@ export default function EsgDriversTool() {
 
         setJobId(activeJobId);
         setStatus(data);
+        if (data.country) setCountry(data.country);
+        if (data.sector) setSector(data.sector);
+        if (data.language) setLanguage(data.language);
 
         if (data.status === "done") {
           try {
@@ -444,6 +479,9 @@ export default function EsgDriversTool() {
       }
 
       setStatus(data);
+      if (data.country) setCountry(data.country);
+      if (data.sector) setSector(data.sector);
+      if (data.language) setLanguage(data.language);
 
       if (data.status === "done") {
         try {
@@ -624,6 +662,14 @@ export default function EsgDriversTool() {
         stage: data.job?.stage || "queued",
         error: null,
         activity: Array.isArray(data.job?.activity) ? data.job.activity : [],
+        selectionPolicy:
+          data.job?.selectionPolicy === RANKED_SELECTION_POLICY
+            ? RANKED_SELECTION_POLICY
+            : undefined,
+        candidateCount: toOptionalCount(data.job?.candidateCount),
+        candidateAssessedCount: toOptionalCount(data.job?.candidateAssessedCount),
+        publishedDriverCount: toOptionalCount(data.job?.publishedDriverCount),
+        expectedDriverCount: toOptionalCount(data.job?.expectedDriverCount),
       });
       navigateJob(data.jobId);
       void loadHistory();
@@ -683,6 +729,14 @@ export default function EsgDriversTool() {
       stage: item.stage,
       error: item.error,
       activity: item.latestActivity ? [item.latestActivity] : [],
+      selectionPolicy:
+        item.selectionPolicy === RANKED_SELECTION_POLICY
+          ? RANKED_SELECTION_POLICY
+          : undefined,
+      candidateCount: item.candidateCount,
+      publishedDriverCount: item.publishedDriverCount,
+      expectedDriverCount:
+        item.selectionPolicy === RANKED_SELECTION_POLICY ? 15 : undefined,
     });
     navigateJob(item.id);
   }
@@ -805,8 +859,8 @@ export default function EsgDriversTool() {
     if (
       resumingJobId ||
       !result ||
-      !canResumePartialDriverJob({
-        completion: result.completion,
+      !canRetryDriverResult({
+        result,
         status: status?.status,
         jobId: parentJobId,
         resultJobId,
@@ -852,6 +906,14 @@ export default function EsgDriversTool() {
         stage: data.job?.stage || "queued",
         error: null,
         activity: Array.isArray(data.job?.activity) ? data.job.activity : [],
+        selectionPolicy:
+          data.job?.selectionPolicy === RANKED_SELECTION_POLICY
+            ? RANKED_SELECTION_POLICY
+            : undefined,
+        candidateCount: toOptionalCount(data.job?.candidateCount),
+        candidateAssessedCount: toOptionalCount(data.job?.candidateAssessedCount),
+        publishedDriverCount: toOptionalCount(data.job?.publishedDriverCount),
+        expectedDriverCount: toOptionalCount(data.job?.expectedDriverCount),
       });
       navigateJob(childJobId);
       void loadHistory();
@@ -917,6 +979,7 @@ export default function EsgDriversTool() {
         <DriverDetailPage
           result={result}
           drivers={sortedDrivers}
+          ranked={isRankedResult}
           status={status}
           error={error}
           loadingJob={loadingJob}
@@ -1289,13 +1352,22 @@ function DriversHome({
                 </div>
 
                 <div className="mt-5 grid grid-cols-3 gap-2">
-                  <SmallStat label="Drivers" value={item.driverCount || 0} />
+                  <SmallStat
+                    label={item.selectionPolicy === RANKED_SELECTION_POLICY ? "Published" : "Drivers"}
+                    value={item.publishedDriverCount ?? item.driverCount ?? 0}
+                  />
                   <SmallStat label="Progress" value={item.progress || 0} suffix="%" />
                   <SmallStat
                     label="Done"
                     value={item.completedAt ? formatDate(item.completedAt) : "-"}
                   />
                 </div>
+
+                {item.selectionPolicy === RANKED_SELECTION_POLICY && (
+                  <p className="mt-2 text-xs font-semibold text-[#68756c]">
+                    {item.candidateCount ?? "—"} workbook candidates assessed
+                  </p>
+                )}
 
                 <div className="mt-4 flex items-center justify-between border-t border-[#dbe3dc] pt-3 text-sm font-bold text-[#536156]">
                   <span className="min-w-0 truncate">
@@ -1353,23 +1425,6 @@ interface ProcessingSlot {
   confidence?: number;
 }
 
-const PROCESSING_SECTION_PLAN: Array<{
-  section: string;
-  label: string;
-  quota: number;
-}> = [
-  { section: "Global Drivers", label: "Global Drivers", quota: 3 },
-  { section: "Regulatory Requirements", label: "Regulatory", quota: 3 },
-  { section: "Climate Risks", label: "Climate Risks", quota: 2 },
-  { section: "Capital Markets", label: "Capital Markets", quota: 2 },
-  { section: "Supply Chain", label: "Supply Chain", quota: 2 },
-];
-
-const PROCESSING_TOTAL_DRIVERS = PROCESSING_SECTION_PLAN.reduce(
-  (sum, item) => sum + item.quota,
-  0,
-);
-
 function slotStateFromKind(
   kind: EsgDriverActivityKindLike,
   outcome?: string,
@@ -1417,8 +1472,10 @@ interface ProcessingModel {
   startedAt: number | null;
 }
 
-function deriveProcessingModel(activity: EsgDriverJobActivity[]): ProcessingModel {
+export function deriveProcessingModel(activity: EsgDriverJobActivity[], fallbackPlan: NonNullable<DriverStatus["driverPlan"]> = []): ProcessingModel {
+  const driverPlan = [...activity].reverse().find((e) => e.detail?.driverPlan)?.detail?.driverPlan || fallbackPlan;
   const slotMap = new Map<number, ProcessingSlot>();
+  for (const row of driverPlan) slotMap.set(row.number, { number: row.number, section: row.section, title: row.title, state: "queued" });
   const approvedSourceUrls = new Set<string>();
   let searches = 0;
   let reviews = 0;
@@ -1433,7 +1490,7 @@ function deriveProcessingModel(activity: EsgDriverJobActivity[]): ProcessingMode
     if (!detail) continue;
     if (detail.kind === "search") searches += 1;
     if (detail.kind === "review") reviews += 1;
-    if (detail.kind === "source" && detail.outcome === "accepted") {
+    if (detail.kind === "source" && (detail.outcome === "accepted" || detail.outcome === "found")) {
       for (const result of detail.results || []) {
         approvedSourceUrls.add(result.url || result.title);
       }
@@ -1443,7 +1500,7 @@ function deriveProcessingModel(activity: EsgDriverJobActivity[]): ProcessingMode
     if (typeof number === "number" && number > 0) {
       const nextState = slotStateFromKind(detail.kind, detail.outcome);
       const existing = slotMap.get(number);
-      const locked = existing?.state === "accepted" || existing?.state === "omitted";
+
       slotMap.set(number, {
         number,
         section: detail.section || existing?.section,
@@ -1452,19 +1509,15 @@ function deriveProcessingModel(activity: EsgDriverJobActivity[]): ProcessingMode
           typeof detail.confidence === "number"
             ? detail.confidence
             : existing?.confidence,
-        state: locked ? existing!.state : nextState || existing?.state || "queued",
+        state: nextState || existing?.state || "queued",
       });
     }
   }
 
-  const slots: ProcessingSlot[] = Array.from(
-    { length: PROCESSING_TOTAL_DRIVERS },
-    (_, index) =>
-      slotMap.get(index + 1) || { number: index + 1, state: "queued" },
-  );
-
-  const sections = PROCESSING_SECTION_PLAN.map((plan) => {
-    const sectionSlots = slots.filter((slot) => slot.section === plan.section);
+  const slots = Array.from(slotMap.values()).sort((a, b) => a.number - b.number);
+  const sectionPlan = Array.from(new Set(slots.map((slot) => slot.section || 'Workbook drivers'))).map((section) => ({ section, label: section, quota: slots.filter((slot) => (slot.section || 'Workbook drivers') === section).length }));
+  const sections = sectionPlan.map((plan) => {
+    const sectionSlots = slots.filter((slot) => (slot.section || "Workbook drivers") === plan.section);
     const accepted = sectionSlots.filter((slot) => slot.state === "accepted").length;
     const researching = sectionSlots.some((slot) => slot.state === "researching");
     const omitted = sectionSlots.some((slot) => slot.state === "omitted");
@@ -1495,6 +1548,25 @@ function deriveProcessingModel(activity: EsgDriverJobActivity[]): ProcessingMode
     acceptedCount,
     startedAt,
   };
+}
+
+function countAssessedCandidates(activity: EsgDriverJobActivity[]): number {
+  const ids = new Set<string>();
+  for (const event of activity) {
+    const detail = event.detail;
+    if (!detail) continue;
+    if (detail.candidateId) {
+      ids.add(detail.candidateId);
+      continue;
+    }
+    if (
+      detail.driverId &&
+      ["selection", "search", "search-results", "source", "draft", "review", "accepted", "omitted"].includes(detail.kind)
+    ) {
+      ids.add(detail.driverId);
+    }
+  }
+  return ids.size;
 }
 
 function activityVisual(kind: EsgDriverActivityKindLike): {
@@ -1587,7 +1659,7 @@ const SLOT_STATE_STYLE: Record<
   drafting: { label: "Drafting", dot: "bg-[#e7c86b] animate-pulse", text: "text-[#f5dd94]" },
   reviewing: { label: "Reviewing", dot: "bg-[#7fd4a3] animate-pulse", text: "text-[#a6ecc6]" },
   accepted: { label: "Accepted", dot: "bg-[#a4f04a]", text: "text-[#c4ff8a]" },
-  omitted: { label: "No source", dot: "bg-[#f0a4a4]", text: "text-[#ffc4c4]" },
+  omitted: { label: "Unavailable", dot: "bg-[#f0a4a4]", text: "text-[#ffc4c4]" },
 };
 
 function ProgressRing({ progress }: { progress: number }) {
@@ -1674,7 +1746,24 @@ function ProcessingView({
   }, []);
 
   const activity = useMemo(() => status?.activity ?? [], [status?.activity]);
-  const model = useMemo(() => deriveProcessingModel(activity), [activity]);
+  const model = useMemo(() => deriveProcessingModel(activity, status?.driverPlan || Array.from({ length: workbookDriverCount(country, sector) }, (_, i) => ({ id: String(i + 1), number: i + 1, title: "", section: "Workbook drivers" }))), [activity, status?.driverPlan, country, sector]);
+  const isRanked = status?.selectionPolicy === RANKED_SELECTION_POLICY;
+  const candidateTotal = Math.max(
+    0,
+    status?.candidateCount ?? status?.driverPlan?.length ?? model.slots.length,
+  );
+  const candidateAssessed = Math.min(
+    candidateTotal,
+    status?.candidateAssessedCount ?? countAssessedCandidates(activity),
+  );
+  const publishedCount = Math.max(
+    0,
+    status?.publishedDriverCount ?? model.acceptedCount,
+  );
+  const publishedTarget = Math.max(
+    0,
+    status?.expectedDriverCount ?? (isRanked ? 15 : model.slots.length),
+  );
   const progress = status?.progress ?? 0;
   const stage = status?.stage || (starting ? "Starting generation" : "Working");
   const isCancelling = status?.stage === "cancelling" || canceling;
@@ -1718,11 +1807,13 @@ function ProcessingView({
             <div className="flex items-center gap-3">
               <div className="text-right">
                 <span className="block font-mono text-2xl font-bold text-[#d6ff66]">
-                  {model.acceptedCount}
-                  <span className="text-base text-[#8fa093]">/{PROCESSING_TOTAL_DRIVERS}</span>
+                  {isRanked ? publishedCount : model.acceptedCount}
+                  <span className="text-base text-[#8fa093]">
+                    /{isRanked ? publishedTarget : model.slots.length}
+                  </span>
                 </span>
                 <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#8fa093]">
-                  Drivers ready
+                  {isRanked ? "Published report" : "Source supported"}
                 </span>
               </div>
               <button
@@ -1750,10 +1841,18 @@ function ProcessingView({
               />
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <ProcessingStatTile label="Searches" value={model.stats.searches} Icon={Search} />
-              <ProcessingStatTile label="Sources kept" value={model.stats.sourcesApproved} Icon={BookOpen} />
+              <ProcessingStatTile
+                label={isRanked ? "Candidates assessed" : "Searches"}
+                value={isRanked ? `${candidateAssessed}/${candidateTotal}` : model.stats.searches}
+                Icon={isRanked ? Layers3 : Search}
+              />
+              <ProcessingStatTile label="Sources read" value={model.stats.sourcesApproved} Icon={BookOpen} />
               <ProcessingStatTile label="Reviews" value={model.stats.reviews} Icon={ShieldCheck} />
-              <ProcessingStatTile label="Accepted" value={`${model.stats.accepted}/${PROCESSING_TOTAL_DRIVERS}`} Icon={CheckCircle2} />
+              <ProcessingStatTile
+                label={isRanked ? "Published report" : "Source supported"}
+                value={`${isRanked ? publishedCount : model.stats.accepted}/${isRanked ? publishedTarget : model.slots.length}`}
+                Icon={CheckCircle2}
+              />
             </div>
           </div>
         </section>
@@ -1800,6 +1899,7 @@ function ProcessingView({
                       event={event}
                       now={now}
                       isLast={index === timeline.length - 1}
+                      showConfidence={!isRanked}
                     />
                   ))}
                 </ol>
@@ -1822,15 +1922,17 @@ function ProcessingView({
 
             <section className="rounded-[10px] border border-[#243026] bg-[#101a13] p-5 text-white">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#d6ff66]">
-                Driver slots
+                {isRanked ? "Candidate assessment" : "Driver slots"}
               </p>
               <div className="mt-3 grid grid-cols-2 gap-2">
                 {model.slots.map((slot) => (
-                  <ProcessingSlotCard key={slot.number} slot={slot} />
+                  <ProcessingSlotCard key={slot.number} slot={slot} showConfidence={!isRanked} />
                 ))}
               </div>
               <p className="mt-4 text-xs leading-5 text-[#8fa093]">
-                The full driver page opens automatically when generation finishes.
+                {isRanked
+                  ? `${candidateAssessed} of ${candidateTotal} workbook candidates assessed. The report publishes up to ${publishedTarget} ranked drivers when generation finishes.`
+                  : "The full driver page opens automatically when generation finishes."}
               </p>
             </section>
           </div>
@@ -1882,7 +1984,13 @@ function ProcessingSectionRow({
   );
 }
 
-function ProcessingSlotCard({ slot }: { slot: ProcessingSlot }) {
+function ProcessingSlotCard({
+  slot,
+  showConfidence = true,
+}: {
+  slot: ProcessingSlot;
+  showConfidence?: boolean;
+}) {
   const style = SLOT_STATE_STYLE[slot.state];
   return (
     <div className="rounded-[6px] border border-white/10 bg-white/[0.03] px-3 py-2.5">
@@ -1900,7 +2008,7 @@ function ProcessingSlotCard({ slot }: { slot: ProcessingSlot }) {
       <p className="mt-1.5 line-clamp-2 min-h-[2.2rem] text-[11px] leading-[1.1rem] text-[#c8d8cc]">
         {slot.title || (slot.section ? slot.section : "Awaiting selection")}
       </p>
-      {typeof slot.confidence === "number" && slot.state === "accepted" && (
+      {showConfidence && typeof slot.confidence === "number" && slot.state === "accepted" && (
         <span className="mt-1 inline-block font-mono text-[10px] text-[#a4f04a]">
           {Math.round(slot.confidence)}% confidence
         </span>
@@ -1913,10 +2021,12 @@ function ProcessingTimelineEvent({
   event,
   now,
   isLast,
+  showConfidence = true,
 }: {
   event: EsgDriverJobActivity;
   now: number;
   isLast: boolean;
+  showConfidence?: boolean;
 }) {
   const detail = event.detail;
   const kind = detail?.kind || "system";
@@ -1963,7 +2073,7 @@ function ProcessingTimelineEvent({
               {badge.label}
             </span>
           )}
-          {typeof detail?.confidence === "number" && (
+          {showConfidence && typeof detail?.confidence === "number" && (
             <span className="font-mono text-[10px] text-[#a4f04a]">
               {Math.round(detail.confidence)}%
             </span>
@@ -2093,10 +2203,11 @@ function NewDriverPage({
           <h2 className="mt-3 text-3xl font-semibold tracking-tight text-[#172019]">
             Enter scope details
           </h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-[#68756c]">
-            The agent will research fresh ESG signals and generate the driver deck
-            using the Excel-style archetypes.
-          </p>
+           <p className="mt-2 max-w-2xl text-sm leading-6 text-[#68756c]">
+             Assess the exact drivers in ESG_Drivers_September.xlsx using only links
+             in the selected sector worksheet, then publish the 15 most relevant
+             source-supported drivers.
+           </p>
 
           <form onSubmit={onSubmit} className="mt-8 grid gap-4">
             <SetupField
@@ -2128,9 +2239,9 @@ function NewDriverPage({
             />
 
             <p className="text-xs leading-5 text-[#68756c]">
-              Type any country and sector. The agent builds the deck from the
-              reviewed workbook sources — global drivers apply everywhere, and
-              country- or sector-specific drivers are added when they match.
+              Up to 15 ranked drivers are published from {workbookDriverCount(country, sector)}{" "}
+              workbook candidates. Original names stay unchanged and updates are written in
+              your selected language. Missing evidence remains visible in the coverage audit.
             </p>
 
             <button
@@ -2164,6 +2275,7 @@ function NewDriverPage({
 function DriverDetailPage({
   result,
   drivers,
+  ranked,
   status,
   error,
   loadingJob,
@@ -2192,6 +2304,7 @@ function DriverDetailPage({
 }: {
   result: EsgDriverResult | null;
   drivers: EsgDriver[];
+  ranked: boolean;
   status: DriverStatus | null;
   error: string;
   loadingJob: boolean;
@@ -2230,6 +2343,36 @@ function DriverDetailPage({
     );
   }
 
+  if (ranked && result && !activeDriver) {
+    return (
+      <main className="px-5 py-6 xl:px-7">
+        <RankedCoverageNotice
+          result={result}
+          canRetryMissingDrivers={canRetryMissingDrivers}
+          resumingMissingDrivers={resumingMissingDrivers}
+          onRetryMissingDrivers={onRetryMissingDrivers}
+        />
+        <div className="mt-5 rounded-[8px] border border-amber-200 bg-white p-8">
+          <AlertTriangle className="h-8 w-8 text-amber-600" />
+          <h2 className="mt-4 text-2xl font-semibold text-[#172019]">
+            No ranked drivers were published
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-[#68756c]">
+            The candidate assessment is retained above. Retry unavailable candidates or start a new workbook run to publish source-supported drivers.
+          </p>
+          <button
+            type="button"
+            onClick={onNew}
+            className="mt-6 inline-flex h-10 items-center gap-2 rounded-[5px] bg-[#172019] px-3 text-sm font-bold text-white"
+          >
+            <Plus className="h-4 w-4" />
+            New driver
+          </button>
+        </div>
+      </main>
+    );
+  }
+
   if (!result || !activeDriver || !activeAccuracyReview) {
     const jobStatus = status?.status;
     // While the job is still running, show the full processing view (never the
@@ -2249,13 +2392,13 @@ function DriverDetailPage({
         />
       );
     }
-    if (jobStatus === "done") {
+    if (jobStatus === "done" && !result) {
       return <LoadingState label="Loading driver pack" />;
     }
     return (
       <main className="px-5 py-6 xl:px-7">
         <EmptyError
-          error={error || status?.stage || "Driver pack is not available."}
+          error={result && result.drivers.length === 0 ? "This saved pack contains no drivers. Start a new workbook run." : error || status?.stage || "Driver pack is not available."}
           onBack={onBack}
           onNew={onNew}
         />
@@ -2263,19 +2406,20 @@ function DriverDetailPage({
     );
   }
 
-  const expectedDriverCount = result.expectedDriverCount ?? 12;
-  const omittedDriverIds = (result.slotFailures || [])
-    .map((failure) => failure.driverId)
-    .join(", ");
+  const expectedDriverCount = ranked
+    ? result.selection?.requestedCount ?? 15
+    : result.expectedDriverCount ?? result.drivers.length;
+  const supportedCount = result.verifiedDriverCount ?? result.drivers.length;
   return (
     <main className="grid min-h-[calc(100vh-151px)] grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(0,1fr)_360px]">
       <aside className="border-b border-[#d7ddd6] bg-[#f8faf5] lg:border-b-0 lg:border-r">
         <div className="sticky top-0 space-y-5 p-4 lg:max-h-[calc(100vh-88px)] lg:overflow-y-auto">
-          <DeckBrief result={result} summary={accuracySummary} />
+          <DeckBrief result={result} summary={accuracySummary} ranked={ranked} />
           <ViewToggle viewMode={viewMode} onViewModeChange={onViewModeChange} />
           <SlideRail
             drivers={drivers}
             evidenceById={evidenceById}
+            ranked={ranked}
             activeSlideIndex={activeSlideIndex}
             onSlideChange={onSlideChange}
           />
@@ -2283,17 +2427,25 @@ function DriverDetailPage({
       </aside>
 
       <section className="min-w-0 bg-[#eef2ee]">
-        {result.completion === "partial" && (
+        {result.workflow !== "excel-sources" && <div className="border-b border-[#cfd8d0] bg-white px-5 py-3 text-sm text-[#536156]">This saved pack uses an earlier catalog. Generate a new pack to use the September workbook and its source restrictions.</div>}
+        {result.provenance && <div className="border-b border-[#cfd8d0] bg-white px-5 py-3 text-sm text-[#536156]">Model: {result.provenance.actualModels.join(', ') || result.provenance.configuredModel}. Each supported update passed a separate review against its cited Excel sources.</div>}
+        {ranked ? (
+          <RankedCoverageNotice
+            result={result}
+            canRetryMissingDrivers={canRetryMissingDrivers}
+            resumingMissingDrivers={resumingMissingDrivers}
+            onRetryMissingDrivers={onRetryMissingDrivers}
+          />
+        ) : result.completion === "partial" ? (
           <div className="border-b border-amber-300 bg-amber-50 px-5 py-3 text-sm text-amber-950">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="max-w-4xl leading-5">
-                <span className="font-bold">Partial approved-source pack:</span>{" "}
-                {result.drivers.length} of {expectedDriverCount} drivers were generated.
-                {omittedDriverIds ? ` Omitted: ${omittedDriverIds}.` : ""} Every
-                displayed driver passed the individual source and quality gates.
+                <span className="font-bold">Updates need attention:</span>{" "}
+                {supportedCount} of {expectedDriverCount} drivers have source-supported updates.
+                {result.workflow === "excel-sources" && " All workbook rows are retained; unavailable updates are marked individually."}
                 {canRetryMissingDrivers && (
                   <span className="mt-1 block text-xs text-amber-800">
-                    Retrying creates a new job and keeps this approved pack unchanged.
+                    Retrying creates a new pack, rechecks saved evidence, and retries unavailable updates.
                   </span>
                 )}
               </div>
@@ -2309,12 +2461,12 @@ function DriverDetailPage({
                   ) : (
                     <RefreshCw className="h-4 w-4" />
                   )}
-                  {resumingMissingDrivers ? "Creating retry job" : "Retry missing drivers"}
+                  {resumingMissingDrivers ? "Creating retry job" : "Retry unavailable updates"}
                 </button>
               )}
             </div>
           </div>
-        )}
+        ) : null}
         {error && (
           <div className="border-b border-red-200 bg-red-50 px-5 py-3 text-sm font-semibold text-red-700">
             {error}
@@ -2327,6 +2479,7 @@ function DriverDetailPage({
             activeReview={activeAccuracyReview}
             activeSlideIndex={activeSlideIndex}
             drivers={drivers}
+            ranked={ranked}
             isRtl={isRtl}
             showEmbeddedEvidence={false}
             onSlideChange={onSlideChange}
@@ -2335,6 +2488,7 @@ function DriverDetailPage({
           <DriversMatrix
             drivers={drivers}
             evidenceById={evidenceById}
+            ranked={ranked}
             expandedDriverId={expandedDriverId}
             isRtl={isRtl}
             onExpandedDriverChange={onExpandedDriverChange}
@@ -2347,6 +2501,7 @@ function DriverDetailPage({
           driver={activeDriver}
           sources={activeDriverSources}
           review={activeAccuracyReview}
+          ranked={ranked}
         />
       </aside>
     </main>
@@ -2377,25 +2532,9 @@ function SetupField({
         {label}
       </span>
       {options ? (
-        <>
-          {/* Free text with suggestions: any country/sector is allowed; the
-              reviewed options are offered as autocomplete hints only. */}
-          <input
-            value={value}
-            onChange={(event) => onChange(event.target.value)}
-            list={`${label}-options`}
-            className="h-12 w-full rounded-[5px] border border-[#cfd8d0] bg-white px-3 text-base font-semibold text-[#172019] outline-none transition focus:border-[#172019] focus:ring-2 focus:ring-[#d6ff66]/40"
-            placeholder={placeholder}
-            disabled={disabled}
-            aria-label={label}
-            autoComplete="off"
-          />
-          <datalist id={`${label}-options`}>
-            {options.map((option) => (
-              <option key={option} value={option} />
-            ))}
-          </datalist>
-        </>
+        <select value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} aria-label={label} className="h-12 w-full rounded-[5px] border border-[#cfd8d0] bg-white px-3 text-base font-semibold text-[#172019] outline-none transition focus:border-[#172019] focus:ring-2 focus:ring-[#d6ff66]/40">
+          {options.map((option) => <option key={option} value={option}>{option}</option>)}
+        </select>
       ) : (
         <input
           value={value}
@@ -2409,12 +2548,141 @@ function SetupField({
   );
 }
 
+function RankedCoverageNotice({
+  result,
+  canRetryMissingDrivers,
+  resumingMissingDrivers,
+  onRetryMissingDrivers,
+}: {
+  result: EsgDriverResult;
+  canRetryMissingDrivers: boolean;
+  resumingMissingDrivers: boolean;
+  onRetryMissingDrivers: () => void;
+}) {
+  const selection = result.selection;
+  if (!selection || selection.policyVersion !== RANKED_SELECTION_POLICY) return null;
+
+  const candidateById = new Map(
+    (result.candidatePool || []).map((candidate) => [candidate.id, candidate]),
+  );
+  const publishedCount = result.drivers.length;
+  const requestedCount = selection.requestedCount;
+  const candidateCount = selection.candidateCount || result.candidatePool?.length || 0;
+  const excluded = selection.excluded || [];
+  const retryableExcluded = excluded.filter((item) =>
+    item.reason === "unavailable" || item.reason === "unscored",
+  );
+  const isComplete = publishedCount === requestedCount;
+
+  return (
+    <section
+      data-testid="ranked-coverage-notice"
+      className={`border-b px-5 py-4 ${
+        isComplete
+          ? "border-[#b9d88f] bg-[#f2f8e9] text-[#274016]"
+          : "border-amber-300 bg-amber-50 text-amber-950"
+      }`}
+    >
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+        <div className="max-w-4xl leading-6">
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold">
+            <span className="font-bold">Relevance-ranked report:</span>
+            <span>
+              {publishedCount} of {requestedCount} requested drivers published from {candidateCount} workbook candidates.
+            </span>
+          </p>
+          <p className="mt-1 text-xs leading-5 opacity-85">
+            The report is ordered by the stored relevance score. Candidate assessment coverage is kept separately for audit and does not add extra report cards.
+            {isComplete && retryableExcluded.length > 0
+              ? ` The report is complete; ${retryableExcluded.length} candidate${retryableExcluded.length === 1 ? " remains" : "s remain"} available for retry.`
+              : !isComplete
+                ? " Fewer than 15 candidates passed the publication gates."
+                : ""}
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-bold">
+            <span className="rounded-full border border-current/15 bg-white/60 px-2 py-1">
+              {selection.supportedCandidateCount} source-supported candidates
+            </span>
+            <span className="rounded-full border border-current/15 bg-white/60 px-2 py-1">
+              {selection.eligibleCandidateCount} eligible after scoring
+            </span>
+          </div>
+        </div>
+
+        {canRetryMissingDrivers && (
+          <button
+            type="button"
+            onClick={onRetryMissingDrivers}
+            disabled={resumingMissingDrivers}
+            className="inline-flex h-10 flex-none items-center justify-center gap-2 rounded-[5px] bg-[#172019] px-4 text-sm font-bold text-white transition hover:bg-[#2a382e] disabled:cursor-wait disabled:opacity-65"
+          >
+            {resumingMissingDrivers ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+            {resumingMissingDrivers ? "Creating retry job" : selection.excluded.some((item) => item.reason === "unscored") ? "Retry assessment gaps" : "Retry unavailable updates"}
+          </button>
+        )}
+      </div>
+
+      <details className="mt-3 max-w-5xl rounded-[6px] border border-current/15 bg-white/55 px-3 py-2">
+        <summary className="cursor-pointer text-xs font-bold">
+          Candidate assessment coverage{excluded.length > 0 ? ` · ${excluded.length} excluded` : ""}
+        </summary>
+        <div className="mt-3 space-y-2 text-xs leading-5">
+          {excluded.length === 0 ? (
+            <p>No excluded candidate records were returned for this assessment.</p>
+          ) : (
+            <ul className="space-y-2">
+              {excluded.map((item, index) => {
+                const candidate = candidateById.get(item.driverId);
+                return (
+                  <li
+                    key={`${item.driverId}-${item.reason}-${index}`}
+                    className="rounded-[5px] border border-current/10 bg-white/60 px-3 py-2"
+                  >
+                    <p className="font-bold">
+                      {candidate?.driverTitle || item.driverId}
+                      {candidate?.driverSection ? ` · ${candidate.driverSection}` : ""}
+                    </p>
+                    <p>
+                      {selectionExclusionLabel(item.reason)}
+                      {item.duplicateOf ? ` · duplicate of ${item.duplicateOf}` : ""}
+                    </p>
+                    {item.reason === "unavailable" && (
+                      <p className="mt-1 font-semibold">
+                        Unsupported topic retained in audit: {candidate?.driverTitle || item.driverId}
+                      </p>
+                    )}
+                    {(item.reason === "unavailable" || item.reason === "unscored") &&
+                      candidate?.statusReason?.trim() && (
+                        <p
+                          className="mt-1 break-words whitespace-pre-wrap text-[#536156]"
+                          dir="auto"
+                        >
+                          {item.reason === "unscored" ? "Relevance review reason: " : "Research gap reason: "}{candidate.statusReason.trim()}
+                        </p>
+                      )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </details>
+    </section>
+  );
+}
+
 function DeckBrief({
   result,
   summary,
+  ranked,
 }: {
   result: EsgDriverResult;
   summary: AccuracySummary | null;
+  ranked: boolean;
 }) {
   return (
     <section>
@@ -2432,25 +2700,36 @@ function DeckBrief({
         <MetricTile
           label="Drivers"
           value={
-            result.completion === "partial"
-              ? `${result.drivers.length}/${result.expectedDriverCount ?? 12}`
-              : result.drivers.length
+            ranked
+              ? `${result.drivers.length}/${result.selection?.requestedCount ?? 15}`
+              : result.completion === "partial"
+                ? `${result.drivers.length}/${result.expectedDriverCount ?? result.drivers.length}`
+                : result.drivers.length
           }
         />
         <MetricTile label="Sources" value={result.evidence.length} />
-        <MetricTile label="Avg" value={averageConfidence(result.drivers)} />
+        <MetricTile
+          label={ranked || result.workflow === "excel-sources" ? "Supported" : "Avg"}
+          value={result.verifiedDriverCount ?? averageConfidence(result.drivers)}
+        />
       </div>
+
+      {ranked && (
+        <p className="mt-3 rounded-[5px] bg-[#eaf4df] px-2.5 py-2 text-xs font-semibold leading-5 text-[#46632e]">
+          Top {result.selection?.requestedCount ?? 15} report drivers from {result.selection?.candidateCount ?? result.candidatePool?.length ?? 0} workbook candidates
+        </p>
+      )}
 
       {summary && (
         <div className="mt-3 grid grid-cols-3 gap-1 text-center text-[11px] font-bold">
           <span className="rounded-[4px] bg-[#e0f5e6] px-2 py-1 text-[#16734a]">
-            {summary.strong} strong
+            {summary.strong} {result.workflow === "excel-sources" ? "supported" : "strong"}
           </span>
           <span className="rounded-[4px] bg-[#fff0bf] px-2 py-1 text-[#8a5d00]">
             {summary.checked} checked
           </span>
           <span className="rounded-[4px] bg-[#ffe3e1] px-2 py-1 text-[#a33d35]">
-            {summary.limited} limited
+            {summary.limited} {result.workflow === "excel-sources" ? "unavailable" : "limited"}
           </span>
         </div>
       )}
@@ -2540,11 +2819,13 @@ function ViewToggle({
 function SlideRail({
   drivers,
   evidenceById,
+  ranked,
   activeSlideIndex,
   onSlideChange,
 }: {
   drivers: EsgDriver[];
   evidenceById: Map<string, EsgDriverSource>;
+  ranked: boolean;
   activeSlideIndex: number;
   onSlideChange: (index: number) => void;
 }) {
@@ -2568,6 +2849,7 @@ function SlideRail({
               key={driver.id}
               type="button"
               onClick={() => onSlideChange(index)}
+              data-testid={`driver-slide-${driver.id}`}
               className={`group grid w-full grid-cols-[28px_minmax(0,1fr)_auto] gap-2 rounded-[5px] border px-2 py-2 text-left transition ${
                 selected
                   ? "border-[#172019] bg-[#172019] text-white"
@@ -2598,9 +2880,15 @@ function SlideRail({
                   className={`font-mono text-[10px] font-bold ${
                     selected ? "text-[#d6ff66]" : "text-[#667468]"
                   }`}
-                  title="Confidence"
+                  title={ranked ? "Relevance score" : driver.generationStatus ? "Update status" : "Confidence"}
                 >
-                  {Math.round(driver.confidence)}%
+                  {ranked
+                    ? formatRelevanceScore(driver.relevance)
+                    : driver.generationStatus
+                      ? driver.generationStatus === "verified"
+                        ? "Supported"
+                        : "Unavailable"
+                      : `${Math.round(driver.confidence)}%`}
                 </span>
                 <StatusDot review={review} />
               </span>
@@ -2618,6 +2906,7 @@ function DeckCanvas({
   activeReview,
   activeSlideIndex,
   drivers,
+  ranked,
   isRtl,
   showEmbeddedEvidence = true,
   onSlideChange,
@@ -2627,6 +2916,7 @@ function DeckCanvas({
   activeReview: AccuracyReview;
   activeSlideIndex: number;
   drivers: EsgDriver[];
+  ranked: boolean;
   isRtl: boolean;
   showEmbeddedEvidence?: boolean;
   onSlideChange: (index: number) => void;
@@ -2641,7 +2931,7 @@ function DeckCanvas({
         <div>
           <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#627166]">
             <BookOpen className="h-4 w-4" />
-            Driver {activeSlideIndex + 1} of {drivers.length}
+            {ranked ? "Rank" : "Driver"} {activeSlideIndex + 1} of {drivers.length}
           </div>
           <p className="mt-1 text-sm text-[#68756c]">
             {activeDriver.driverSection} / {activeDriver.driverType}
@@ -2676,11 +2966,15 @@ function DeckCanvas({
               <SlideChip>{activeDriver.driverSection}</SlideChip>
               <SlideChip>{activeDriver.driverType}</SlideChip>
               {activeDriver.driverLogicId && (
-                <SlideChip>{activeDriver.driverLogicId}</SlideChip>
+                <SlideChip>{activeDriver.workbookRow ? `Excel row ${activeDriver.workbookRow}` : activeDriver.driverLogicId}</SlideChip>
               )}
             </div>
             <div className="flex flex-wrap gap-2">
-              <ConfidenceBadge value={activeDriver.confidence} />
+              {ranked ? (
+                <RelevanceBadge relevance={activeDriver.relevance} />
+              ) : (
+                !activeDriver.generationStatus && <ConfidenceBadge value={activeDriver.confidence} />
+              )}
               <AccuracyBadge review={activeReview} />
             </div>
           </div>
@@ -2698,6 +2992,8 @@ function DeckCanvas({
             {activeDriver.driverText}
           </p>
 
+          {ranked && <RelevanceBreakdown relevance={activeDriver.relevance} idSuffix="deck" />}
+
           <div className="mt-7 grid gap-5 border-t border-[#d9dfd8] pt-6 lg:grid-cols-2">
             <InfoBlock
               label="Evidence / KPI"
@@ -2712,11 +3008,12 @@ function DeckCanvas({
             />
           </div>
 
+          <DriverEvidenceBasis driver={activeDriver} />
           <div className="mt-6 rounded-[6px] bg-[#172019] p-5 text-white">
             <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.55fr)]">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#d6ff66]">
-                  Logic
+                  {activeDriver.baseline ? "Original workbook logic · unverified baseline" : "Logic"}
                 </p>
                 <p className="mt-2 text-sm leading-6 text-[#dce8df]">
                   {activeDriver.driverLogic || "Excel-style driver archetype"}
@@ -2724,11 +3021,10 @@ function DeckCanvas({
               </div>
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#d6ff66]">
-                  Source strength
+                  Update status
                 </p>
                 <p className="mt-2 text-sm leading-6 text-[#dce8df]">
-                  Evidence, source links, and confidence checks are completed before
-                  the driver is displayed.
+                  {activeDriver.generationStatus === "unavailable" ? activeDriver.statusReason : "This update passed checks against the cited source passages. Source publication dates and retrieval dates are shown separately."}
                 </p>
               </div>
             </div>
@@ -2740,7 +3036,7 @@ function DeckCanvas({
                 Source names
               </p>
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {activeDriver.keySources.slice(0, 4).map((source) => (
+                {Array.from(new Set(activeDriver.keySources)).slice(0, 4).map((source) => (
                   <span
                     key={source}
                     className="max-w-full truncate rounded-[4px] bg-[#edf2ed] px-2 py-1 text-xs font-semibold text-[#253029]"
@@ -2766,6 +3062,7 @@ function DeckCanvas({
             driver={activeDriver}
             sources={activeDriverSources}
             review={activeReview}
+            ranked={ranked}
           />
         </div>
       )}
@@ -2813,10 +3110,12 @@ function EvidenceInspector({
   driver,
   sources,
   review,
+  ranked,
 }: {
   driver: EsgDriver | null;
   sources: EsgDriverSource[];
   review: AccuracyReview | null;
+  ranked: boolean;
 }) {
   return (
     <div className="h-full bg-[#fbfcf8] p-4">
@@ -2845,13 +3144,22 @@ function EvidenceInspector({
               {driver.driverTitle}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
-              <ConfidenceBadge value={driver.confidence} />
+              {ranked ? (
+                <RelevanceBadge relevance={driver.relevance} />
+              ) : (
+                !driver.generationStatus && <ConfidenceBadge value={driver.confidence} />
+              )}
               <span className="rounded-[4px] bg-[#eef2ee] px-2 py-1 text-xs font-semibold text-[#536156]">
                 {driver.lastChecked}
               </span>
             </div>
           </div>
 
+          {ranked && <RelevanceBreakdown relevance={driver.relevance} idSuffix="inspector" />}
+          <DriverEvidenceBasis driver={driver} />
+          {driver.statusReason && <p className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{driver.statusReason}</p>}
+          {driver.baseline && <details className="rounded border border-[#d6ded7] bg-white p-3 text-sm"><summary className="cursor-pointer font-semibold">Original Excel row {driver.workbookRow} · unverified baseline</summary><p className="mt-2 whitespace-pre-wrap">{driver.baseline.logic}</p><p className="mt-2 whitespace-pre-wrap">{driver.baseline.evidenceKpi}</p><p className="mt-2">{driver.baseline.keySources}</p></details>}
+          {driver.citations?.map((citation, index) => <blockquote key={`${citation.passageId}-${index}`} className="border-l-2 border-[#91b268] bg-white p-3 text-sm leading-6"><p dir="auto">{citation.quote}</p><footer className="mt-2 text-xs text-[#68756c]">{sources.find((s) => s.id === citation.sourceId)?.title} · {citation.location}</footer></blockquote>)}
           <SourceDetailGrid sources={sources} compact />
         </div>
       ) : (
@@ -2864,15 +3172,25 @@ function EvidenceInspector({
   );
 }
 
+function DriverEvidenceBasis({ driver }: { driver: EsgDriver }) {
+  if (!driver.evidenceStatus) return null;
+  return <div className="mt-3 rounded border border-[#d9dfd8] bg-[#f7faf6] p-3 text-xs leading-5 text-[#536156]">
+    <p className="font-semibold">{EVIDENCE_STATUS_LABELS[driver.evidenceStatus]}{driver.evidenceDate ? ` · ${driver.evidenceDate}` : ''}</p>
+    {driver.evidenceLimitation && <p className="mt-1" dir="auto">{driver.evidenceLimitation}</p>}
+  </div>;
+}
+
 function DriversMatrix({
   drivers,
   evidenceById,
+  ranked,
   expandedDriverId,
   isRtl,
   onExpandedDriverChange,
 }: {
   drivers: EsgDriver[];
   evidenceById: Map<string, EsgDriverSource>;
+  ranked: boolean;
   expandedDriverId: string | null;
   isRtl: boolean;
   onExpandedDriverChange: (driverId: string | null) => void;
@@ -2888,18 +3206,33 @@ function DriversMatrix({
           <table className="min-w-[1500px] divide-y divide-[#dce3dc] text-sm">
             <thead className="bg-[#172019] text-white">
               <tr>
-                {[
-                  "Section",
-                  "Type",
-                  "Title",
-                  "Driver Text",
-                  "Relevance",
-                  "Evidence/KPI",
-                  "Sources",
-                  "Links",
-                  "Confidence",
-                  "Checked",
-                ].map((header) => (
+                {(ranked
+                  ? [
+                      "Rank",
+                      "Section",
+                      "Type",
+                      "Title",
+                      "Driver Text",
+                      "Relevance",
+                      "Evidence/KPI",
+                      "Sources",
+                      "Links",
+                      "Update status",
+                      "Checked",
+                    ]
+                  : [
+                      "Section",
+                      "Type",
+                      "Title",
+                      "Driver Text",
+                      "Relevance",
+                      "Evidence/KPI",
+                      "Sources",
+                      "Links",
+                      "Update status",
+                      "Checked",
+                    ]
+                ).map((header) => (
                   <th
                     key={header}
                     className="px-3 py-3 text-left text-[11px] font-bold uppercase tracking-[0.1em] text-[#d6ff66]"
@@ -2910,13 +3243,18 @@ function DriversMatrix({
               </tr>
             </thead>
             <tbody className="divide-y divide-[#e5ebe5]">
-              {drivers.map((driver) => {
+              {drivers.map((driver, index) => {
                 const expanded = expandedDriverId === driver.id;
                 const sources = getDriverSources(driver, evidenceById);
 
                 return (
                   <Fragment key={driver.id}>
                     <tr className="align-top hover:bg-[#f7faf6]">
+                      {ranked && (
+                        <td className="w-16 px-3 py-3 align-top font-mono text-lg font-bold text-[#172019]">
+                          {index + 1}
+                        </td>
+                      )}
                       <td className="w-44 px-3 py-3 font-semibold text-[#172019]">
                         <button
                           type="button"
@@ -2955,17 +3293,26 @@ function DriversMatrix({
                         className="w-[260px] px-3 py-3 leading-6 text-[#536156]"
                         dir={isRtl ? "rtl" : "ltr"}
                       >
-                        {driver.countrySectorRelevance}
+                        {ranked && <RelevanceBadge relevance={driver.relevance} />}
+                        <span className={ranked ? "mt-2 block" : ""}>
+                          {ranked && (
+                            <span className="mb-1 block text-[10px] font-bold uppercase tracking-[0.1em] text-[#75857a]">
+                              Country / sector context
+                            </span>
+                          )}
+                          {driver.countrySectorRelevance}
+                        </span>
                       </td>
                       <td
                         className="w-64 px-3 py-3 leading-6 text-[#344139]"
                         dir={isRtl ? "rtl" : "ltr"}
                       >
                         {driver.evidenceKpi}
+                        <DriverEvidenceBasis driver={driver} />
                       </td>
                       <td className="w-52 px-3 py-3">
                         <div className="flex flex-wrap gap-1.5">
-                          {driver.keySources.slice(0, 4).map((source) => (
+                          {Array.from(new Set(driver.keySources)).slice(0, 4).map((source) => (
                             <span
                               key={source}
                               className="rounded-[4px] bg-[#eef2ee] px-2 py-1 text-xs font-semibold text-[#536156]"
@@ -2979,7 +3326,11 @@ function DriversMatrix({
                         <SourceLinkList driver={driver} />
                       </td>
                       <td className="w-28 px-3 py-3">
-                        <ConfidenceBadge value={driver.confidence} />
+                        {ranked || driver.generationStatus ? (
+                          <AccuracyBadge review={getAccuracyReview(driver, sources)} />
+                        ) : (
+                          <ConfidenceBadge value={driver.confidence} />
+                        )}
                       </td>
                       <td className="w-28 px-3 py-3 text-[#536156]">
                         {driver.lastChecked}
@@ -2987,7 +3338,13 @@ function DriversMatrix({
                     </tr>
                     {expanded && (
                       <tr className="bg-[#f7faf6]">
-                        <td colSpan={10} className="px-4 py-4">
+                        <td colSpan={ranked ? 11 : 10} className="px-4 py-4">
+                          {ranked && (
+                            <RelevanceBreakdown
+                              relevance={driver.relevance}
+                              idSuffix={`matrix-${driver.id}`}
+                            />
+                          )}
                           <SourceDetailGrid sources={sources} />
                         </td>
                       </tr>
@@ -3115,9 +3472,10 @@ function StatusDot({ review }: { review: AccuracyReview }) {
 }
 
 function SourceLinkList({ driver }: { driver: EsgDriver }) {
+  const links = Array.from(new Set(driver.sourceLinks)).slice(0, 2);
   return (
     <div className="mt-2 space-y-1" dir="ltr">
-      {driver.sourceLinks.slice(0, 2).map((link, index) => (
+      {links.map((link, index) => (
         <a
           key={`${driver.id}-${link}`}
           href={link}
@@ -3196,10 +3554,16 @@ function SourceDetail({
           </span>
           <span className="min-w-0">
             <span className="block text-sm font-bold leading-5 text-[#172019]">
-              [{source.id}] {source.title}
+              {source.passages ? source.title : `[${source.id}] ${source.title}`}
             </span>
             <span className="mt-1 block text-xs text-[#68756c]">
-              {source.domain} - Updated {sourceDisplayDate(source)}
+              {source.domain} · {sourceDisplayDate(source)}
+              <span className="block">Retrieved {formatDate(source.retrievedAt)}</span>
+              {source.sourceDate && (
+                <span className="mt-1 block leading-4 text-[#536156]">
+                  Date evidence: “{source.sourceDate.evidence}” · {source.sourceDate.location}
+                </span>
+              )}
             </span>
             {source.approvalId && (
               <span className="mt-2 inline-flex rounded-[4px] bg-[#e0f5e6] px-2 py-1 text-[11px] font-bold text-[#16734a]">
@@ -3243,7 +3607,7 @@ function SourceDetail({
         </p>
       </div>
 
-      <div
+      {!source.passages && <div
         className={`grid grid-cols-3 gap-1 text-center text-[11px] font-bold text-[#536156] ${
           expanded ? "border-t border-[#edf2ed] p-3 pt-2" : "px-3 pb-3"
         }`}
@@ -3257,7 +3621,7 @@ function SourceDetail({
         <span className="rounded-[4px] bg-[#eef2ee] px-2 py-1">
           R {source.relevanceScore}
         </span>
-      </div>
+      </div>}
     </div>
   );
 }
@@ -3266,15 +3630,28 @@ function getDriverSources(
   driver: EsgDriver,
   evidenceById: Map<string, EsgDriverSource>,
 ): EsgDriverSource[] {
-  const byRef = driver.sourceRefs
-    .map((ref) => evidenceById.get(ref))
-    .filter((source): source is EsgDriverSource => Boolean(source));
+  const byRef = uniqueSourcesById(
+    driver.sourceRefs
+      .map((ref) => evidenceById.get(ref))
+      .filter((source): source is EsgDriverSource => Boolean(source)),
+  );
 
   if (byRef.length > 0) return byRef;
 
-  return Array.from(evidenceById.values()).filter((source) =>
-    driver.sourceLinks.includes(source.url),
+  return uniqueSourcesById(
+    Array.from(evidenceById.values()).filter((source) =>
+      driver.sourceLinks.includes(source.url),
+    ),
   );
+}
+
+function uniqueSourcesById(sources: EsgDriverSource[]): EsgDriverSource[] {
+  const seen = new Set<string>();
+  return sources.filter((source) => {
+    if (seen.has(source.id)) return false;
+    seen.add(source.id);
+    return true;
+  });
 }
 
 function buildAccuracySummary(
@@ -3304,10 +3681,12 @@ function buildAccuracySummary(
   return summary;
 }
 
-function getAccuracyReview(
+export function getAccuracyReview(
   driver: EsgDriver,
   sources: EsgDriverSource[],
 ): AccuracyReview {
+  if (driver.generationStatus === 'unavailable') return { level: 'limited', label: 'Update unavailable', reasons: driver.validationWarnings?.length ? driver.validationWarnings : [driver.statusReason || 'No supported update available.'] };
+  if (driver.generationStatus === 'verified') return { level: 'strong', label: 'Source supported', reasons: [] };
   const reasons: string[] = [];
   reasons.push(...(driver.validationWarnings || []));
   const hasGenericSource = driver.keySources.some(isGenericSourceLabel);
@@ -3402,23 +3781,104 @@ function readableSnippet(source: EsgDriverSource): string {
 
 function isLikelyGarbled(text: string): boolean {
   const sample = text.slice(0, 700);
-  const oddChars = sample.match(/[^\w\s.,;:!?%$€£()+\-/"'&]/g)?.length || 0;
-  const letters = sample.match(/[a-z]/gi)?.length || 0;
+  const oddChars = sample.match(new RegExp("[^\\p{L}\\p{N}\\p{P}\\p{S}\\s]", "gu"))?.length || 0;
+  const letters = sample.match(new RegExp("\\p{L}", "gu"))?.length || 0;
   const spaces = sample.match(/\s/g)?.length || 0;
   const replacement = sample.includes("�");
 
   return replacement || oddChars > sample.length * 0.16 || letters < 30 || spaces < 8;
 }
 
-function sourceDisplayDate(source: EsgDriverSource): string {
-  return (
-    source.updatedDate ||
-    source.lastModified ||
-    source.publishedDate ||
-    source.retrievedAt.slice(0, 10) ||
-    "unknown"
-  );
+export function sourceDisplayDate(source: EsgDriverSource): string {
+  if (source.sourceDate?.value) {
+    return `${sourceDateKindLabel(source.sourceDate.kind)} ${formatSourceDate(source.sourceDate.value)}`;
+  }
+  // Legacy packs may only carry these raw fields. Preserve their precision and
+  // never use HTTP modification metadata as a publication date.
+  if (source.updatedDate) return `Updated ${formatSourceDate(source.updatedDate)}`;
+  if (source.publishedDate) return `Published ${formatSourceDate(source.publishedDate)}`;
+  return "Publication date not stated";
 }
+
+function sourceDateKindLabel(kind: NonNullable<EsgDriverSource["sourceDate"]>["kind"]): string {
+  switch (kind) {
+    case "updated":
+      return "Updated";
+    case "version-issued":
+      return "Version issued";
+    case "published":
+    default:
+      return "Published";
+  }
+}
+
+function formatSourceDate(value: string): string {
+  const cleaned = value.trim();
+  if (!cleaned) return "date not stated";
+  // Source dates are written evidence. Do not coerce year/month values into a
+  // JavaScript Date, which would invent a day and can shift the timezone.
+  return cleaned;
+}
+
+function clampRating(value: unknown): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, Math.min(5, Math.round(parsed)));
+}
+
+function clampRelevanceScore(value: unknown): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, Math.min(100, Math.round(parsed)));
+}
+
+function relevanceBandForScore(score: number): "high" | "medium" | "low" {
+  if (score >= 75) return "high";
+  if (score >= 50) return "medium";
+  return "low";
+}
+
+function formatRelevanceScore(relevance?: DriverRelevance): string {
+  return relevance ? `${clampRelevanceScore(relevance.score)}/100` : "Unscored";
+}
+
+function relevanceDimensionLabel(
+  dimension: keyof DriverRelevance["dimensions"],
+): string {
+  switch (dimension) {
+    case "businessImpact":
+      return "Business impact";
+    default:
+      return dimension.charAt(0).toUpperCase() + dimension.slice(1);
+  }
+}
+
+function selectionExclusionLabel(
+  reason: NonNullable<DriverSelectionLike["excluded"]>[number]["reason"],
+): string {
+  switch (reason) {
+    case "unavailable":
+      return "Unavailable: no source-supported update was published.";
+    case "unscored":
+      return "Unscored: no relevance assessment was available.";
+    case "below-threshold":
+      return "Below threshold: relevance score was below 50.";
+    case "duplicate":
+      return "Duplicate candidate excluded from the report.";
+    case "below-cutoff":
+      return "Below cutoff: ranked outside the requested report size.";
+    default:
+      return "Excluded from the published report.";
+  }
+}
+
+type DriverSelectionLike = {
+  excluded: Array<{
+    reason: "unavailable" | "unscored" | "below-threshold" | "duplicate" | "below-cutoff";
+    driverId: string;
+    duplicateOf?: string;
+  }>;
+};
 
 function sourceLinkLabel(link: string): string {
   const host = getHostname(link);
@@ -3435,6 +3895,11 @@ function getHostname(link: string): string {
 
 function uniqueStrings(values: string[]): string[] {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function toOptionalCount(value: unknown): number | undefined {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
 function averageConfidence(drivers: EsgDriver[]): number {
@@ -3518,4 +3983,156 @@ function formatActivityTime(value: string): string {
 
 function isRtlLanguage(language: string): boolean {
   return /arabic|ar\b|hebrew|urdu|persian|farsi/i.test(language);
+}
+
+function hasRankedCandidateGap(result: EsgDriverResult): boolean {
+  if (result.selection?.policyVersion !== RANKED_SELECTION_POLICY) return false;
+  const excluded = result.selection.excluded || [];
+  if (excluded.some(
+    (item) => item.reason === "unavailable" || item.reason === "unscored",
+  )) {
+    return true;
+  }
+
+  const publishedIds = new Set(result.selection.publishedDriverIds || []);
+  return (result.candidatePool || []).some(
+    (candidate) =>
+      candidate.generationStatus === "unavailable" && !publishedIds.has(candidate.id),
+  );
+}
+
+function RelevanceBadge({ relevance }: { relevance?: DriverRelevance }) {
+  if (!relevance) {
+    return (
+      <span className="inline-flex items-center rounded-[4px] bg-[#eef2ee] px-2 py-1 text-xs font-bold text-[#68756c]">
+        Relevance unscored
+      </span>
+    );
+  }
+
+  const score = clampRelevanceScore(relevance.score);
+  const band = relevance.band || relevanceBandForScore(score);
+  const classes =
+    band === "high"
+      ? "bg-[#dff2c7] text-[#31551c]"
+      : band === "medium"
+        ? "bg-[#fff0bf] text-[#805b00]"
+        : "bg-[#e8ece8] text-[#536156]";
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-[4px] px-2 py-1 text-xs font-bold ${classes}`}
+      aria-label={`Relevance score ${score} out of 100, ${band}`}
+    >
+      <span className="font-mono">{score}/100</span>
+      <span className="uppercase tracking-[0.08em]">{band}</span>
+    </span>
+  );
+}
+
+function RelevanceBreakdown({
+  relevance,
+  idSuffix = "default",
+}: {
+  relevance?: DriverRelevance;
+  idSuffix?: string;
+}) {
+  if (!relevance) {
+    return (
+      <div className="rounded-[6px] border border-dashed border-[#cfd8d0] bg-[#f7faf6] px-3 py-2 text-xs text-[#68756c]">
+        Relevance assessment unavailable for this driver.
+      </div>
+    );
+  }
+
+  const score = clampRelevanceScore(relevance.score);
+  const dimensions = Object.entries(RELEVANCE_WEIGHTS) as Array<[
+    keyof DriverRelevance["dimensions"],
+    number,
+  ]>;
+  const fingerprint = String(relevance.evidenceFingerprint || "driver");
+  const panelId = `relevance-breakdown-${fingerprint.slice(0, 16).replace(/[^a-z0-9_-]/gi, "-")}-${idSuffix.replace(/[^a-z0-9_-]/gi, "-")}`;
+
+  return (
+    <details className="mt-5 overflow-hidden rounded-[7px] border border-[#cdddbb] bg-[#f3f8ed]" data-testid="relevance-breakdown">
+      <summary
+        className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-[#31551c]"
+        aria-controls={panelId}
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          <Sparkles className="h-4 w-4 flex-none" />
+          <span>Why selected · relevance score {score}/100</span>
+        </span>
+        <ChevronDown className="h-4 w-4 flex-none transition-transform [[open]>&]:rotate-180" />
+      </summary>
+      <div id={panelId} className="border-t border-[#dce9ce] px-4 py-4">
+        <p className="text-sm leading-6 text-[#344139]">{relevance.rationale}</p>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          {dimensions.map(([dimension, weight]) => {
+            const assessment = relevance.dimensions[dimension];
+            const rating = clampRating(assessment?.rating);
+            const points = Math.round((rating * weight) / 5);
+            return (
+              <div key={dimension} className="rounded-[5px] border border-[#dce9ce] bg-white/75 px-3 py-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-xs font-bold uppercase tracking-[0.08em] text-[#536156]">
+                    {relevanceDimensionLabel(dimension)}
+                  </p>
+                  <span className="flex-none font-mono text-xs font-bold text-[#31551c]">
+                    {points}/{weight} pts
+                  </span>
+                </div>
+                <p className="mt-1 text-[11px] font-semibold text-[#68756c]">
+                  Rating {rating}/5 · {rating} × {weight} ÷ 5
+                </p>
+                <p className="mt-1.5 text-xs leading-5 text-[#344139]">
+                  {assessment?.reason || "No explanation supplied."}
+                </p>
+                {assessment?.passageIds?.length > 0 && (
+                  <p className="mt-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-[#75857a]">
+                    Evidence passages: {assessment.passageIds.join(", ")}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[10px] font-semibold text-[#68756c]">
+          <span>Policy {relevance.policyVersion}</span>
+          <span>Assessed {formatSourceDate(relevance.assessedAt)}</span>
+          <span>Relevance score only · source support is shown separately</span>
+        </div>
+      </div>
+    </details>
+  );
+}
+
+function canRetryDriverResult(input: {
+  result: EsgDriverResult;
+  status: EsgDriverJobStatus | null | undefined;
+  jobId: string;
+  resultJobId: string;
+  resumable: boolean;
+}): boolean {
+  if (
+    input.status !== "done" ||
+    !input.jobId ||
+    input.jobId !== input.resultJobId
+  ) {
+    return false;
+  }
+
+  if (input.result.selection?.policyVersion === RANKED_SELECTION_POLICY) {
+    // Ranked reports may be complete at 15 published drivers while still
+    // retaining unavailable or unscored workbook candidates for a retry.
+    return hasRankedCandidateGap(input.result);
+  }
+
+  return canResumePartialDriverJob({
+    completion: input.result.completion,
+    status: input.status,
+    jobId: input.jobId,
+    resultJobId: input.resultJobId,
+    resumable: input.resumable,
+  });
 }

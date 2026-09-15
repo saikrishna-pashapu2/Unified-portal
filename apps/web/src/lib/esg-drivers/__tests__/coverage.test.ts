@@ -20,7 +20,8 @@ describe("ESG driver evidence coverage", () => {
   it.each([
     ["Banking", "Banking"],
     ["Financial services", "Banking"],
-    ["Cement", "Construction"],
+    ["Energy", "Energy"],
+    ["Mining and Metals", "Mining & Metals"],
     ["Property", "Real Estate"],
     ["Oil and gas", "Oil & Gas"],
   ])("canonicalizes the supported sector alias %s", (input, expected) => {
@@ -35,15 +36,17 @@ describe("ESG driver evidence coverage", () => {
 
   it("publishes stable UI options", () => {
     expect(ESG_DRIVER_COUNTRY_OPTIONS).toEqual([
+      "Kazakhstan",
+      "Uzbekistan",
       "UAE",
       "Saudi Arabia",
-      "Kazakhstan",
     ]);
     expect(ESG_DRIVER_SECTOR_OPTIONS).toEqual([
       "Banking",
-      "Construction",
-      "Real Estate",
+      "Energy",
       "Oil & Gas",
+      "Mining & Metals",
+      "Real Estate",
     ]);
   });
 });

@@ -22,6 +22,9 @@ export const MAX_WORKBOOK_UPLOAD_BYTES = 5 * 1024 * 1024;
 export const MAX_WORKBOOK_DATA_ROWS = 500;
 export const MAX_WORKBOOK_COLUMNS = 128;
 export const MAX_WORKBOOK_SHEETS = 5;
+// Generated reports may add a candidate audit alongside source availability.
+// Upload parsing keeps its separate five-sheet limit.
+export const MAX_WORKBOOK_EXPORT_SHEETS = 6;
 export const MAX_WORKBOOK_CELL_CHARS = 20_000;
 export const MAX_WORKBOOK_TOTAL_CELLS = 100_000;
 export const MAX_WORKBOOK_TOTAL_TEXT_CHARS = 2_000_000;
@@ -142,9 +145,9 @@ export async function parseWorkbookBuffer(buffer: Buffer): Promise<ParsedWorkboo
 export async function writeWorkbookBuffer(
   sheets: WorkbookSheetInput[],
 ): Promise<Buffer> {
-  if (sheets.length < 1 || sheets.length > MAX_WORKBOOK_SHEETS) {
+  if (sheets.length < 1 || sheets.length > MAX_WORKBOOK_EXPORT_SHEETS) {
     throw new WorkbookSecurityError(
-      `Workbook must contain between 1 and ${MAX_WORKBOOK_SHEETS} sheets`,
+      `Workbook must contain between 1 and ${MAX_WORKBOOK_EXPORT_SHEETS} sheets`,
     );
   }
 
@@ -191,6 +194,7 @@ function inputLimits(): WorkbookLimits {
 function outputLimits(): WorkbookLimits {
   return {
     ...inputLimits(),
+    maxSheets: MAX_WORKBOOK_EXPORT_SHEETS,
     maxRows: 2_000,
     maxTotalCells: 250_000,
     maxTotalTextChars: 5_000_000,

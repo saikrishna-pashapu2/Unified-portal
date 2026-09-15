@@ -5,6 +5,16 @@ import * as cheerio from "cheerio";
 import { Agent } from "undici";
 import { env } from "@/lib/config/env";
 import { getPdfJsStandardFontDataUrl } from "@/lib/pdfjs-node";
+import { assertWorkbookUrlAllowed } from './workbook-types';
+import { extractExcelHtml, extractExcelPdfDocument, MAX_EXCEL_SOURCE_CHARS } from './excel-extraction';
+import {
+  documentDates,
+  extractHtmlSourceDateMetadata,
+  extractSourceDate,
+  sourceDocumentTitle,
+  type SourceDateEvidence,
+  type SourceDocumentDate,
+} from './excel-source-metadata';
 import {
   buildLogicSearchQueries,
   selectDriverLogics,
@@ -447,11 +457,13 @@ export function extractBestDate(input: {
   publishedDate?: string | null;
   updatedDate?: string | null;
   lastModified?: string | null;
+  sourceDate?: Pick<SourceDateEvidence, 'value'> | null;
   snippet?: string;
   title?: string;
   url?: string;
 }): string | null {
   const candidates = [
+    input.sourceDate?.value,
     input.updatedDate,
     input.publishedDate,
     input.lastModified,
@@ -1639,6 +1651,7 @@ async function hydrateSearchItem(
   let contentSnippet = "";
   let publishedDate: string | null = extractDateFromPagemap(item.pagemap, "published");
   let updatedDate: string | null = extractDateFromPagemap(item.pagemap, "updated");
+  let sourceDate: SourceDateEvidence | null = null;
   let lastModified: string | null = null;
   let finalUrl: string | null = null;
   let retrievalStatus: EsgDriverSource["retrievalStatus"] = "failed";
@@ -1662,6 +1675,7 @@ async function hydrateSearchItem(
     if (fetched.publishedDate) publishedDate = fetched.publishedDate;
     if (fetched.updatedDate) updatedDate = fetched.updatedDate;
     if (fetched.lastModified) lastModified = fetched.lastModified;
+    if (fetched.sourceDate) sourceDate = fetched.sourceDate;
     finalUrl = fetched.finalUrl;
     retrievalStatus = "retrieved";
     evidenceProvenance = "retrieved-page";
@@ -1674,6 +1688,7 @@ async function hydrateSearchItem(
     publishedDate,
     updatedDate,
     lastModified,
+    sourceDate,
   });
 
   const authorityScore = scoreAuthority(
@@ -1724,6 +1739,7 @@ export async function fetchSourceSnippet(
   publishedDate: string | null;
   updatedDate: string | null;
   lastModified: string | null;
+  sourceDate?: SourceDateEvidence | null;
   finalUrl: string;
 }> {
   return withActiveResearchTime(() =>
@@ -1741,6 +1757,7 @@ async function fetchSourceSnippetActive(
   publishedDate: string | null;
   updatedDate: string | null;
   lastModified: string | null;
+  sourceDate: SourceDateEvidence | null;
   finalUrl: string;
 }> {
   const initialRecord = explicitRecord || matchApprovedSource(url);
@@ -1823,16 +1840,18 @@ async function fetchSourceSnippetActive(
           isPdfResponse
         ) {
           if (!looksLikePdf(buffer)) throw new Error("Source response was not a valid PDF.");
-          const contentSnippet = await extractPdfText(
+          const extracted = await extractPdfText(
             buffer,
             explicitRecord?.catalogPageReferences || [],
           );
+          const contentSnippet = extracted.text;
           assertUsableRetrievedText(contentSnippet);
           return {
             contentSnippet,
             publishedDate: null,
             updatedDate: null,
             lastModified,
+            sourceDate: extractSourceDate({ text: contentSnippet, pdfTitle: extracted.title }),
             finalUrl: currentUrl.toString(),
           };
         }
@@ -1845,6 +1864,7 @@ async function fetchSourceSnippetActive(
             publishedDate: null,
             updatedDate: null,
             lastModified,
+            sourceDate: extractSourceDate({ text: contentSnippet }),
             finalUrl: currentUrl.toString(),
           };
         }
@@ -1878,6 +1898,7 @@ async function fetchSourceSnippetForApprovedRecord(
   publishedDate: string | null;
   updatedDate: string | null;
   lastModified: string | null;
+  sourceDate: SourceDateEvidence | null;
   finalUrl: string;
 }> {
   return fetchSourceSnippetActive(url, record.id, dependencies, record);
@@ -1888,7 +1909,12 @@ export interface CatalogEvidenceFetchResult {
   publishedDate: string | null;
   updatedDate: string | null;
   lastModified: string | null;
+  sourceDate?: SourceDateEvidence | null;
   finalUrl: string;
+  title?: string;
+  documentDates?: SourceDocumentDate[];
+  retrievalMethod?: 'direct' | 'tavily-extract';
+  directRetrievalError?: string;
 }
 
 /**
@@ -1901,11 +1927,13 @@ export interface CatalogEvidenceFetchResult {
  */
 export async function fetchCatalogEvidence(
   url: string,
-  options: { pageReferences?: string[] } = {},
+  options: { pageReferences?: string[]; allowedUrls?: readonly string[]; searchableText?: boolean } = {},
   dependencies: ResearchNetworkDependencies = {},
 ): Promise<CatalogEvidenceFetchResult> {
   const fetchImpl = dependencies.fetchImpl || globalThis.fetch;
   const lookupImpl = dependencies.lookupImpl || defaultLookup;
+  const allowedUrls = options.allowedUrls || [url];
+  assertWorkbookUrlAllowed(url, allowedUrls);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   let currentUrl = new URL(url);
@@ -1916,6 +1944,7 @@ export async function fetchCatalogEvidence(
       redirectCount <= MAX_SOURCE_REDIRECTS;
       redirectCount += 1
     ) {
+      assertWorkbookUrlAllowed(currentUrl.href, allowedUrls);
       const addresses = await resolveSafePublicUrl(currentUrl, { lookupImpl });
       const dispatcher = createPinnedDispatcher(addresses);
       try {
@@ -1965,37 +1994,45 @@ export async function fetchCatalogEvidence(
 
         if (isPdfResponse) {
           if (!looksLikePdf(buffer)) throw new Error("Source response was not a valid PDF.");
-          const contentSnippet = await extractPdfText(
-            buffer,
-            options.pageReferences || [],
-          );
+          const document = options.searchableText ? await extractExcelPdfDocument(buffer) : undefined;
+          const extracted = document || await extractPdfText(buffer, options.pageReferences || []);
+          const contentSnippet = extracted.text;
           assertUsableRetrievedText(contentSnippet);
           return {
             contentSnippet,
             publishedDate: null,
             updatedDate: null,
             lastModified,
+            sourceDate: extractSourceDate({ text: contentSnippet, pdfTitle: extracted.title }),
             finalUrl: currentUrl.toString(),
+            title: sourceDocumentTitle(contentSnippet, undefined, extracted.title),
+            documentDates: documentDates(contentSnippet),
+            retrievalMethod: 'direct',
           };
         }
         if (contentType === "text/plain") {
-          const contentSnippet = cleanText(buffer.toString("utf8")).slice(
-            0,
-            EVIDENCE_SNIPPET_MAX_CHARS,
-          );
+          const text = buffer.toString('utf8');
+          if (options.searchableText && text.length > MAX_EXCEL_SOURCE_CHARS) throw new Error('Source exceeds the searchable text limit (500,000 characters).');
+          const contentSnippet = options.searchableText ? text : cleanText(text).slice(0, EVIDENCE_SNIPPET_MAX_CHARS);
           assertUsableRetrievedText(contentSnippet);
           return {
             contentSnippet,
             publishedDate: null,
             updatedDate: null,
             lastModified,
+            sourceDate: extractSourceDate({ text: contentSnippet }),
             finalUrl: currentUrl.toString(),
           };
         }
 
-        const parsed = parseHtmlSource(buffer.toString("utf8"), lastModified);
+        const html = buffer.toString('utf8');
+        if (options.searchableText && /_Incapsula_Resource|\/cdn-cgi\/challenge-platform\/|cf-chl-/i.test(html)) {
+          throw new Error('Source returned a browser verification challenge instead of readable evidence.');
+        }
+        const parsed = parseHtmlSource(html, lastModified);
+        if (options.searchableText) parsed.contentSnippet = extractExcelHtml(html);
         assertUsableRetrievedText(parsed.contentSnippet);
-        return { ...parsed, finalUrl: currentUrl.toString() };
+        return { ...parsed, finalUrl: currentUrl.toString(), title: sourceDocumentTitle(parsed.contentSnippet, html), documentDates: documentDates(parsed.contentSnippet), retrievalMethod: 'direct' };
       } finally {
         await dispatcher.close();
       }
@@ -2304,24 +2341,14 @@ function parseHtmlSource(
   publishedDate: string | null;
   updatedDate: string | null;
   lastModified: string | null;
+  sourceDate: SourceDateEvidence | null;
 } {
   const $ = cheerio.load(html);
   $("script, style, noscript, svg, nav, footer, header, form").remove();
 
-  const publishedDate = normalizeDate(
-    $('meta[property="article:published_time"]').attr("content") ||
-      $('meta[name="date"]').attr("content") ||
-      $('meta[name="dc.date"]').attr("content") ||
-      $("time[datetime]").first().attr("datetime") ||
-      null,
-  );
-
-  const updatedDate = normalizeDate(
-    $('meta[property="article:modified_time"]').attr("content") ||
-      $('meta[name="last-modified"]').attr("content") ||
-      $('meta[name="updated"]').attr("content") ||
-      null,
-  );
+  const pageDates = extractHtmlSourceDateMetadata(html);
+  const publishedDate = pageDates.publishedDate;
+  const updatedDate = pageDates.updatedDate;
 
   const parts: string[] = [];
   $("main p, article p, p, li, h1, h2, h3").each((_, element) => {
@@ -2339,13 +2366,14 @@ function parseHtmlSource(
     publishedDate,
     updatedDate,
     lastModified,
+    sourceDate: extractSourceDate({ text: selected.join(" "), html }),
   };
 }
 
 async function extractPdfText(
   buffer: Buffer,
   pageReferences: readonly string[],
-): Promise<string> {
+): Promise<{ text: string; title?: string }> {
   const globalScope = globalThis as any;
   globalScope.DOMMatrix ||= class {};
   globalScope.Path2D ||= class {};
@@ -2377,7 +2405,13 @@ async function extractPdfText(
       if (cleaned) pages.push(`Page ${pageNumber}: ${cleaned.slice(0, 1400)}`);
       page.cleanup();
     }
-    return cleanText(pages.join(" ")).slice(0, 7000);
+    const metadata = await document.getMetadata().catch(() => null);
+    const title = (metadata?.info as { Title?: unknown } | undefined)?.Title;
+    const text = cleanText(pages.join(" ")).slice(0, 7000);
+    return {
+      text,
+      ...(typeof title === "string" && title.trim() ? { title: title.trim() } : {}),
+    };
   } finally {
     await document.destroy();
   }

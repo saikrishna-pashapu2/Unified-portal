@@ -1,84 +1,29 @@
-export const ESG_DRIVER_COUNTRY_OPTIONS = [
-  "UAE",
-  "Saudi Arabia",
-  "Kazakhstan",
-] as const;
+import options from './workbook-options.generated.json';
 
-export const ESG_DRIVER_SECTOR_OPTIONS = [
-  "Banking",
-  "Construction",
-  "Real Estate",
-  "Oil & Gas",
-] as const;
+export const ESG_DRIVER_COUNTRY_OPTIONS = options.countries;
+export const ESG_DRIVER_SECTOR_OPTIONS = options.sectors;
+export const ESG_DRIVER_WORKBOOK_OPTIONS = options;
+export type SupportedEsgDriverCountry = string;
+export type SupportedEsgDriverSector = string;
 
-export type SupportedEsgDriverCountry =
-  (typeof ESG_DRIVER_COUNTRY_OPTIONS)[number];
-export type SupportedEsgDriverSector =
-  (typeof ESG_DRIVER_SECTOR_OPTIONS)[number];
+const normalize = (s: string) => s.trim().toLowerCase().replace(/&/g, ' and ').replace(/\s+/g, ' ');
 
-export function canonicalizeEsgDriverCountry(
-  value: string,
-): SupportedEsgDriverCountry | null {
-  const normalized = normalizeCoverageValue(value);
-
-  if (normalized === "uae" || normalized === "united arab emirates") {
-    return "UAE";
-  }
-  if (
-    normalized === "ksa" ||
-    normalized === "saudi" ||
-    normalized === "saudi arabia" ||
-    normalized === "kingdom of saudi arabia"
-  ) {
-    return "Saudi Arabia";
-  }
-  if (
-    normalized === "kazakhstan" ||
-    normalized === "republic of kazakhstan"
-  ) {
-    return "Kazakhstan";
-  }
-
-  return null;
+export function canonicalizeEsgDriverCountry(value: string): string | null {
+  const aliases: Record<string, string> = {
+    'united arab emirates': 'UAE', ksa: 'Saudi Arabia', saudi: 'Saudi Arabia',
+    'kingdom of saudi arabia': 'Saudi Arabia', 'republic of kazakhstan': 'Kazakhstan',
+    'republic of uzbekistan': 'Uzbekistan',
+  };
+  const key = normalize(value);
+  return ESG_DRIVER_COUNTRY_OPTIONS.find((s) => normalize(s) === key) || aliases[key] || null;
 }
 
-export function canonicalizeEsgDriverSector(
-  value: string,
-): SupportedEsgDriverSector | null {
-  const normalized = normalizeCoverageValue(value);
-
-  if (
-    /\b(bank|banking|financial|finance|insurance|lending|credit)\b/.test(
-      normalized,
-    )
-  ) {
-    return "Banking";
-  }
-  if (
-    /\b(construction|cement|building materials|contractor|contractors)\b/.test(
-      normalized,
-    )
-  ) {
-    return "Construction";
-  }
-  if (/\b(real estate|property|buildings?|reit)\b/.test(normalized)) {
-    return "Real Estate";
-  }
-  if (
-    /\b(oil|gas|petroleum|lng|upstream|downstream)\b/.test(normalized)
-  ) {
-    return "Oil & Gas";
-  }
-
-  return null;
+export function canonicalizeEsgDriverSector(value: string): string | null {
+  const aliases: Record<string, string> = { bank: 'Banking', 'financial services': 'Banking', property: 'Real Estate', 'mining and metal': 'Mining & Metals' };
+  const key = normalize(value);
+  return ESG_DRIVER_SECTOR_OPTIONS.find((s) => normalize(s) === key) || aliases[key] || null;
 }
 
-function normalizeCoverageValue(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/&/g, " and ")
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+export function workbookDriverCount(country: string, sector: string): number {
+  return (options.counts as Record<string, Record<string, number>>)[sector]?.[country] || 0;
 }
