@@ -1,0 +1,49 @@
+{
+  "workbook": "ESG_Drivers_September.xlsx",
+  "version": "excel-v2.cc3d4f887adc9d71",
+  "countries": [
+    "Kazakhstan",
+    "Uzbekistan",
+    "UAE",
+    "Saudi Arabia"
+  ],
+  "sectors": [
+    "Banking",
+    "Energy",
+    "Oil & Gas",
+    "Mining & Metals",
+    "Real Estate"
+  ],
+  "counts": {
+    "Banking": {
+      "Kazakhstan": 53,
+      "Uzbekistan": 49,
+      "UAE": 52,
+      "Saudi Arabia": 56
+    },
+    "Energy": {
+      "Kazakhstan": 59,
+      "Uzbekistan": 40,
+      "UAE": 49,
+      "Saudi Arabia": 51
+    },
+    "Oil & Gas": {
+      "Kazakhstan": 46,
+      "Uzbekistan": 53,
+      "UAE": 60,
+      "Saudi Arabia": 54
+    },
+    "Mining & Metals": {
+      "Kazakhstan": 59,
+      "Uzbekistan": 52,
+      "UAE": 50,
+      "Saudi Arabia": 50
+    },
+    "Real Estate": {
+      "Kazakhstan": 63,
+      "Uzbekistan": 56,
+      "UAE": 47,
+      "Saudi Arabia": 46
+    }
+  }
+}

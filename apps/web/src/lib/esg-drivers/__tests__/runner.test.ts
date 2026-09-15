@@ -112,7 +112,11 @@ describe("ESG driver checkpoint runner", () => {
 
 function checkpoint(updatedAt: string) {
   return {
-    version: 1 as const,
+    version: 2 as const,
+    workflow: "excel-sources" as const,
+    workbook: "ESG_Drivers_September.xlsx", workbookSha256: "test",
+    input: { country: "UAE", sector: "Banking", language: "English" },
+    definitions: [], allowedSources: [], slots: [{ driver: { id: "banking-r2", generationStatus: "verified" }, sources: [] }],
     catalogVersion: "2026-07-14",
     selectionPlan: {} as any,
     canonicalDrivers: [],

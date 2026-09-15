@@ -13,7 +13,7 @@ describe("env config", () => {
       NEXTAUTH_URL: "http://localhost:3000",
       OLLAMA_HOST: "https://ollama.com",
       OLLAMA_MODEL: "minimax-m2.5:cloud",
-      OPENAI_ESG_DRIVERS_MODEL: "gpt-5.4-mini",
+      OPENAI_ESG_DRIVERS_MODEL: "gpt-5.6-luna",
     });
   });
 

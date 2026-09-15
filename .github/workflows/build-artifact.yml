@@ -110,6 +110,13 @@ jobs:
           src/app/api/document-translator src/lib/pdfx-v2
           src/components/pdfx-v2 src/app/api/pdfx-v2 src/lib/__tests__/env.test.ts
 
+      - name: Test ESG driver contracts and workbook catalog
+        env:
+          OPENAI_API_KEY: build-placeholder-not-used
+        run: |
+          pnpm catalog:check
+          pnpm -C apps/web exec vitest run src/lib/esg-drivers src/app/api/esg/drivers src/app/esg/tools/__tests__/drivers-client.test.ts src/lib/__tests__/workbook.test.ts src/lib/__tests__/env.test.ts
+
       - name: Build web
         env:
           # The only value that truly matters: Next INLINES NEXT_PUBLIC_* into
@@ -128,7 +135,7 @@ jobs:
           # every other value stays a runtime `process.env` lookup, so the server
           # reads the real values from its own .env when it starts.
           OPENAI_API_KEY: build-placeholder-not-used
-          OPENAI_ESG_DRIVERS_MODEL: gpt-5.4-mini
+          OPENAI_ESG_DRIVERS_MODEL: gpt-5.6-luna
           GOOGLE_API_KEY_2: build-placeholder-not-used
           GOOGLE_CSE_ID_2: build-placeholder-not-used
           TAVILY_API_KEY: build-placeholder-not-used

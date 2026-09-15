@@ -10,6 +10,8 @@ export const BACKGROUND_JOB_TYPES = [
   "esg_workbook",
   "fitch_workbook",
   "esg_driver",
+  "esg_driver_excel_v3",
+  "esg_driver_excel_v4",
 ] as const;
 
 export type BackgroundJobType = (typeof BACKGROUND_JOB_TYPES)[number];
@@ -154,6 +156,19 @@ export async function enqueueBackgroundJob(
   database: RawDatabaseClient = esgPrisma,
 ): Promise<void> {
   try {
+    if (args.jobType === "esg_driver_excel_v3" || args.jobType === "esg_driver_excel_v4") {
+      // ESG driver domain creation and queue insertion share this transaction;
+      // serialize the active-job check with the legacy trigger/advisory key.
+      await database.$executeRaw`SELECT pg_advisory_xact_lock(${args.userId}::integer, hashtext('esg_driver'))`;
+      const active = await database.$queryRaw<Array<{ id: string }>>`
+        SELECT id::text FROM background_jobs
+        WHERE user_id = ${args.userId}
+          AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4')
+          AND status IN ('queued', 'processing')
+        LIMIT 1
+      `;
+      if (active.length) throw new JobConcurrencyLimitError();
+    }
     await database.$executeRaw`
       INSERT INTO background_jobs (
         id, job_type, user_id, payload_json, input_data, max_attempts,
@@ -691,7 +706,11 @@ async function synchronizeReapedJobs(
           completed_at: new Date(),
         },
       });
-    } else if (job.job_type === "esg_driver") {
+    } else if (
+      job.job_type === "esg_driver" ||
+      job.job_type === "esg_driver_excel_v3" ||
+      job.job_type === "esg_driver_excel_v4"
+    ) {
       await esgPrisma.$executeRaw`
         UPDATE esg_driver_jobs
         SET status = ${status}, progress = 100, stage = ${status},
@@ -704,7 +723,7 @@ async function synchronizeReapedJobs(
   }
 }
 
-export async function reconcileTerminalDomainJobs(): Promise<void> {
+export async function reconcileEsgDriverDomainJobs(): Promise<void> {
   // A process can die after the queue reaper commits but before its domain row
   // is synchronized. Reconcile from the queue (the lifecycle source of truth)
   // without ever replacing an already-terminal domain result.
@@ -721,10 +740,14 @@ export async function reconcileTerminalDomainJobs(): Promise<void> {
         updated_at = now()
     FROM background_jobs AS queue
     WHERE queue.id = domain.id
-      AND queue.job_type = 'esg_driver'
+      AND queue.job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4')
       AND queue.status IN ('error', 'cancelled')
       AND domain.status IN ('queued', 'processing')
   `;
+}
+
+export async function reconcileTerminalDomainJobs(): Promise<void> {
+  await reconcileEsgDriverDomainJobs();
   await esgPrisma.$executeRaw`
     UPDATE file_uploads AS domain
     SET status = queue.status,

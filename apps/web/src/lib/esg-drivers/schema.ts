@@ -17,23 +17,22 @@ const verificationMessageSchema = nonBlankString.max(500);
 export const SUPPORTED_ESG_DRIVER_COUNTRIES = ESG_DRIVER_COUNTRY_OPTIONS;
 export const SUPPORTED_ESG_DRIVER_SECTORS = ESG_DRIVER_SECTOR_OPTIONS;
 
-// Any country / any sector is accepted. Known aliases are normalized to the
-// catalog's canonical label (so "UAE" and "United Arab Emirates" behave the
-// same); anything else passes through as typed. The agent selects whichever
-// reviewed archetypes apply (All-scoped drivers always apply).
+// The worksheet defines coverage; unsupported scopes cannot produce a generic pack.
 const supportedCountrySchema = z
   .string()
   .trim()
   .min(2)
   .max(120)
-  .transform((value) => canonicalizeEsgDriverCountry(value) || value);
+  .transform((value) => canonicalizeEsgDriverCountry(value) || value)
+  .refine((value) => ESG_DRIVER_COUNTRY_OPTIONS.includes(value), 'Choose a country in the workbook.');
 
 const supportedSectorSchema = z
   .string()
   .trim()
   .min(2)
   .max(160)
-  .transform((value) => canonicalizeEsgDriverSector(value) || value);
+  .transform((value) => canonicalizeEsgDriverSector(value) || value)
+  .refine((value) => ESG_DRIVER_SECTOR_OPTIONS.includes(value), 'Choose a sector worksheet in the workbook.');
 
 export const driverSectionSchema = z.enum([
   "Global Drivers",
@@ -180,7 +179,7 @@ export const deckReviewSchema = z.object({
 export const generateDriversRequestSchema = z.object({
   country: supportedCountrySchema,
   sector: supportedSectorSchema,
-  language: z.string().trim().min(2).max(80).default("English"),
+  language: z.string().trim().pipe(z.enum(['English', 'Russian', 'Arabic'])).default("English"),
 });
 
 export type GeneratedDriverPack = z.infer<typeof generatedDriverPackSchema>;

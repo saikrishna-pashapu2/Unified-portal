@@ -36,7 +36,7 @@ export async function POST(request: Request, context: any) {
   }
   if (!isResumableEsgDriverJob(parent)) {
     return NextResponse.json(
-      { error: "Only completed partial ESG driver jobs can be resumed." },
+      { error: "Only completed ESG driver jobs with missing report slots or research gaps can be resumed." },
       { status: 409 },
     );
   }
@@ -67,7 +67,7 @@ export async function POST(request: Request, context: any) {
     }
     if (error instanceof EsgDriverResumeConflictError) {
       return NextResponse.json(
-        { error: "Only completed partial ESG driver jobs can be resumed." },
+        { error: "Only completed ESG driver jobs with missing report slots or research gaps can be resumed." },
         { status: 409 },
       );
     }

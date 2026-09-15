@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ensureUserId } from "@/lib/session-user";
+import { savedResultError } from '@/lib/esg-drivers/result-integrity';
 import {
   getEsgDriverJob,
   isResumableEsgDriverJob,
@@ -42,6 +43,9 @@ export async function GET(request: Request) {
       { status: missingCompletedResult ? 500 : terminal ? 409 : 202 },
     );
   }
+
+  const integrityError = savedResultError(job.result, job.checkpoint);
+  if (integrityError) return NextResponse.json({ jobId: job.id, status: 'error', error: integrityError, resumable: false }, { status: 409 });
 
   return NextResponse.json({
     success: true,

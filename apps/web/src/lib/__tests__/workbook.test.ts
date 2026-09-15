@@ -76,4 +76,13 @@ describe("DEP-01 hardened workbook processing", () => {
       "Workbook contains too many rows",
     );
   });
+
+  it('exports six report sheets while retaining the five-sheet upload boundary', async () => {
+    const sheets = Array.from({ length: 6 }, (_, index) => ({ name: `Report ${index + 1}`, rows: [['Evidence']] }));
+    const buffer = await writeWorkbookBuffer(sheets);
+    const xlsx = createRequire(import.meta.url)('xlsx');
+    expect(xlsx.read(buffer, { type: 'buffer' }).SheetNames).toHaveLength(6);
+    await expect(parseWorkbookBuffer(buffer)).rejects.toThrow('Workbook contains too many sheets');
+    await expect(writeWorkbookBuffer([...sheets, { name: 'Overflow', rows: [] }])).rejects.toThrow('between 1 and 6');
+  });
 });

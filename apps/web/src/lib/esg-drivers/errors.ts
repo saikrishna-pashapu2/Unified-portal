@@ -32,6 +32,11 @@ const TRANSIENT_ERROR_NAMES = new Set([
 ]);
 
 const TRANSIENT_ERROR_CODES = new Set([
+  // Retry the durable job from its checkpoint, never blindly replay raw writes.
+  "P1001",
+  "P1002",
+  "P1008",
+  "P1017",
   "EAI_AGAIN",
   "ECONNREFUSED",
   "ECONNRESET",
@@ -42,8 +47,15 @@ const TRANSIENT_ERROR_CODES = new Set([
   "ETIMEDOUT",
 ]);
 
+// Prisma uses P2028 for several deterministic transaction API failures as
+// well as interactive transactions that exceeded their configured timeout.
+// Retry only the latter when the message proves both expiry and elapsed-time
+// timeout details; a bare P2028 must remain terminal.
+const EXPIRED_TRANSACTION_TIMEOUT_PATTERN =
+  /\btransaction\b[\s\S]{0,500}\bexpired\b[\s\S]{0,500}\btimeout\s+for\s+this\s+transaction\s+was\s+\d+\s*ms\b[\s\S]{0,300}\b\d+\s*ms\s+passed\s+since\s+(?:the\s+)?(?:transaction\s+began|start\s+of\s+the\s+transaction)\b/i;
+
 const TRANSIENT_MESSAGE_PATTERN =
-  /\b(?:connection error|connection refused|connection reset|connection timed out|eai_again|econnrefused|econnreset|enetunreach|enotfound|epipe|etimedout|fetch failed|gateway timeout|network error|rate limited|rate limit|request timed out|service unavailable|socket hang up|temporarily unavailable|too many requests)\b/i;
+  /\b(?:can't reach database server|server has closed the connection|connection error|connection refused|connection reset|connection timed out|eai_again|econnrefused|econnreset|enetunreach|enotfound|epipe|etimedout|fetch failed|gateway timeout|network error|rate limited|rate limit|request timed out|service unavailable|socket hang up|temporarily unavailable|too many requests)\b/i;
 
 /**
  * Retry only failures that are explicitly recognizable as temporary provider or
@@ -70,8 +82,11 @@ export function isTransientEsgDriverError(error: unknown): boolean {
 
     const name = errorName(item);
     if (TRANSIENT_ERROR_NAMES.has(name)) return true;
-    const code = stringProperty(item, "code").toUpperCase();
+    const code = (stringProperty(item, "code") || stringProperty(item, "errorCode")).toUpperCase();
     if (TRANSIENT_ERROR_CODES.has(code)) return true;
+    if (code === "P2028" && EXPIRED_TRANSACTION_TIMEOUT_PATTERN.test(stringProperty(item, "message"))) {
+      return true;
+    }
     return TRANSIENT_MESSAGE_PATTERN.test(stringProperty(item, "message"));
   });
 }

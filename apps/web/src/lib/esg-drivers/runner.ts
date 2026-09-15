@@ -8,12 +8,13 @@ import {
   updateEsgDriverJobProgress,
 } from "./jobs";
 import type {
-  EsgDriverCheckpoint,
+  AnyEsgDriverCheckpoint,
   EsgDriverProgressDetail,
   GenerateEsgDriversInput,
 } from "./types";
 import type { ClaimedBackgroundJob } from "@/lib/jobs/queue";
 import { throwIfJobCancelled } from "@/lib/jobs/queue";
+import { assertWorkbookResult } from './result-integrity';
 
 export async function runEsgDriverGenerationJob(
   job: ClaimedBackgroundJob<GenerateEsgDriversInput>,
@@ -23,6 +24,7 @@ export async function runEsgDriverGenerationJob(
       includeCheckpoint: true,
     });
     if (existing?.status === "done" && existing.result) {
+      assertWorkbookResult(existing.result, existing.checkpoint, true);
       return {
         queueCompleted: false,
         result: { generatedDrivers: existing.result.drivers.length, reused: true },
@@ -36,7 +38,7 @@ export async function runEsgDriverGenerationJob(
     await updateEsgDriverJobProgress(job.id, job.leaseOwner, {
       status: "processing",
       progress: reportedProgress,
-      stage: existing?.checkpoint ? "resuming from checkpoint" : "starting",
+      stage: existing?.checkpoint?.version === 2 && existing.checkpoint.slots.length ? "resuming from checkpoint" : "starting",
     });
 
     const result = await generateEsgDriverResult(job.payload, {
@@ -61,7 +63,7 @@ export async function runEsgDriverGenerationJob(
           detail,
         });
       },
-      onCheckpoint: async (checkpoint: EsgDriverCheckpoint) => {
+      onCheckpoint: async (checkpoint: AnyEsgDriverCheckpoint) => {
         await throwIfJobCancelled(job.id, job.leaseOwner);
         await updateEsgDriverJobCheckpoint(
           job.id,
