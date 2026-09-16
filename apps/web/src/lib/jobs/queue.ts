@@ -7,6 +7,7 @@ export const BACKGROUND_JOB_TYPES = [
   "pdf_translation_v3",
   "pdf_translation_v4",
   "pdf_translation_v5",
+  "pdf_translation_v5_native",
   "esg_workbook",
   "fitch_workbook",
   "esg_driver",
@@ -420,7 +421,7 @@ export async function completePdfTranslationV2Job(
   userId: number,
   leaseOwner: string,
   args: {
-    jobType: Extract<BackgroundJobType, "pdf_translation_v2" | "pdf_translation_v3" | "pdf_translation_v4" | "pdf_translation_v5">;
+    jobType: Extract<BackgroundJobType, "pdf_translation_v2" | "pdf_translation_v3" | "pdf_translation_v4" | "pdf_translation_v5" | "pdf_translation_v5_native">;
     outputPdf: Buffer;
     metrics: unknown;
     result: unknown;
@@ -598,7 +599,7 @@ export async function cleanupTerminalPdfJobBlobs(
   return esgPrisma.$executeRaw`
     UPDATE background_jobs
     SET input_data = NULL, output_data = NULL, updated_at = now()
-    WHERE job_type IN ('pdf_translation_v2', 'pdf_translation_v3', 'pdf_translation_v4', 'pdf_translation_v5')
+    WHERE job_type IN ('pdf_translation_v2', 'pdf_translation_v3', 'pdf_translation_v4', 'pdf_translation_v5', 'pdf_translation_v5_native')
       AND status IN ('done', 'error', 'cancelled')
       AND completed_at < now() - (${retentionSeconds} * INTERVAL '1 second')
       AND (input_data IS NOT NULL OR output_data IS NOT NULL)
@@ -690,7 +691,8 @@ async function synchronizeReapedJobs(
       job.job_type === "pdf_translation_v2" ||
       job.job_type === "pdf_translation_v3" ||
       job.job_type === "pdf_translation_v4" ||
-      job.job_type === "pdf_translation_v5"
+      job.job_type === "pdf_translation_v5" ||
+      job.job_type === "pdf_translation_v5_native"
     ) {
       await esgPrisma.pdf_translation_v2_jobs.updateMany({
         where: {
@@ -776,7 +778,7 @@ export async function reconcileTerminalDomainJobs(): Promise<void> {
         updated_at = now()
     FROM background_jobs AS queue
     WHERE queue.id = domain.id
-      AND queue.job_type IN ('pdf_translation_v2', 'pdf_translation_v3', 'pdf_translation_v4', 'pdf_translation_v5')
+      AND queue.job_type IN ('pdf_translation_v2', 'pdf_translation_v3', 'pdf_translation_v4', 'pdf_translation_v5', 'pdf_translation_v5_native')
       AND queue.status IN ('error', 'cancelled')
       AND domain.status IN ('queued', 'processing', 'cancelling')
   `;

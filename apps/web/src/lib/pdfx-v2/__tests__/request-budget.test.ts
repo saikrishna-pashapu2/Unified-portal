@@ -1,5 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
-import { budgetedRequester, emptyRequestLedger, isPdfxBudgetError } from '../request-budget';
+import {
+  budgetedRequester,
+  emptyRequestLedger,
+  isPdfxBudgetError,
+  isPdfxTerminalError,
+  isPdfxWorkerControlFlowError,
+  PdfxWorkerVersionError,
+  PdfxTranslationStopError,
+} from '../request-budget';
 import type { PdfxV2OpenAiRequester } from '../openai';
 
 const args = { pagePdf: Buffer.from('pdf'), pageNumber: 6, model: 'gpt-5.6-luna', targetLanguage: 'Russian' as const };
@@ -51,4 +59,33 @@ describe('durable PDF request and spending safeguards', () => {
     const error = new Error('outer', { cause: Object.assign(new Error('budget'), { name: 'PdfxRequestBudgetError' }) });
     expect(isPdfxBudgetError(error)).toBe(true);
   });
+  it('treats a worker-version mismatch as terminal before retrying', () => {
+    expect(isPdfxTerminalError(new PdfxWorkerVersionError('wrong worker'))).toBe(true);
+  });
+  it('treats exhausted translation passes as terminal before queue replay', () => {
+    expect(isPdfxTerminalError(new PdfxTranslationStopError('exhausted'))).toBe(true);
+  });
+  it('retains the token reservation when the provider omits its usage', async () => {
+    const ledger = emptyRequestLedger();
+    const extract = vi.fn(async () => { throw Object.assign(new Error('No output'), {
+      providerUsage: { ...result, inputTokens: 0, outputTokens: 0, usageKnown: false },
+    }); });
+    await expect(budgetedRequester(provider(extract), ledger, async () => {}).extract(args)).rejects.toThrow('No output');
+    expect(ledger).toMatchObject({ responses: 1, unreportedRequests: 1, outputTokens: 0 });
+    expect(ledger.reservedOutputTokens?.['page:6']).toBe(40000);
+  });
+  it.each(['JobCancelledError', 'JobLeaseLostError'])(
+    'preserves %s from the pre-request persistence checkpoint',
+    async (name) => {
+      const controlFlow = Object.assign(new Error(name), { name });
+      const extract = vi.fn(async () => result);
+      await expect(
+        budgetedRequester(provider(extract), emptyRequestLedger(), async () => {
+          throw controlFlow;
+        }).extract(args),
+      ).rejects.toBe(controlFlow);
+      expect(isPdfxWorkerControlFlowError(controlFlow)).toBe(true);
+      expect(extract).not.toHaveBeenCalled();
+    },
+  );
 });

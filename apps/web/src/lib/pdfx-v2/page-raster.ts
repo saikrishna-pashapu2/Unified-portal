@@ -74,6 +74,18 @@ export async function rasterizeSinglePagePdf(pagePdf: Buffer, clockwiseRotation 
   return rasterizePdfPage(pagePdf, 1, clockwiseRotation);
 }
 
+/** Crop bounds remain in the upright full-page 0..1000 coordinate system. */
+export async function cropPageRaster(png:Buffer, bbox:readonly number[]):Promise<Buffer> {
+  if(bbox.length!==4 || !bbox.every(n=>Number.isFinite(n)&&n>=0&&n<=1000) || bbox[0]>=bbox[2] || bbox[1]>=bbox[3]) throw new Error('Invalid layout repair crop');
+  const {createCanvas,loadImage}=await import('@napi-rs/canvas');
+  const source=await loadImage(png);
+  const x=Math.floor(bbox[0]/1000*source.width), y=Math.floor(bbox[1]/1000*source.height);
+  const w=Math.max(1,Math.ceil(bbox[2]/1000*source.width)-x),h=Math.max(1,Math.ceil(bbox[3]/1000*source.height)-y);
+  const canvas=createCanvas(w,h);
+  canvas.getContext('2d').drawImage(source,x,y,w,h,0,0,w,h);
+  return canvas.toBuffer('image/png');
+}
+
 /** Overlapping horizontal detail strips retain legible small spreadsheet text.
  * They are extra views in ONE request, not per-cell validation API calls. */
 export async function rasterDetailStrips(png: Buffer): Promise<{ png: Buffer; top: number; bottom: number }[]> {

@@ -18,7 +18,7 @@ describe("Excel production worker integration", () => {
   });
   it("preserves the deployed v5 PDF retry ceilings", () => {
     expect(worker).toContain("maximumAttempts: PDF_TRANSLATION_MAX_ATTEMPTS");
-    expect(worker).toContain("forceTerminal: isPdfxBudgetError(error)");
+    expect(worker).toContain("forceTerminal: isPdfxTerminalError(error)");
     expect(worker).not.toMatch(/pdf_translation_v[67]/);
   });
 });

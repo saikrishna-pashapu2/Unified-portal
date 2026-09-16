@@ -30,8 +30,13 @@ import {
   PDF_TRANSLATION_MAX_ATTEMPTS,
   processPdfTranslationV2Job,
 } from "@/lib/pdfx-v2/pipeline";
-import { isPdfxV2QueueJobType } from "@/lib/pdfx-v2/constants";
-import { isPdfxBudgetError } from "@/lib/pdfx-v2/request-budget";
+import {
+  isPdfxV2QueueJobType,
+  PDFX_V2_MODEL,
+  PDFX_V2_PIPELINE_VERSION,
+  PDFX_V2_QUEUE_JOB_TYPE,
+} from "@/lib/pdfx-v2/constants";
+import { isPdfxTerminalError } from "@/lib/pdfx-v2/request-budget";
 import {
   ExcelRequestBudgetError,
   ExcelSelectionError,
@@ -59,6 +64,7 @@ const enabledJobTypes = esgDriversOnly
       "pdf_translation_v3",
       "pdf_translation_v4",
       "pdf_translation_v5",
+      PDFX_V2_QUEUE_JOB_TYPE,
     ] as const;
 let stopping = false;
 let lastEmailPoll = 0;
@@ -77,6 +83,11 @@ async function main(): Promise<void> {
   if (esgDriversOnly) await reconcileEsgDriverDomainJobs();
   else await reconcileTerminalDomainJobs();
   console.log(`[esg-driver-worker] started ${workerId} (concurrency=${concurrency}, jobTypes=${enabledJobTypes.join(",")})`);
+  if ((enabledJobTypes as readonly string[]).includes(PDFX_V2_QUEUE_JOB_TYPE)) {
+    console.log(
+      `[esg-driver-worker] PDF Translator ready (queue=${PDFX_V2_QUEUE_JOB_TYPE}, pipeline=${PDFX_V2_PIPELINE_VERSION}, model=${PDFX_V2_MODEL})`,
+    );
+  }
 
   const activeJobs = new Set<Promise<void>>();
   const claimPollState = createTransientPollState();
@@ -109,6 +120,9 @@ async function main(): Promise<void> {
             console.log("[esg-driver-worker] ESG database connection restored; queue polling resumed");
           }
           for (const job of claimResult.value) {
+            if (isPdfxV2QueueJobType(job.jobType)) {
+              console.log(`[esg-driver-worker] claimed PDF Translator job ${job.id} (${job.jobType}) on ${workerId}`);
+            }
             let task!: Promise<void>;
             task = executeJob(job)
               .catch((error) => {
@@ -231,7 +245,7 @@ async function executeJob(job: ClaimedBackgroundJob): Promise<void> {
           isPdfxV2QueueJobType(job.jobType)
             ? {
                 maximumAttempts: PDF_TRANSLATION_MAX_ATTEMPTS,
-                forceTerminal: isPdfxBudgetError(error),
+                forceTerminal: isPdfxTerminalError(error),
               }
             : error instanceof ExcelRequestBudgetError || error instanceof ExcelSelectionError
               ? { forceTerminal: true }
@@ -252,6 +266,7 @@ async function executeJob(job: ClaimedBackgroundJob): Promise<void> {
     }
     console.error(
       `[esg-driver-worker] ${job.id} failed (${transition.status}): ${message}`,
+      error,
     );
   } finally {
     clearInterval(heartbeat);

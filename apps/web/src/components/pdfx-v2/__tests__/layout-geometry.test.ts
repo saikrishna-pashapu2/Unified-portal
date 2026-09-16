@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  clampLayoutZoomPercent,
+  DEFAULT_LAYOUT_ZOOM_PERCENT,
   fitLayoutFontSize,
+  layoutTextFitsBox,
+  layoutZoomWidth,
+  MAX_LAYOUT_ZOOM_PERCENT,
+  MIN_LAYOUT_ZOOM_PERCENT,
   normalizedBox,
   resolvePageSize,
 } from '../layout-geometry';
@@ -21,6 +27,35 @@ function layout(overrides: Partial<StoredPdfPageLayout> = {}): StoredPdfPageLayo
 }
 
 describe('PDF positioned text geometry', () => {
+  it('keeps review zoom display-only and within safe rendering bounds', () => {
+    expect(DEFAULT_LAYOUT_ZOOM_PERCENT).toBe(200);
+    expect(clampLayoutZoomPercent(Number.NaN)).toBe(DEFAULT_LAYOUT_ZOOM_PERCENT);
+    expect(clampLayoutZoomPercent(25)).toBe(MIN_LAYOUT_ZOOM_PERCENT);
+    expect(clampLayoutZoomPercent(900)).toBe(MAX_LAYOUT_ZOOM_PERCENT);
+    expect(layoutZoomWidth(225)).toBe('225%');
+  });
+
+  it('does not collapse fitted text because of harmless SVG sub-pixel width rounding', () => {
+    expect(layoutTextFitsBox({
+      availableHeight: 13.1688,
+      availableWidth: 118.6,
+      contentScrollHeight: 13,
+      contentScrollWidth: 119,
+    })).toBe(true);
+    expect(layoutTextFitsBox({
+      availableHeight: 13.1688,
+      availableWidth: 118.6,
+      contentScrollHeight: 13,
+      contentScrollWidth: 121,
+    })).toBe(false);
+    expect(layoutTextFitsBox({
+      availableHeight: 13.1688,
+      availableWidth: 118.6,
+      contentScrollHeight: 14,
+      contentScrollWidth: 119,
+    })).toBe(false);
+  });
+
   it('maps normalized model coordinates onto physical PDF page dimensions', () => {
     expect(normalizedBox([100, 250, 900, 750], 600, 840)).toEqual({
       x: 60,

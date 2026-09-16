@@ -1,4 +1,5 @@
 import { validateTranslationResult } from './language-validation';
+import { numberPlaceholderFailure } from './number-placeholders';
 import type { PdfPageLayout, PdfPageTranslation } from './schemas';
 import {
   allCells,
@@ -432,6 +433,8 @@ export function validateTranslatedPage(
   const merged = mergePageTranslation(source, translation);
   const sourceText = pageLayoutToPlainText(source);
   const translatedText = pageLayoutToPlainText(merged);
+  const placeholderFailure = numberPlaceholderFailure(sourceText, translatedText, targetLanguage);
+  if (placeholderFailure) failures.push(placeholderFailure);
   const sourceNumbers = numberTokens(sourceText);
   const translatedNumbers = numberTokens(translatedText);
   if (!equalCounts(sourceNumbers, translatedNumbers)) {

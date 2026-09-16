@@ -123,6 +123,8 @@ export const PdfPageReviewSchema = z.object({
 
 export type PdfPageLayout = z.infer<typeof PdfPageLayoutSchema>;
 export type StoredPdfPageLayout = PdfPageLayout & {
+  // Internal provenance, never part of the model response schema.
+  nativeTable?: boolean;
   // Added by the worker from the source PDF, never guessed by the model.
   // Bounding boxes remain normalized to 0..1000 on each axis.
   pageWidthPoints?: number;
@@ -133,12 +135,13 @@ export function parseStoredPdfPageLayout(value: unknown): StoredPdfPageLayout | 
   const parsed = PdfPageLayoutSchema.safeParse(value);
   if (!parsed.success) return null;
   const stored = value && typeof value === 'object'
-    ? value as { pageWidthPoints?: unknown; pageHeightPoints?: unknown }
+    ? value as { pageWidthPoints?: unknown; pageHeightPoints?: unknown; nativeTable?:unknown }
     : {};
   const pageWidthPoints = Number(stored.pageWidthPoints);
   const pageHeightPoints = Number(stored.pageHeightPoints);
   return {
     ...parsed.data,
+    ...(stored.nativeTable===true?{nativeTable:true}:{}),
     ...(Number.isFinite(pageWidthPoints) && pageWidthPoints > 0 ? { pageWidthPoints } : {}),
     ...(Number.isFinite(pageHeightPoints) && pageHeightPoints > 0 ? { pageHeightPoints } : {}),
   };

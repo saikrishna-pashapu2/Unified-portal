@@ -1,11 +1,15 @@
 'use client';
 
-import { useLayoutEffect, useRef, type CSSProperties } from 'react';
+import { useId, useLayoutEffect, useRef, type CSSProperties, type KeyboardEvent } from 'react';
 import type { PdfElement, StoredPdfPageLayout } from '@/lib/pdfx-v2/schemas';
 import { listTextWithMarkers } from '@/lib/pdfx-v2/serialize';
 import { pageCanvasGeometry, diagramLines } from '@/lib/pdfx-v2/diagram-geometry';
 import {
+  clampLayoutZoomPercent,
+  DEFAULT_LAYOUT_ZOOM_PERCENT,
   fitLayoutFontSize,
+  layoutTextFitsBox,
+  layoutZoomWidth,
   normalizedBox,
   resolvePageSize,
   type PageBox,
@@ -15,8 +19,12 @@ type PdfLayoutCanvasProps = {
   emptyLabel: string;
   label: string;
   layout?: StoredPdfPageLayout | null;
+  onFitZoom?: () => void;
+  onZoomIn?: () => void;
+  onZoomOut?: () => void;
   text: string;
   variant: 'original' | 'translated';
+  zoomPercent?: number;
 };
 
 const VISUAL_KINDS = new Set<PdfElement['kind']>([
@@ -70,6 +78,7 @@ function FittedText({
   style: CSSProperties;
   verticallyCentered?: boolean;
 }) {
+  minimumFontSize=Math.max(0.05,Math.min(minimumFontSize,box.height/8,box.width/30));
   const outerRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
   const initialFontSize = fitLayoutFontSize(
@@ -85,6 +94,12 @@ function FittedText({
     if (!outer || !content) return;
 
     const fit = () => {
+      const outerStyle = getComputedStyle(outer);
+      const availableHeight = parseFloat(outerStyle.height) -
+        parseFloat(outerStyle.paddingTop) - parseFloat(outerStyle.paddingBottom);
+      const availableWidth = parseFloat(outerStyle.width) -
+        parseFloat(outerStyle.paddingLeft) - parseFloat(outerStyle.paddingRight);
+      if (!(availableHeight > 0 && availableWidth > 0)) return;
       let low = minimumFontSize;
       let high = Math.max(
         low,
@@ -94,8 +109,15 @@ function FittedText({
       for (let pass = 0; pass < 14; pass += 1) {
         const candidate = (low + high) / 2;
         content.style.fontSize = `${candidate}px`;
-        const fits = content.scrollHeight <= outer.clientHeight + 0.25 &&
-          content.scrollWidth <= outer.clientWidth + 0.25;
+        // The content is already constrained to width: 100%. Comparing its
+        // computed width with the padded parent introduces SVG sub-pixel
+        // rounding differences and used to reject every candidate font size.
+        const fits = layoutTextFitsBox({
+          availableHeight,
+          availableWidth,
+          contentScrollHeight: content.scrollHeight,
+          contentScrollWidth: content.scrollWidth,
+        });
         if (fits) {
           fitted = candidate;
           low = candidate;
@@ -120,7 +142,7 @@ function FittedText({
         height: '100%',
         justifyContent: 'center',
         overflow: 'hidden',
-        padding: verticallyCentered ? '0 0.7px' : '0.15px 0.8px',
+        padding: `${verticallyCentered?0:Math.min(0.15,box.height/12)}px ${Math.min(0.7,box.width/12)}px`,
         width: '100%',
       }}
     >
@@ -186,7 +208,7 @@ function TableBlock({
               fill={cell.isHeader ? '#f1f5f9' : '#ffffff'}
               height={box.height}
               stroke="#64748b"
-              strokeWidth={0.55}
+              strokeWidth={Math.min(0.55,box.height*0.08,box.width*0.08)}
               vectorEffect="non-scaling-stroke"
               width={box.width}
               x={box.x}
@@ -231,9 +253,15 @@ export function PdfLayoutCanvas({
   emptyLabel,
   label,
   layout,
+  onFitZoom,
+  onZoomIn,
+  onZoomOut,
   text,
   variant,
+  zoomPercent = DEFAULT_LAYOUT_ZOOM_PERCENT,
 }: PdfLayoutCanvasProps) {
+  const instructionsId = useId();
+
   if (!layout) {
     if (!text.trim()) {
       return <div className="grid min-h-64 place-items-center p-8 text-sm italic text-slate-400">{emptyLabel}</div>;
@@ -246,42 +274,76 @@ export function PdfLayoutCanvas({
   const elements = [...layout.elements]
     .filter((element) => !VISUAL_KINDS.has(element.kind))
     .sort((left, right) => left.order - right.order || left.id.localeCompare(right.id));
+  const safeZoomPercent = clampLayoutZoomPercent(zoomPercent);
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    if ((event.key === '+' || event.key === '=') && onZoomIn) {
+      event.preventDefault();
+      onZoomIn();
+    } else if (event.key === '-' && onZoomOut) {
+      event.preventDefault();
+      onZoomOut();
+    } else if (event.key === '0' && onFitZoom) {
+      event.preventDefault();
+      onFitZoom();
+    }
+  };
 
   return (
     <div className="bg-slate-200 p-2 sm:p-3">
-      <svg
-        aria-label={`${label}, geometry-preserving selectable text layout`}
-        className="block h-auto w-full bg-white shadow-sm"
-        data-layout-variant={variant}
-        preserveAspectRatio="xMidYMid meet"
-        role="document"
-        viewBox={`0 0 ${size.width} ${size.height}`}
+      <p id={instructionsId} className="sr-only">
+        This selectable page is shown at {safeZoomPercent} percent. Use plus and minus to zoom, or zero to fit the whole page width. Scroll horizontally when zoomed.
+      </p>
+      <div
+        aria-describedby={instructionsId}
+        aria-keyshortcuts="+ - 0"
+        aria-label={`${label} viewer at ${safeZoomPercent} percent zoom`}
+        className="overflow-x-auto overscroll-x-contain rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 [scrollbar-gutter:stable]"
+        data-layout-zoom={safeZoomPercent}
+        onKeyDown={handleKeyDown}
+        role="region"
+        tabIndex={0}
       >
-        <rect fill="#ffffff" height={size.height} width={size.width} x={0} y={0} />
-        <g transform={canvas.transform}>
-        {diagramLines(layout.graphics, canvas.width, canvas.height).map((line, index) => (
-          <line key={`line-${index}`} x1={line.x1} y1={line.y1} x2={line.x2} y2={line.y2}
-            stroke="#101827" strokeWidth={0.65} strokeDasharray={line.dashed ? '3 2' : undefined} />
-        ))}
-        {elements.map((element) => element.kind === 'table'
-          ? (
-              <TableBlock
-                key={element.id}
-                element={element}
-                pageHeight={canvas.height}
-                pageWidth={canvas.width}
-              />
-            )
-          : (
-              <TextBlock
-                key={element.id}
-                element={element}
-                pageHeight={canvas.height}
-                pageWidth={canvas.width}
-              />
+        <div
+          className="min-w-full transition-[width] duration-200 motion-reduce:transition-none"
+          style={{ width: layoutZoomWidth(safeZoomPercent) }}
+        >
+          <svg
+            aria-label={`${label}, geometry-preserving selectable text layout`}
+            className="block h-auto w-full max-w-none bg-white shadow-sm"
+            data-layout-variant={variant}
+            preserveAspectRatio="xMidYMid meet"
+            role="document"
+            viewBox={`0 0 ${size.width} ${size.height}`}
+          >
+            <rect fill="#ffffff" height={size.height} width={size.width} x={0} y={0} />
+            <g transform={canvas.transform}>
+            {diagramLines(layout.graphics, canvas.width, canvas.height).map((line, index) => (
+              <line key={`line-${index}`} x1={line.x1} y1={line.y1} x2={line.x2} y2={line.y2}
+                stroke="#101827" strokeWidth={0.65} strokeDasharray={line.dashed ? '3 2' : undefined} />
             ))}
-        </g>
-      </svg>
+            {elements.map((element) => element.kind === 'table'
+              ? (
+                  <TableBlock
+                    key={element.id}
+                    element={element}
+                    pageHeight={canvas.height}
+                    pageWidth={canvas.width}
+                  />
+                )
+              : (
+                  <TextBlock
+                    key={element.id}
+                    element={element}
+                    pageHeight={canvas.height}
+                    pageWidth={canvas.width}
+                  />
+                ))}
+            </g>
+          </svg>
+        </div>
+      </div>
     </div>
   );
 }

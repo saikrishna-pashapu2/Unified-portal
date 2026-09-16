@@ -24,7 +24,28 @@ describe('production PDF worker retry ceiling', () => {
   it('wires the safeguard into the committed production worker, not only the local worker', () => {
     const worker = readFileSync(fileURLToPath(new URL('../../../esg-driver-worker.mts', import.meta.url)), 'utf8');
     expect(worker).toContain('maximumAttempts: PDF_TRANSLATION_MAX_ATTEMPTS');
-    expect(worker).toContain('forceTerminal: isPdfxBudgetError(error)');
+    expect(worker).toContain('forceTerminal: isPdfxTerminalError(error)');
+    expect(worker).not.toContain('forceTerminal: isPdfxBudgetError(error)');
     expect(worker).not.toContain('keepRetrying: true');
+  });
+
+  it('registers the native v5 queue fence for both enqueue and worker routing', async () => {
+    const { BACKGROUND_JOB_TYPES } = await import('@/lib/jobs/queue');
+    const {
+      PDFX_V2_QUEUE_JOB_TYPE,
+      isPdfxV2QueueJobType,
+    } = await import('../constants');
+
+    expect(PDFX_V2_QUEUE_JOB_TYPE).toBe('pdf_translation_v5_native');
+    expect(BACKGROUND_JOB_TYPES).toContain(PDFX_V2_QUEUE_JOB_TYPE);
+    expect(isPdfxV2QueueJobType(PDFX_V2_QUEUE_JOB_TYPE)).toBe(true);
+  });
+
+  it('logs the native queue, pipeline, and pinned model at worker readiness', () => {
+    const worker = readFileSync(fileURLToPath(new URL('../../../esg-driver-worker.mts', import.meta.url)), 'utf8');
+    expect(worker).toContain('PDFX_V2_QUEUE_JOB_TYPE');
+    expect(worker).toContain('PDFX_V2_PIPELINE_VERSION');
+    expect(worker).toContain('PDFX_V2_MODEL');
+    expect(worker).toContain('PDF Translator ready');
   });
 });

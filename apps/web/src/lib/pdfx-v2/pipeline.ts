@@ -25,7 +25,15 @@ import {
   translatePageWithOpenAi,
   defaultPdfxV2Requester,
 } from './openai';
-import { budgetedRequester, emptyRequestLedger, type RequestLedger } from './request-budget';
+import {
+  budgetedRequester,
+  emptyRequestLedger,
+  PdfxWorkerVersionError,
+  isPdfxWorkerControlFlowError,
+  type RequestLedger,
+} from './request-budget';
+import { parseExtractionRecovery } from './layout-repair';
+import { withPdfTranslationLease } from './lease-checkpoint';
 import { renderPdfxV2Document } from './render';
 import { mergePageTranslation, pageLayoutToPlainText } from './serialize';
 import type { PdfxV2JobPayload, PdfxV2Stage } from './types';
@@ -177,6 +185,23 @@ export async function processPdfTranslationV2Job(
   });
   if (!existing) throw new Error('PDF Translator job record is missing');
 
+  const priorMetrics = (existing.metrics && typeof existing.metrics === 'object'
+    ? existing.metrics
+    : {}) as StoredMetrics;
+  if (
+    job.jobType === PDFX_V2_QUEUE_JOB_TYPE &&
+    (
+      priorMetrics.requiredPipelineVersion !== PDFX_V2_PIPELINE_VERSION ||
+      priorMetrics.requiredModel !== PDFX_V2_MODEL
+    )
+  ) {
+    throw new PdfxWorkerVersionError(
+      `PDF Translator job ${job.id} requires pipeline ${String(priorMetrics.requiredPipelineVersion ?? 'unknown')} ` +
+      `with model ${String(priorMetrics.requiredModel ?? 'unknown')}; this worker provides ` +
+      `${PDFX_V2_PIPELINE_VERSION} with ${PDFX_V2_MODEL}. No model request was sent.`,
+    );
+  }
+
   if (existing.status === 'completed' && existing.output_pdf) {
     const result = {
       pages: existing.total_pages,
@@ -193,9 +218,6 @@ export async function processPdfTranslationV2Job(
     return { queueCompleted: true, result };
   }
 
-  const priorMetrics = (existing.metrics && typeof existing.metrics === 'object'
-    ? existing.metrics
-    : {}) as StoredMetrics;
   const checkpointCompatible =
     priorMetrics.pipelineVersion === PDFX_V2_PIPELINE_VERSION &&
     priorMetrics.model === PDFX_V2_MODEL;
@@ -217,20 +239,21 @@ export async function processPdfTranslationV2Job(
       storedMetrics.contextInputTokens = (storedMetrics.contextInputTokens ?? 0) + response.inputTokens;
       storedMetrics.contextOutputTokens = (storedMetrics.contextOutputTokens ?? 0) + response.outputTokens;
     }
-    const operations: any[] = [esgPrisma.pdf_translation_v2_jobs.updateMany({
-      where: { id: job.id, user_id: job.userId, status: 'processing' },
-      data: { metrics: jsonValue(storedMetrics) },
-    })];
-    if (response && response.page > 0) {
-      operations.push(esgPrisma.pdf_translation_v2_pages.upsert({
-        where: { job_id_page_number: { job_id: job.id, page_number: response.page } },
-        create: { job_id: job.id, page_number: response.page, status: 'extracting', warnings: [],
-          input_tokens: response.inputTokens, output_tokens: response.outputTokens },
-        update: { input_tokens: { increment: response.inputTokens }, output_tokens: { increment: response.outputTokens } },
-      }));
-    }
-    const [saved] = await esgPrisma.$transaction(operations);
-    if ((saved as { count: number }).count !== 1) throw new Error('Translation is no longer active');
+    await withPdfTranslationLease(job.id, job.leaseOwner, async transaction => {
+      const saved = await transaction.pdf_translation_v2_jobs.updateMany({
+        where: { id: job.id, user_id: job.userId, status: 'processing' },
+        data: { metrics: jsonValue(storedMetrics) },
+      });
+      if (response && response.page > 0) {
+        await transaction.pdf_translation_v2_pages.upsert({
+          where: { job_id_page_number: { job_id: job.id, page_number: response.page } },
+          create: { job_id: job.id, page_number: response.page, status: 'extracting', warnings: [],
+            input_tokens: response.inputTokens, output_tokens: response.outputTokens },
+          update: { input_tokens: { increment: response.inputTokens }, output_tokens: { increment: response.outputTokens } },
+        });
+      }
+      if (saved.count !== 1) throw new Error('Translation is no longer active');
+    });
   });
 
   const reportProgress = async (
@@ -320,6 +343,17 @@ export async function processPdfTranslationV2Job(
           pageNumber,
           job.payload.targetLang,
           requester,
+          {
+            resume:parseExtractionRecovery(prior?.validation),
+            save:async(state)=> {
+              await throwIfJobCancelled(job.id,job.leaseOwner);
+              await esgPrisma.pdf_translation_v2_pages.upsert({
+                where:{job_id_page_number:{job_id:job.id,page_number:pageNumber}},
+                create:{job_id:job.id,page_number:pageNumber,status:'extracting',warnings:[],validation:jsonValue({extractionRecovery:state}),extraction_attempts:state.attempts,extraction_model:PDFX_V2_MODEL},
+                update:{validation:jsonValue({extractionRecovery:state}),extraction_attempts:state.attempts,extraction_model:PDFX_V2_MODEL},
+              });
+            },
+          },
         );
       } catch (error) {
         await esgPrisma.pdf_translation_v2_pages.upsert({
@@ -361,6 +395,7 @@ export async function processPdfTranslationV2Job(
           extraction_attempts: extracted.attempts,
           warnings: jsonValue(extractedLayout.warnings),
           error_message: null,
+          validation: jsonValue({}),
         },
       });
     }
@@ -417,21 +452,31 @@ export async function processPdfTranslationV2Job(
           context,
           job.payload.targetLang,
           requester,
+          {
+            resume:current?.validation && typeof current.validation==='object'
+              ? (current.validation as {translationRecovery?:unknown;denseTranslation?:unknown}).translationRecovery ?? (current.validation as {denseTranslation?:unknown}).denseTranslation
+              : undefined,
+            save:async(state)=> {
+              await withPdfTranslationLease(job.id, job.leaseOwner, transaction =>
+                transaction.pdf_translation_v2_pages.update({where:{job_id_page_number:{job_id:job.id,page_number:pageNumber}},data:{validation:jsonValue(state.version === 'native-cell-batches-v1' ? {denseTranslation:state} : {translationRecovery:state})}}));
+            },
+          },
         );
       } catch (error) {
-        await esgPrisma.pdf_translation_v2_pages.update({
+        if (isPdfxWorkerControlFlowError(error)) throw error;
+        await withPdfTranslationLease(job.id, job.leaseOwner, transaction => transaction.pdf_translation_v2_pages.update({
           where: { job_id_page_number: { job_id: job.id, page_number: pageNumber } },
           data: {
             status: 'translation_error',
             error_message: errorMessage(error),
           },
-        });
+        }));
         throw error;
       }
       await throwIfJobCancelled(job.id, job.leaseOwner);
       const merged = mergePageTranslation(source, translated.translation) as StoredPdfPageLayout;
       translatedLayouts.push(merged);
-      await esgPrisma.pdf_translation_v2_pages.update({
+      await withPdfTranslationLease(job.id, job.leaseOwner, transaction => transaction.pdf_translation_v2_pages.update({
         where: { job_id_page_number: { job_id: job.id, page_number: pageNumber } },
         data: {
           status: 'translated',
@@ -443,7 +488,7 @@ export async function processPdfTranslationV2Job(
           warnings: jsonValue(merged.warnings),
           error_message: null,
         },
-      });
+      }));
     }
 
     await reportProgress(94, 'rendering', 'Rendering translated tables and text…');
