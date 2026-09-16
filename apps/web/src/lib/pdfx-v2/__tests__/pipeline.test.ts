@@ -65,6 +65,12 @@ vi.mock('../openai', () => ({
   translatePageWithOpenAi: mocks.translate,
 }));
 vi.mock('../render', () => ({ renderPdfxV2Document: mocks.render }));
+vi.mock('../lease-checkpoint', () => ({
+  withPdfTranslationLease: vi.fn(async (_id, _lease, write) => write({
+    pdf_translation_v2_jobs: { updateMany: mocks.updateJob },
+    pdf_translation_v2_pages: { update: mocks.updatePage, upsert: mocks.upsertPage },
+  })),
+}));
 
 function layout(pageNumber: number, text: string): PdfPageLayout {
   return {
@@ -106,7 +112,7 @@ describe('PDF Translator pipeline', () => {
       | undefined;
     expect(queueArgs?.data).toEqual(expect.objectContaining({
       id: jobId,
-      job_type: 'pdf_translation_v5',
+      job_type: 'pdf_translation_v5_native',
       max_attempts: 3,
       input_data: inputBuffer,
     }));
@@ -114,7 +120,7 @@ describe('PDF Translator pipeline', () => {
       | { data: Record<string, unknown> }
       | undefined;
     expect(domainArgs?.data.metrics).toEqual({
-      requiredPipelineVersion: 'luna-layout-v5-2026-08-25',
+      requiredPipelineVersion: 'luna-layout-v5-native-2026-09-14',
       requiredModel: 'gpt-5.6-luna',
     });
   });
@@ -128,7 +134,12 @@ describe('PDF Translator pipeline', () => {
     mocks.findJob.mockResolvedValue({
       status: 'queued', output_pdf: null, total_pages: 1,
       document_context: documentContext,
-      metrics: { pipelineVersion: 'legacy-layout', model: 'non-luna-model' },
+      metrics: {
+        requiredPipelineVersion: 'luna-layout-v5-native-2026-09-14',
+        requiredModel: 'gpt-5.6-luna',
+        pipelineVersion: 'legacy-layout',
+        model: 'non-luna-model',
+      },
       pages: [{
         page_number: 1, status: 'translated', source_layout: source,
         translated_layout: layout(1, 'Старый перевод 100'),
@@ -155,7 +166,7 @@ describe('PDF Translator pipeline', () => {
     const { processPdfTranslationV2Job } = await import('../pipeline');
     await processPdfTranslationV2Job({
       id: '11111111-1111-4111-8111-111111111111',
-      jobType: 'pdf_translation_v5', userId: 7,
+      jobType: 'pdf_translation_v5_native', userId: 7,
       payload: { filename: 'legal.pdf', targetLang: 'Russian', pageCount: 1 },
       inputData: await onePagePdf(), outputData: null, result: null,
       status: 'processing', progress: 10, attempts: 2, maxAttempts: 1_000,
@@ -174,6 +185,7 @@ describe('PDF Translator pipeline', () => {
   });
 
   it('resumes completed page checkpoints and translates only the unfinished page', async () => {
+    const retainedRecovery = { version: 'page-translation-v1', fingerprint: 'matching-source', passes: {} };
     const source1 = layout(1, 'Биринчи саҳифа 100');
     const source2 = layout(2, 'Иккинчи саҳифа 200');
     const translated1 = layout(1, 'Первая страница 100');
@@ -186,7 +198,9 @@ describe('PDF Translator pipeline', () => {
       status: 'queued', output_pdf: null, total_pages: 2,
       document_context: documentContext,
       metrics: {
-        pipelineVersion: 'luna-layout-v5-2026-08-25',
+        requiredPipelineVersion: 'luna-layout-v5-native-2026-09-14',
+        requiredModel: 'gpt-5.6-luna',
+        pipelineVersion: 'luna-layout-v5-native-2026-09-14',
         model: 'gpt-5.6-luna',
       },
       pages: [
@@ -196,7 +210,7 @@ describe('PDF Translator pipeline', () => {
     });
     mocks.findPage
       .mockResolvedValueOnce({ status: 'translated', translated_layout: translated1 })
-      .mockResolvedValueOnce({ status: 'extracted', translated_layout: null });
+      .mockResolvedValueOnce({ status: 'extracted', translated_layout: null, validation: { translationRecovery: retainedRecovery } });
     mocks.translate.mockResolvedValue({
       translation: { pageNumber: 2, warnings: [], elements: [{ id: 'e001', text: 'Вторая страница 200', cells: [] }] },
       layout: source2, attempts: 1, validation: { valid: true, failures: [], warnings: [] },
@@ -206,7 +220,7 @@ describe('PDF Translator pipeline', () => {
     const { processPdfTranslationV2Job } = await import('../pipeline');
     await processPdfTranslationV2Job({
       id: '11111111-1111-4111-8111-111111111111',
-      jobType: 'pdf_translation_v5', userId: 7,
+      jobType: 'pdf_translation_v5_native', userId: 7,
       payload: { filename: 'legal.pdf', targetLang: 'Russian', pageCount: 2 },
       inputData: await twoPagePdf(), outputData: null, result: null,
       status: 'processing', progress: 10, attempts: 2, maxAttempts: 3,
@@ -228,6 +242,7 @@ describe('PDF Translator pipeline', () => {
       documentContext,
       'Russian',
       expect.objectContaining({ extract: expect.any(Function), translate: expect.any(Function) }),
+      expect.objectContaining({save:expect.any(Function), resume: retainedRecovery}),
     );
     expect(mocks.render.mock.calls[0][0]).toEqual([
       expect.objectContaining({
@@ -247,7 +262,36 @@ describe('PDF Translator pipeline', () => {
       '11111111-1111-4111-8111-111111111111',
       7,
       'worker-1',
-      expect.objectContaining({ jobType: 'pdf_translation_v5' }),
+      expect.objectContaining({ jobType: 'pdf_translation_v5_native' }),
     );
+  });
+
+  it('rejects a native queue job created for another worker build before any model request', async () => {
+    mocks.findJob.mockResolvedValue({
+      status: 'queued', output_pdf: null, total_pages: 1,
+      document_context: null,
+      metrics: {
+        requiredPipelineVersion: 'future-pipeline',
+        requiredModel: 'gpt-5.6-luna',
+      },
+      pages: [],
+    });
+
+    const { processPdfTranslationV2Job } = await import('../pipeline');
+    await expect(processPdfTranslationV2Job({
+      id: '11111111-1111-4111-8111-111111111111',
+      jobType: 'pdf_translation_v5_native', userId: 7,
+      payload: { filename: 'legal.pdf', targetLang: 'Russian', pageCount: 1 },
+      inputData: await onePagePdf(), outputData: null, result: null,
+      status: 'processing', progress: 0, attempts: 1, maxAttempts: 3,
+      progressData: null, lastError: null,
+      leaseOwner: 'worker-1', cancelRequested: false,
+      availableAt: new Date(), leaseExpiresAt: new Date(Date.now() + 60_000),
+      createdAt: new Date(), updatedAt: new Date(), completedAt: null,
+    })).rejects.toThrow(/requires pipeline future-pipeline/);
+
+    expect(mocks.extract).not.toHaveBeenCalled();
+    expect(mocks.context).not.toHaveBeenCalled();
+    expect(mocks.translate).not.toHaveBeenCalled();
   });
 });

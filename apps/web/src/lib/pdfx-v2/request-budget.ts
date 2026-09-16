@@ -1,4 +1,5 @@
 import type { PdfxV2OpenAiRequester } from './openai';
+import { isPdfxProviderRefusalError } from './structured-response';
 
 export type RequestLedger = {
   counts: Record<string, number>;
@@ -15,12 +16,33 @@ export function emptyRequestLedger(): RequestLedger {
 export class PdfxRequestBudgetError extends Error {
   constructor(message: string, options?: ErrorOptions) { super(message, options); this.name = 'PdfxRequestBudgetError'; }
 }
+export class PdfxWorkerVersionError extends Error {
+  constructor(message: string, options?: ErrorOptions) { super(message, options); this.name = 'PdfxWorkerVersionError'; }
+}
+export class PdfxTranslationStopError extends Error {
+  constructor(message: string, options?: ErrorOptions) { super(message, options); this.name = 'PdfxTranslationStopError'; }
+}
+export function isPdfxWorkerControlFlowError(error: unknown): boolean {
+  return error instanceof Error &&
+    (error.name === 'JobCancelledError' || error.name === 'JobLeaseLostError');
+}
 export function isPdfxBudgetError(error: unknown): boolean {
   const seen = new Set<unknown>();
   while (error instanceof Error && !seen.has(error)) {
     if (error.name === 'PdfxRequestBudgetError') return true;
     seen.add(error);
     error = error.cause;
+  }
+  return false;
+}
+
+export function isPdfxTerminalError(error:unknown):boolean {
+  if(isPdfxBudgetError(error)) return true;
+  const seen=new Set<unknown>();
+  while(error instanceof Error && !seen.has(error)) {
+    if (isPdfxProviderRefusalError(error)) return true;
+    if(error.name==='PdfxExtractionStopError' || error.name==='PdfxWorkerVersionError' || error.name==='PdfxTranslationStopError') return true;
+    seen.add(error);error=error.cause;
   }
   return false;
 }
@@ -34,13 +56,13 @@ export function budgetedRequester(
 ): PdfxV2OpenAiRequester {
   const wrap = (stage: keyof PdfxV2OpenAiRequester) => async (args: any) => {
     const page = args.pageNumber ?? args.source?.pageNumber ?? 0;
-    const group = stage === 'validate' ? 'translate' : stage === 'orientation' ? 'extract' : stage;
+    const group = stage === 'validate' ? 'translate' : stage === 'orientation' || stage === 'repair' ? 'extract' : stage;
     const key = `${group}:${page}`;
     const cap = group === 'extract' ? 4 : group === 'context' ? 2 : 12;
     const tokenKey = `page:${page}`;
     ledger.reservedOutputTokens ??= {};
     const available = (page === 0 ? 4000 : 60000) - (ledger.reservedOutputTokens[tokenKey] ?? 0);
-    const requestMaximum = stage === 'orientation' ? 200 : stage === 'context' ? 2000 : stage === 'validate' ? 1500 : stage === 'translate' ? 20000 : 40000;
+    const requestMaximum = stage === 'orientation' ? 1000 : stage === 'repair' ? 12000 : stage === 'context' ? 2000 : stage === 'validate' ? 1500 : stage === 'translate' ? 20000 : 40000;
     const maxOutputTokens = Math.min(requestMaximum, available);
     if (maxOutputTokens < Math.min(1000, requestMaximum)) {
       throw new PdfxRequestBudgetError(`Automatic output-token budget reached for page ${page}; no further API requests were sent.`);
@@ -54,7 +76,10 @@ export function budgetedRequester(
     let observed: { page: number; stage: string; inputTokens: number; outputTokens: number } | undefined;
     const save = async () => {
       try { await persist(ledger, observed); }
-      catch (error) { throw new PdfxRequestBudgetError('Could not persist API request accounting; stopped before further spending.', { cause: error }); }
+      catch (error) {
+        if (isPdfxWorkerControlFlowError(error)) throw error;
+        throw new PdfxRequestBudgetError('Could not persist API request accounting; stopped before further spending.', { cause: error });
+      }
     };
     await save();
     let result;
@@ -68,7 +93,10 @@ export function budgetedRequester(
     await save();
     return result;
 
-    function record(usage: { inputTokens: number; outputTokens: number; cachedInputTokens?: number }) {
+    function record(usage: { inputTokens: number; outputTokens: number; cachedInputTokens?: number; usageKnown?: boolean }) {
+      // Missing provider usage is not a free request. Keep its reservation and
+      // unreported flag, even when a response ID or empty payload was received.
+      if (usage.usageKnown === false) { ledger.responses += 1; return; }
       observed = { page, stage, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens };
       ledger.inputTokens += usage.inputTokens;
       ledger.outputTokens += usage.outputTokens;
@@ -80,5 +108,5 @@ export function budgetedRequester(
       ledger.reservedOutputTokens![tokenKey] -= Math.max(0, maxOutputTokens - usage.outputTokens);
     }
   };
-  return { ...(requester.orientation ? { orientation: wrap('orientation') } : {}), extract: wrap('extract'), context: wrap('context'), translate: wrap('translate'), validate: wrap('validate') };
+  return { remainingTranslationRequests: (pageNumber) => Math.max(0, 12 - (ledger.counts[`translate:${pageNumber}`] ?? 0)), ...(requester.nativeGeometry ? {nativeGeometry:requester.nativeGeometry} : {}), ...(requester.repair ? {repair:wrap('repair')} : {}), ...(requester.orientation ? { orientation: wrap('orientation') } : {}), extract: wrap('extract'), context: wrap('context'), translate: wrap('translate'), validate: wrap('validate') };
 }

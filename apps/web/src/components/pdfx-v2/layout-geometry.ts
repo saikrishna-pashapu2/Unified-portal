@@ -4,6 +4,42 @@ export type PageBox = { x: number; y: number; width: number; height: number };
 
 const A4_PORTRAIT = { width: 595.28, height: 841.89 };
 
+export const DEFAULT_LAYOUT_ZOOM_PERCENT = 200;
+export const MIN_LAYOUT_ZOOM_PERCENT = 100;
+export const MAX_LAYOUT_ZOOM_PERCENT = 400;
+export const LAYOUT_ZOOM_STEP_PERCENT = 25;
+
+export function clampLayoutZoomPercent(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_LAYOUT_ZOOM_PERCENT;
+  return Math.max(
+    MIN_LAYOUT_ZOOM_PERCENT,
+    Math.min(MAX_LAYOUT_ZOOM_PERCENT, Math.round(value)),
+  );
+}
+
+export function layoutZoomWidth(value: number): string {
+  return `${clampLayoutZoomPercent(value)}%`;
+}
+
+export function layoutTextFitsBox({
+  availableHeight,
+  availableWidth,
+  contentScrollHeight,
+  contentScrollWidth,
+}: {
+  availableHeight: number;
+  availableWidth: number;
+  contentScrollHeight: number;
+  contentScrollWidth: number;
+}): boolean {
+  // DOM scroll dimensions are whole pixels while SVG boxes often land on
+  // fractions. Be conservative vertically so hidden overflow never cuts a
+  // line, while allowing one fractional horizontal pixel caused by the
+  // width:100% SVG layout quantization.
+  return contentScrollHeight <= Math.max(1, Math.floor(availableHeight)) &&
+    contentScrollWidth <= Math.ceil(availableWidth + 0.25);
+}
+
 export function resolvePageSize(layout: StoredPdfPageLayout) {
   const width = Number(layout.pageWidthPoints);
   const height = Number(layout.pageHeightPoints);

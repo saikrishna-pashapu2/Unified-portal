@@ -10,19 +10,20 @@ export const MAX_PDF_REQUEST_BYTES =
 // not make this an environment override: stale worker settings must never
 // select any other model for extraction, translation, review, or retries.
 export const PDFX_V2_MODEL = 'gpt-5.6-luna' as const;
-export const PDFX_V2_RENDERER_VERSION = 'clean-layout-v1-2026-08-25' as const;
+export const PDFX_V2_RENDERER_VERSION = 'clean-layout-v2-2026-09-14' as const;
 
 // Checkpoints created by older geometry/rendering rules must not be mixed with
 // pages created by this pipeline. Bump this whenever the stored layout contract
 // changes in a way that requires re-extraction.
-export const PDFX_V2_PIPELINE_VERSION = 'luna-layout-v5-2026-08-25' as const;
+export const PDFX_V2_PIPELINE_VERSION = 'luna-layout-v5-native-2026-09-14' as const;
 
-// New submissions use a queue type unknown to pre-layout-preservation workers.
-// Keeping the domain/API name as v2 avoids a database migration, while the v4
-// queue fence guarantees that an obsolete worker cannot claim and complete a
-// new translation with the removed reflow renderer or a non-Luna model.
-export const PDFX_V2_QUEUE_JOB_TYPE = 'pdf_translation_v5' as const;
+// Queue type is a deployment fence, not the product/pipeline version. The
+// native v5 repair remains the v5 translator, but an already-running old v5
+// worker must be unable to claim jobs submitted by this build. This also makes
+// local testing safe when the local app deliberately points at production DB.
+export const PDFX_V2_QUEUE_JOB_TYPE = 'pdf_translation_v5_native' as const;
 export const PDFX_V2_LEGACY_QUEUE_JOB_TYPES = [
+  'pdf_translation_v5',
   'pdf_translation_v4',
   'pdf_translation_v3',
   'pdf_translation_v2',

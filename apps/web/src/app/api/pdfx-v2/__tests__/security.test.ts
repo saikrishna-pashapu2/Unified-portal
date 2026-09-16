@@ -31,6 +31,17 @@ vi.mock('@/lib/jobs/queue', async () => {
 beforeEach(() => vi.clearAllMocks());
 
 describe('PDF Translator API ownership', () => {
+  it.each(['extractionRecovery','denseTranslation','translationRecovery'])('does not publish private %s recovery data as a validated layout',async(key)=> {
+    mocks.findOwnedJob.mockResolvedValue({status:'error',total_pages:1,pages:[{
+      page_number:1,status:'extraction_error',source_text:null,translated_text:null,
+      source_layout:null,translated_layout:null,warnings:[],validation:{[key]:{candidate:{text:'Unvalidated candidate'}}},
+    }]});
+    const { GET }=await import('../pages/route');
+    const response=await GET(new Request('http://localhost/api/pdfx-v2/pages?jobId=11111111-1111-4111-8111-111111111111&page=1'));
+    const payload=await response.json();
+    expect(payload.pages[0]).toMatchObject({validation:null,sourceLayout:null,translatedLayout:null});
+    expect(JSON.stringify(payload)).not.toContain('Unvalidated candidate');
+  });
   it('returns owned positioned layouts for the selectable page reconstruction UI', async () => {
     const sourceLayout = { pageNumber: 1, elements: [] };
     const translatedLayout = { pageNumber: 1, elements: [] };

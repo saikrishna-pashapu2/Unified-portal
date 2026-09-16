@@ -172,15 +172,16 @@ function fitText(
   minimumFontSize = MIN_FONT_SIZE,
   lineHeightMultiplier = 1.18,
 ): { fontSize: number; lineHeight: number; lines: string[] } {
+  minimumFontSize=Math.max(0.05,Math.min(minimumFontSize,box.height/8,box.width/30));
   const maximum = Math.max(minimumFontSize, Math.min(maximumFontSize, box.height * 0.82));
   for (let fontSize = maximum; fontSize >= minimumFontSize; fontSize -= 0.25) {
-    const lines = wrapLines(text, Math.max(1, box.width), font, fontSize);
+    const lines = wrapLines(text, Math.max(0.01, box.width), font, fontSize);
     const lineHeight = fontSize * lineHeightMultiplier;
-    if (lines.length * lineHeight <= box.height + 0.1) {
+    if (lines.length * lineHeight <= box.height + 0.001) {
       return { fontSize, lineHeight, lines };
     }
   }
-  const lines = wrapLines(text, Math.max(1, box.width), font, minimumFontSize);
+  const lines = wrapLines(text, Math.max(0.01, box.width), font, minimumFontSize);
   return { fontSize: minimumFontSize, lineHeight: minimumFontSize * lineHeightMultiplier, lines };
 }
 
@@ -207,8 +208,10 @@ function drawTextInBox(args: {
     args.minimumFontSize,
     args.lineHeightMultiplier,
   );
-  const visibleLineCount = Math.max(0, Math.floor(contentBox.height / fitted.lineHeight));
-  const lines = fitted.lines.slice(0, visibleLineCount);
+  if(fitted.lines.length*fitted.lineHeight>contentBox.height+0.01) {
+    throw new PdfxV2ValidationError('Text cannot fit its source cell without truncation. Use the original Excel file for extremely dense spreadsheet PDFs.');
+  }
+  const lines = fitted.lines;
   const renderedHeight = lines.length * fitted.lineHeight;
   const topOffset = args.verticallyCentered
     ? Math.max(0, (contentBox.height - renderedHeight) / 2)
@@ -247,7 +250,7 @@ function drawTable(page: PDFPage, element: PdfElement, font: PDFFont): void {
         height: cellBox.height,
         color: cell.isHeader ? rgb(0.945, 0.961, 0.976) : rgb(1, 1, 1),
         borderColor: rgb(0.392, 0.455, 0.545),
-        borderWidth: 0.55,
+        borderWidth: Math.min(0.55,cellBox.height*0.08,cellBox.width*0.08),
       });
       const alignment: TextAlignment = cell.isHeader
         ? 'center'

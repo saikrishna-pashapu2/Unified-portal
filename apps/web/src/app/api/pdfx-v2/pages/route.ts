@@ -56,7 +56,10 @@ export async function GET(request: Request) {
       sourceLayout: page.source_layout,
       translatedLayout: page.translated_layout,
       warnings: page.warnings,
-      validation: page.validation,
+      // Recovery candidates are unvalidated private worker state, not a page
+      // preview or an approved layout. Never publish them through this API.
+      validation: page.validation && typeof page.validation==='object' && ('extractionRecovery' in page.validation || 'denseTranslation' in page.validation || 'translationRecovery' in page.validation)
+        ? null : page.validation,
     })),
   });
   response.headers.set('Cache-Control', 'private, no-store');

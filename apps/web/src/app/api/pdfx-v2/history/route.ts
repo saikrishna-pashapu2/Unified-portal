@@ -34,7 +34,7 @@ export async function GET(request: Request) {
     items: items.map((item) => ({
       ...item,
       message: item.status === 'error'
-        ? 'Translation could not continue automatically. Please contact support; completed pages were retained.'
+        ? 'Translation could not continue automatically. Please contact support.'
         : item.message,
       canDownload: item.status === 'completed',
     })),

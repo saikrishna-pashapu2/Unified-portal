@@ -30,6 +30,11 @@ export async function GET(request: Request) {
         current_page: true,
         created_at: true,
         completed_at: true,
+        _count: {
+          select: {
+            pages: { where: { status: 'translated' } },
+          },
+        },
       },
     }),
     esgPrisma.background_jobs.findFirst({
@@ -48,11 +53,11 @@ export async function GET(request: Request) {
   let message = row.message;
   let progress = row.progress;
   if (row.status === 'error') {
-    message = 'Translation could not continue automatically. Please contact support; completed pages were retained.';
+    message = 'Translation could not continue automatically. Please contact support.';
   } else if (active && queue?.status === 'error') {
     status = 'error';
     progress = 100;
-    message = 'Translation could not continue automatically. Please contact support; completed pages were retained.';
+    message = 'Translation could not continue automatically. Please contact support.';
   } else if (active && queue?.status === 'cancelled') {
     status = 'cancelled';
     progress = 100;
@@ -78,6 +83,7 @@ export async function GET(request: Request) {
       progress,
       totalPages: row.total_pages,
       currentPage: row.current_page,
+      completedPages: row._count.pages,
       attempts: queue?.attempts ?? 0,
       maxAttempts: queue?.max_attempts ?? 0,
       createdAt: row.created_at,
