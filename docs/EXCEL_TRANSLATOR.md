@@ -13,6 +13,12 @@ The existing `/esg/tools/pdf-translator-2` page now accepts PDF and plain XLSX f
 
 The existing admin PDF translator dashboard includes a separate Excel usage section. It reports retained-job counts, users, request attempts, input/output tokens, the cached-input subset and changed cells. It does not mix Excel cells with PDF page counts or claim to be a provider billing ledger.
 
+## Admin job history and failure details
+
+The admin translator dashboard lists retained PDF and Excel jobs together, with file-type/status filters, filename search and pagination. Its date selector applies to this list and the period-based usage sections; choose **All time** to include older jobs. PDF page counts and Excel changed-cell counts remain separate. Refresh reloads both product usage sections and the job list.
+
+Failed jobs show their stored failure reason separately from the ordinary progress message. Long errors can be expanded. These are diagnostic details, not a new retry or a guarantee that an old job has been repaired. Where no detailed failure was recorded, the dashboard says so instead of inventing a cause. The admin-only, private/no-store endpoint returns job metadata and usage counters, not uploads, generated documents, workbook checkpoints or raw job JSON. Viewing history never starts translation or makes paid model calls.
+
 ## Translator home and complete history
 
 The home page uses a full-width document library below the upload/language panel. History defaults to 25 records per page, with 10/25/50 page-size options and first/previous/next/last navigation. There is no recent-eight-record visibility cap or date cutoff. Every retained PDF and Excel job belonging to the signed-in user is available across those pages.
@@ -102,9 +108,11 @@ Unit tests cover workbook detection/structure, selected-cell serialization, shar
 
 ```powershell
 pnpm -C apps/web test src/lib/xlsx-translator src/components/xlsx-translator src/app/api/xlsx-translator src/app/api/admin/xlsx-translator
+pnpm -C apps/web test src/app/api/admin/document-translator
 pnpm -C apps/web exec tsc --noEmit --incremental false
 pnpm -C apps/web exec tsc -p tsconfig.esg-driver-worker.json --noEmit --incremental false
 node apps/web/scripts/test-xlsx-translator-ui.mjs
+node apps/web/scripts/test-translator-admin-ui.mjs
 ```
 
 The browser smoke test serves an isolated component with mock APIs, verifies selection/review/confirmation/results/mobile overflow, and saves screenshots under `tmp/excel-translator-ui`. It never starts the portal or uses its credentials/database.
