@@ -1,8 +1,9 @@
 'use client';
 
 import ExcelUsageCard from '@/components/xlsx-translator/ExcelUsageCard';
+import AdminTranslatorJobs from '@/components/document-translator/AdminTranslatorJobs';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -114,14 +115,6 @@ const PERIOD_OPTIONS: Array<{ value: PeriodValue; label: string }> = [
   { value: 'all', label: 'All time' },
 ];
 
-const STATUS_STYLES: Record<string, string> = {
-  completed: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20',
-  processing: 'bg-cyan-50 text-cyan-700 ring-cyan-600/20',
-  queued: 'bg-amber-50 text-amber-700 ring-amber-600/20',
-  error: 'bg-rose-50 text-rose-700 ring-rose-600/20',
-  cancelled: 'bg-slate-100 text-slate-600 ring-slate-500/20',
-};
-
 function formatNumber(value: number, maximumFractionDigits = 0) {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits }).format(value || 0);
 }
@@ -183,14 +176,6 @@ function MetricCard({
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
-  return (
-    <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize ring-1 ring-inset ${STATUS_STYLES[status] ?? STATUS_STYLES.cancelled}`}>
-      {status}
-    </span>
-  );
-}
-
 function EmptyState({ label }: { label: string }) {
   return (
     <div className="grid min-h-40 place-items-center rounded-xl border border-dashed border-slate-300 bg-slate-50 text-sm text-slate-500">
@@ -205,9 +190,14 @@ export default function PdfTranslatorAdminPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const statsRequestId = useRef(0);
 
   const loadStats = useCallback(async (manual = false) => {
-    manual ? setRefreshing(true) : setLoading(true);
+    const requestId = ++statsRequestId.current;
+    setLoading(true);
+    setRefreshing(manual);
+    setError(null);
     try {
       const response = await fetch(`/api/admin/pdf-translator/stats?period=${period}`, {
         cache: 'no-store',
@@ -216,13 +206,17 @@ export default function PdfTranslatorAdminPage() {
       if (!response.ok || !('success' in payload) || payload.success !== true) {
         throw new Error('error' in payload && payload.error ? payload.error : 'Unable to load analytics');
       }
+      if (requestId !== statsRequestId.current) return;
       setStats(payload);
       setError(null);
     } catch (loadError) {
+      if (requestId !== statsRequestId.current) return;
       setError(loadError instanceof Error ? loadError.message : 'Unable to load analytics');
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (requestId === statsRequestId.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, [period]);
 
@@ -230,46 +224,24 @@ export default function PdfTranslatorAdminPage() {
     void loadStats();
   }, [loadStats]);
 
-  const chartData = useMemo(() => stats?.dailyTrend.map((item) => ({
+  const displayStats = stats?.period.value === period ? stats : null;
+  const chartData = useMemo(() => displayStats?.dailyTrend.map((item) => ({
     ...item,
     label: new Date(`${item.date}T00:00:00`).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
     }),
-  })) ?? [], [stats]);
+  })) ?? [], [displayStats]);
 
-  if (loading && !stats) {
-    return (
-      <div className="-m-6 grid min-h-[calc(100vh-4rem)] place-items-center bg-[#f3f5f1]">
-        <div className="text-center">
-          <Loader2 className="mx-auto h-10 w-10 animate-spin text-cyan-700" />
-          <p className="mt-4 text-sm font-medium text-slate-600">Reading translator telemetry…</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error && !stats) {
-    return (
-      <div className="-m-6 grid min-h-[calc(100vh-4rem)] place-items-center bg-[#f3f5f1] p-6">
-        <div className="max-w-md rounded-2xl border border-rose-200 bg-white p-8 text-center shadow-xl">
-          <AlertTriangle className="mx-auto h-10 w-10 text-rose-600" />
-          <h1 className="mt-4 text-xl font-semibold text-slate-950">Analytics unavailable</h1>
-          <p className="mt-2 text-sm text-slate-600">{error}</p>
-          <button onClick={() => void loadStats(true)} className="mt-6 rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800">
-            Try again
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!stats) return null;
-  const { overview } = stats;
-  const inputTokenShare = overview.totalTokens > 0
+  const overview = displayStats?.overview;
+  const inputTokenShare = overview && overview.totalTokens > 0
     ? (overview.inputTokens / overview.totalTokens) * 100
     : 0;
-  const statusTotal = stats.statusBreakdown.reduce((sum, item) => sum + item.jobs, 0);
+  const statusTotal = stats?.statusBreakdown.reduce((sum, item) => sum + item.jobs, 0) ?? 0;
+  const refreshAll = () => {
+    setRefreshKey((value) => value + 1);
+    void loadStats(true);
+  };
 
   return (
     <div className="-m-6 min-h-screen bg-[#f3f5f1] pb-14 text-slate-950">
@@ -281,13 +253,13 @@ export default function PdfTranslatorAdminPage() {
               <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-200">
                 <ScanText className="h-3.5 w-3.5" /> Operations console
               </div>
-              <h1 className="max-w-3xl text-3xl font-semibold tracking-tight sm:text-4xl">PDF Translator telemetry</h1>
+              <h1 className="max-w-3xl text-3xl font-semibold tracking-tight sm:text-4xl">PDF &amp; Excel Translator telemetry</h1>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
-                Translation volume, reliability, token consumption, document throughput, and user adoption in one operational view.
+                Review retained PDF and workbook jobs together. The performance analytics below are PDF-specific.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <label className="sr-only" htmlFor="pdf-stats-period">Analytics period</label>
+              <label className="sr-only" htmlFor="pdf-stats-period">Reporting period</label>
               <select
                 id="pdf-stats-period"
                 value={period}
@@ -297,11 +269,11 @@ export default function PdfTranslatorAdminPage() {
                 {PERIOD_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
               <button
-                onClick={() => void loadStats(true)}
+                onClick={refreshAll}
                 disabled={refreshing}
                 className="inline-flex items-center gap-2 rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200 disabled:opacity-60"
               >
-                <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin motion-reduce:animate-none' : ''}`} />
                 Refresh
               </button>
             </div>
@@ -309,10 +281,10 @@ export default function PdfTranslatorAdminPage() {
 
           <div className="mt-8 grid gap-px overflow-hidden rounded-2xl border border-white/10 bg-white/10 sm:grid-cols-2 lg:grid-cols-4">
             {[
-              ['Lifetime jobs', formatNumber(stats.lifetime.totalJobs)],
-              ['Lifetime pages', formatNumber(stats.lifetime.totalPages)],
-              ['Lifetime users', formatNumber(stats.lifetime.uniqueUsers)],
-              ['Lifetime tokens', formatNumber(stats.lifetime.totalTokens)],
+              ['PDF lifetime jobs', displayStats ? formatNumber(displayStats.lifetime.totalJobs) : '—'],
+              ['PDF lifetime pages', displayStats ? formatNumber(displayStats.lifetime.totalPages) : '—'],
+              ['PDF lifetime users', displayStats ? formatNumber(displayStats.lifetime.uniqueUsers) : '—'],
+              ['PDF lifetime tokens', displayStats ? formatNumber(displayStats.lifetime.totalTokens) : '—'],
             ].map(([label, value]) => (
               <div key={label} className="bg-[#102931]/95 px-5 py-4">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</p>
@@ -324,30 +296,46 @@ export default function PdfTranslatorAdminPage() {
       </section>
 
       <main className="mx-auto max-w-[1500px] space-y-6 px-6 pt-7 sm:px-8 lg:px-10">
-        <ExcelUsageCard period={period} />
-        {error && (
-          <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            <AlertTriangle className="h-4 w-4 shrink-0" /> Refresh failed; showing the last successful snapshot.
+        <AdminTranslatorJobs period={period} refreshKey={refreshKey} />
+        <ExcelUsageCard period={period} refreshKey={refreshKey} />
+
+        {error && displayStats && (
+          <div role="alert" className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <AlertTriangle className="h-4 w-4 shrink-0" /> PDF analytics refresh failed; showing the last successful snapshot.
           </div>
         )}
 
+        {!displayStats && (loading || !error) && (
+          <div role="status" aria-live="polite" className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4 text-sm text-slate-600 shadow-sm">
+            <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none text-cyan-700" /> Reading PDF translator analytics…
+          </div>
+        )}
+        {!displayStats && error && (
+          <div role="alert" className="flex flex-col gap-3 rounded-xl border border-rose-200 bg-white px-5 py-4 text-sm text-rose-950 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-700" /><p><span className="font-semibold">PDF analytics unavailable.</span> {error}</p></div>
+            <button onClick={() => void loadStats(true)} className="shrink-0 rounded-lg bg-slate-950 px-4 py-2 font-semibold text-white hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600 focus-visible:ring-offset-2">Try again</button>
+          </div>
+        )}
+
+        {displayStats && overview && (
+          <>
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
-          <MetricCard icon={<FileStack className="h-5 w-5" />} eyebrow="Translations" value={formatNumber(overview.totalJobs)} detail={`${formatNumber(overview.completedJobs)} completed`} />
-          <MetricCard icon={<CheckCircle2 className="h-5 w-5" />} eyebrow="Success rate" value={`${formatNumber(overview.successRate * 100, 1)}%`} detail="Completed vs. failed terminal jobs" tone="green" />
-          <MetricCard icon={<FileText className="h-5 w-5" />} eyebrow="Pages handled" value={formatNumber(overview.totalPages)} detail={`${formatNumber(overview.averagePagesPerJob, 1)} pages per job`} tone="cyan" />
-          <MetricCard icon={<Users className="h-5 w-5" />} eyebrow="Unique users" value={formatNumber(overview.uniqueUsers)} detail="Users submitting documents" />
-          <MetricCard icon={<Activity className="h-5 w-5" />} eyebrow="Active now" value={formatNumber(overview.activeJobs)} detail="Queued or processing" tone="amber" />
-          <MetricCard icon={<AlertTriangle className="h-5 w-5" />} eyebrow="Failed jobs" value={formatNumber(overview.failedJobs)} detail={`${formatNumber(overview.cancelledJobs)} cancelled`} tone="rose" />
+          <MetricCard icon={<FileStack className="h-5 w-5" />} eyebrow="PDF jobs" value={formatNumber(overview.totalJobs)} detail={`${formatNumber(overview.completedJobs)} completed`} />
+          <MetricCard icon={<CheckCircle2 className="h-5 w-5" />} eyebrow="PDF success rate" value={`${formatNumber(overview.successRate * 100, 1)}%`} detail="Completed vs. failed PDF jobs" tone="green" />
+          <MetricCard icon={<FileText className="h-5 w-5" />} eyebrow="PDF pages" value={formatNumber(overview.totalPages)} detail={`${formatNumber(overview.averagePagesPerJob, 1)} pages per job`} tone="cyan" />
+          <MetricCard icon={<Users className="h-5 w-5" />} eyebrow="PDF users" value={formatNumber(overview.uniqueUsers)} detail="Users submitting PDFs" />
+          <MetricCard icon={<Activity className="h-5 w-5" />} eyebrow="PDF active jobs" value={formatNumber(overview.activeJobs)} detail="Queued or processing" tone="amber" />
+          <MetricCard icon={<AlertTriangle className="h-5 w-5" />} eyebrow="PDF failures" value={formatNumber(overview.failedJobs)} detail={`${formatNumber(overview.cancelledJobs)} cancelled`} tone="rose" />
         </section>
 
         <section className="grid gap-6 xl:grid-cols-[minmax(0,1.65fr)_minmax(320px,0.75fr)]">
           <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
             <div className="mb-6 flex items-start justify-between gap-4">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-700">Throughput</p>
-                <h2 className="mt-1 text-xl font-semibold tracking-tight">Daily translation load</h2>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-700">PDF throughput</p>
+                <h2 className="mt-1 text-xl font-semibold tracking-tight">Daily PDF translation load</h2>
               </div>
-              <div className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600">Jobs + pages</div>
+              <div className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600">PDF jobs + pages</div>
             </div>
             {chartData.length ? (
               <div className="h-80 w-full">
@@ -378,12 +366,12 @@ export default function PdfTranslatorAdminPage() {
             <div className="flex items-center gap-3">
               <div className="grid h-10 w-10 place-items-center rounded-xl bg-slate-950 text-white"><Gauge className="h-5 w-5" /></div>
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Reliability</p>
-                <h2 className="text-lg font-semibold">Job status</h2>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">PDF reliability</p>
+                <h2 className="text-lg font-semibold">PDF job status</h2>
               </div>
             </div>
             <div className="mt-7 space-y-4">
-              {stats.statusBreakdown.map((item) => {
+              {displayStats.statusBreakdown.map((item) => {
                 const percent = statusTotal > 0 ? (item.jobs / statusTotal) * 100 : 0;
                 return (
                   <div key={item.status}>
@@ -397,16 +385,16 @@ export default function PdfTranslatorAdminPage() {
                   </div>
                 );
               })}
-              {!stats.statusBreakdown.length && <EmptyState label="No job status data" />}
+              {!displayStats.statusBreakdown.length && <EmptyState label="No PDF job status data" />}
             </div>
           </article>
         </section>
 
         <section className="grid gap-6 lg:grid-cols-3">
           <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-center gap-3"><Database className="h-5 w-5 text-cyan-700" /><h2 className="text-lg font-semibold">Token consumption</h2></div>
+            <div className="flex items-center gap-3"><Database className="h-5 w-5 text-cyan-700" /><h2 className="text-lg font-semibold">PDF token consumption</h2></div>
             <p className="mt-5 text-4xl font-semibold tracking-tight">{formatNumber(overview.totalTokens)}</p>
-            <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-400">Total model tokens</p>
+            <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-400">PDF model tokens</p>
             <div className="mt-6 flex h-3 overflow-hidden rounded-full bg-slate-100">
               <div className="bg-cyan-600" style={{ width: `${inputTokenShare}%` }} />
               <div className="bg-emerald-500" style={{ width: `${100 - inputTokenShare}%` }} />
@@ -415,11 +403,11 @@ export default function PdfTranslatorAdminPage() {
               <div><span className="inline-block h-2 w-2 rounded-full bg-cyan-600" /> <span className="ml-1 text-slate-500">Input</span><p className="mt-1 font-semibold">{formatNumber(overview.inputTokens)}</p></div>
               <div><span className="inline-block h-2 w-2 rounded-full bg-emerald-500" /> <span className="ml-1 text-slate-500">Output</span><p className="mt-1 font-semibold">{formatNumber(overview.outputTokens)}</p></div>
             </div>
-            <p className="mt-5 border-t border-slate-100 pt-4 text-xs text-slate-500">{formatNumber(overview.averageTokensPerPage)} average tokens per source page</p>
+            <p className="mt-5 border-t border-slate-100 pt-4 text-xs text-slate-500">{formatNumber(overview.averageTokensPerPage)} average tokens per PDF page</p>
           </article>
 
           <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-center gap-3"><Clock3 className="h-5 w-5 text-cyan-700" /><h2 className="text-lg font-semibold">Processing time</h2></div>
+            <div className="flex items-center gap-3"><Clock3 className="h-5 w-5 text-cyan-700" /><h2 className="text-lg font-semibold">PDF processing time</h2></div>
             <div className="mt-6 grid grid-cols-2 gap-4">
               <div className="rounded-xl bg-slate-950 p-4 text-white"><p className="text-[10px] uppercase tracking-[0.16em] text-slate-400">Average</p><p className="mt-2 text-2xl font-semibold">{formatDuration(overview.averageDurationSeconds)}</p></div>
               <div className="rounded-xl bg-cyan-50 p-4 text-cyan-950"><p className="text-[10px] uppercase tracking-[0.16em] text-cyan-700">P95</p><p className="mt-2 text-2xl font-semibold">{formatDuration(overview.p95DurationSeconds)}</p></div>
@@ -432,7 +420,7 @@ export default function PdfTranslatorAdminPage() {
           </article>
 
           <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-center gap-3"><HardDrive className="h-5 w-5 text-cyan-700" /><h2 className="text-lg font-semibold">Document storage</h2></div>
+            <div className="flex items-center gap-3"><HardDrive className="h-5 w-5 text-cyan-700" /><h2 className="text-lg font-semibold">PDF storage</h2></div>
             <div className="mt-6 space-y-5">
               <div><div className="flex items-end justify-between"><span className="text-sm text-slate-500">Uploaded PDFs</span><span className="text-xl font-semibold">{formatBytes(overview.uploadedBytes)}</span></div><div className="mt-2 h-2 rounded-full bg-slate-100"><div className="h-full w-full rounded-full bg-slate-800" /></div></div>
               <div><div className="flex items-end justify-between"><span className="text-sm text-slate-500">Generated PDFs</span><span className="text-xl font-semibold">{formatBytes(overview.outputBytes)}</span></div><div className="mt-2 h-2 rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-500" style={{ width: `${overview.uploadedBytes > 0 ? Math.min(100, (overview.outputBytes / overview.uploadedBytes) * 100) : 0}%` }} /></div></div>
@@ -443,27 +431,25 @@ export default function PdfTranslatorAdminPage() {
 
         <section className="grid gap-6 xl:grid-cols-2">
           <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="mb-5 flex items-center gap-3"><Languages className="h-5 w-5 text-cyan-700" /><div><p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Demand mix</p><h2 className="text-lg font-semibold">Target languages</h2></div></div>
-            {stats.languageBreakdown.length ? (
-              <div className="overflow-x-auto"><table className="w-full min-w-[520px] text-sm"><thead><tr className="border-b border-slate-200 text-left text-[10px] uppercase tracking-[0.16em] text-slate-400"><th className="pb-3 font-semibold">Language</th><th className="pb-3 text-right font-semibold">Jobs</th><th className="pb-3 text-right font-semibold">Pages</th><th className="pb-3 text-right font-semibold">Tokens</th></tr></thead><tbody>{stats.languageBreakdown.map((item) => <tr key={item.language} className="border-b border-slate-100 last:border-0"><td className="py-3 font-semibold">{item.language}</td><td className="py-3 text-right">{formatNumber(item.jobs)}</td><td className="py-3 text-right">{formatNumber(item.pages)}</td><td className="py-3 text-right text-slate-500">{formatNumber(item.tokens)}</td></tr>)}</tbody></table></div>
+            <div className="mb-5 flex items-center gap-3"><Languages className="h-5 w-5 text-cyan-700" /><div><p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">PDF demand mix</p><h2 className="text-lg font-semibold">PDF target languages</h2></div></div>
+            {displayStats.languageBreakdown.length ? (
+              <div className="overflow-x-auto"><table className="w-full min-w-[520px] text-sm"><thead><tr className="border-b border-slate-200 text-left text-[10px] uppercase tracking-[0.16em] text-slate-400"><th className="pb-3 font-semibold">Language</th><th className="pb-3 text-right font-semibold">PDF jobs</th><th className="pb-3 text-right font-semibold">Pages</th><th className="pb-3 text-right font-semibold">Tokens</th></tr></thead><tbody>{displayStats.languageBreakdown.map((item) => <tr key={item.language} className="border-b border-slate-100 last:border-0"><td className="py-3 font-semibold">{item.language}</td><td className="py-3 text-right">{formatNumber(item.jobs)}</td><td className="py-3 text-right">{formatNumber(item.pages)}</td><td className="py-3 text-right text-slate-500">{formatNumber(item.tokens)}</td></tr>)}</tbody></table></div>
             ) : <EmptyState label="No language usage in this period" />}
           </article>
 
           <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="mb-5 flex items-center gap-3"><Cpu className="h-5 w-5 text-cyan-700" /><div><p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">OpenAI passes</p><h2 className="text-lg font-semibold">Model execution</h2></div></div>
-            {stats.modelBreakdown.length ? <div className="space-y-3">{stats.modelBreakdown.map((item) => <div key={`${item.role}-${item.model}`} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-700">{item.role}</p><p className="mt-1 font-mono text-sm text-slate-700">{item.model}</p></div><div className="text-right"><p className="font-semibold">{formatNumber(item.pages)} pages</p><p className="text-xs text-slate-500">{formatNumber(item.attempts)} attempts</p></div></div>)}</div> : <EmptyState label="No model usage in this period" />}
+            <div className="mb-5 flex items-center gap-3"><Cpu className="h-5 w-5 text-cyan-700" /><div><p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">PDF OpenAI passes</p><h2 className="text-lg font-semibold">PDF model execution</h2></div></div>
+            {displayStats.modelBreakdown.length ? <div className="space-y-3">{displayStats.modelBreakdown.map((item) => <div key={`${item.role}-${item.model}`} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-700">{item.role}</p><p className="mt-1 font-mono text-sm text-slate-700">{item.model}</p></div><div className="text-right"><p className="font-semibold">{formatNumber(item.pages)} PDF pages</p><p className="text-xs text-slate-500">{formatNumber(item.attempts)} attempts</p></div></div>)}</div> : <EmptyState label="No PDF model usage in this period" />}
           </article>
         </section>
 
         <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5"><div><p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-700">Adoption</p><h2 className="mt-1 text-xl font-semibold">Top translator users</h2></div><Users className="h-5 w-5 text-slate-400" /></div>
-          {stats.topUsers.length ? <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-sm"><thead className="bg-slate-50"><tr className="text-left text-[10px] uppercase tracking-[0.15em] text-slate-400"><th className="px-6 py-3 font-semibold">User</th><th className="px-4 py-3 font-semibold">Team</th><th className="px-4 py-3 text-right font-semibold">Jobs</th><th className="px-4 py-3 text-right font-semibold">Completed</th><th className="px-4 py-3 text-right font-semibold">Failed</th><th className="px-4 py-3 text-right font-semibold">Pages</th><th className="px-6 py-3 text-right font-semibold">Tokens</th></tr></thead><tbody>{stats.topUsers.map((user) => <tr key={user.userId} className="border-t border-slate-100 hover:bg-slate-50/70"><td className="px-6 py-3.5"><p className="font-semibold text-slate-900">{user.name}</p><p className="text-xs text-slate-500">{user.email ?? 'No email'} · last used {formatDate(user.lastUsedAt)}</p></td><td className="px-4 py-3.5 text-slate-500">{user.team ?? '—'}</td><td className="px-4 py-3.5 text-right font-semibold">{formatNumber(user.jobs)}</td><td className="px-4 py-3.5 text-right text-emerald-700">{formatNumber(user.completed)}</td><td className="px-4 py-3.5 text-right text-rose-700">{formatNumber(user.failed)}</td><td className="px-4 py-3.5 text-right">{formatNumber(user.pages)}</td><td className="px-6 py-3.5 text-right text-slate-500">{formatNumber(user.inputTokens + user.outputTokens)}</td></tr>)}</tbody></table></div> : <div className="p-6"><EmptyState label="No user activity in this period" /></div>}
+          <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5"><div><p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-700">PDF adoption</p><h2 className="mt-1 text-xl font-semibold">Top PDF translator users</h2></div><Users className="h-5 w-5 text-slate-400" /></div>
+          {displayStats.topUsers.length ? <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-sm"><thead className="bg-slate-50"><tr className="text-left text-[10px] uppercase tracking-[0.15em] text-slate-400"><th className="px-6 py-3 font-semibold">User</th><th className="px-4 py-3 font-semibold">Team</th><th className="px-4 py-3 text-right font-semibold">PDF jobs</th><th className="px-4 py-3 text-right font-semibold">Completed</th><th className="px-4 py-3 text-right font-semibold">Failed</th><th className="px-4 py-3 text-right font-semibold">Pages</th><th className="px-6 py-3 text-right font-semibold">Tokens</th></tr></thead><tbody>{displayStats.topUsers.map((user) => <tr key={user.userId} className="border-t border-slate-100 hover:bg-slate-50/70"><td className="px-6 py-3.5"><p className="font-semibold text-slate-900">{user.name}</p><p className="text-xs text-slate-500">{user.email ?? 'No email'} · last used {formatDate(user.lastUsedAt)}</p></td><td className="px-4 py-3.5 text-slate-500">{user.team ?? '—'}</td><td className="px-4 py-3.5 text-right font-semibold">{formatNumber(user.jobs)}</td><td className="px-4 py-3.5 text-right text-emerald-700">{formatNumber(user.completed)}</td><td className="px-4 py-3.5 text-right text-rose-700">{formatNumber(user.failed)}</td><td className="px-4 py-3.5 text-right">{formatNumber(user.pages)}</td><td className="px-6 py-3.5 text-right text-slate-500">{formatNumber(user.inputTokens + user.outputTokens)}</td></tr>)}</tbody></table></div> : <div className="p-6"><EmptyState label="No PDF user activity in this period" /></div>}
         </article>
 
-        <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5"><div><p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-700">Live ledger</p><h2 className="mt-1 text-xl font-semibold">Recent translations</h2></div><FileText className="h-5 w-5 text-slate-400" /></div>
-          {stats.recentJobs.length ? <div className="overflow-x-auto"><table className="w-full min-w-[1120px] text-sm"><thead className="bg-slate-50"><tr className="text-left text-[10px] uppercase tracking-[0.15em] text-slate-400"><th className="px-6 py-3 font-semibold">Document</th><th className="px-4 py-3 font-semibold">User</th><th className="px-4 py-3 font-semibold">Target</th><th className="px-4 py-3 font-semibold">Status</th><th className="px-4 py-3 text-right font-semibold">Progress</th><th className="px-4 py-3 text-right font-semibold">Pages</th><th className="px-4 py-3 text-right font-semibold">Tokens</th><th className="px-6 py-3 text-right font-semibold">Created</th></tr></thead><tbody>{stats.recentJobs.map((job) => <tr key={job.id} className="border-t border-slate-100 align-top hover:bg-slate-50/70"><td className="max-w-sm px-6 py-4"><p className="truncate font-semibold text-slate-900" title={job.filename}>{job.filename}</p><p className="mt-1 font-mono text-[10px] text-slate-400">{job.id}</p>{job.status === 'error' && job.message && <p className="mt-2 line-clamp-2 text-xs leading-5 text-rose-600" title={job.message}>{job.message}</p>}</td><td className="px-4 py-4"><p className="font-medium">{job.userName}</p><p className="text-xs text-slate-500">{job.userEmail ?? 'No email'}</p></td><td className="px-4 py-4">{job.targetLanguage}</td><td className="px-4 py-4"><StatusBadge status={job.status} /><p className="mt-1.5 text-[11px] capitalize text-slate-400">{job.stage}</p></td><td className="px-4 py-4 text-right font-semibold">{formatNumber(job.progress)}%</td><td className="px-4 py-4 text-right">{formatNumber(job.totalPages)}</td><td className="px-4 py-4 text-right text-slate-500">{formatNumber(job.inputTokens + job.outputTokens)}</td><td className="whitespace-nowrap px-6 py-4 text-right text-xs text-slate-500">{formatDate(job.createdAt)}</td></tr>)}</tbody></table></div> : <div className="p-6"><EmptyState label="No translations in this period" /></div>}
-        </article>
+          </>
+        )}
       </main>
     </div>
   );

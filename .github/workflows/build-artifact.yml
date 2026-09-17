@@ -107,7 +107,8 @@ jobs:
           pnpm -C apps/web exec vitest run
           src/lib/xlsx-translator src/components/xlsx-translator
           src/app/api/xlsx-translator src/app/api/admin/xlsx-translator
-          src/app/api/document-translator src/lib/pdfx-v2
+          src/app/api/document-translator src/app/api/admin/document-translator
+          src/lib/document-translator src/lib/pdfx-v2
           src/components/pdfx-v2 src/app/api/pdfx-v2 src/lib/__tests__/env.test.ts
 
       - name: Test ESG driver contracts and workbook catalog
