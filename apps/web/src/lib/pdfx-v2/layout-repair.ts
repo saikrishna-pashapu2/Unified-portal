@@ -104,12 +104,50 @@ function normalizeSafeTableEnvelope(table: PdfElement): PdfElement {
   return { ...table, bbox: unionBoxes(cells.map((cell) => cell.bbox)) };
 }
 
+/** Vision-model boxes on scans are approximate, and moderately overlapping
+ * prose boxes were the single most common terminal extraction failure. When
+ * two non-table text regions overlap enough to fail validation but each
+ * clearly remains its own region, split the shared strip between them along
+ * the axis with the smaller intrusion. Heavy overlap (over 60% of the smaller
+ * box) still fails validation so a genuinely duplicated extraction is
+ * re-requested rather than hidden. Thresholds mirror validateExtractedPage. */
+function separateOverlappingProse(elements: PdfElement[]): PdfElement[] {
+  const out = elements.map(element => ({ ...element, bbox: [...element.bbox] as PdfElement['bbox'] }));
+  for (let pass = 0; pass < 3; pass += 1) {
+    let changed = false;
+    for (let i = 0; i < out.length; i += 1) for (let j = i + 1; j < out.length; j += 1) {
+      const a = out[i], b = out[j];
+      if (!isTextualElement(a) || !isTextualElement(b) || a.kind === 'table' || b.kind === 'table') continue;
+      const overlap = intersection(a.bbox, b.bbox);
+      const smaller = Math.min(area(a.bbox), area(b.bbox));
+      if (smaller <= 0 || overlap <= 300 || overlap / smaller <= 0.15 || overlap / smaller > 0.6) continue;
+      const width = Math.min(a.bbox[2], b.bbox[2]) - Math.max(a.bbox[0], b.bbox[0]);
+      const height = Math.min(a.bbox[3], b.bbox[3]) - Math.max(a.bbox[1], b.bbox[1]);
+      const splitVertical = () => {
+        const boundary = (Math.max(a.bbox[1], b.bbox[1]) + Math.min(a.bbox[3], b.bbox[3])) / 2;
+        const [upper, lower] = a.bbox[1] + a.bbox[3] <= b.bbox[1] + b.bbox[3] ? [a, b] : [b, a];
+        if (boundary - upper.bbox[1] < 8 || lower.bbox[3] - boundary < 8) return false;
+        upper.bbox[3] = boundary; lower.bbox[1] = boundary; return true;
+      };
+      const splitHorizontal = () => {
+        const boundary = (Math.max(a.bbox[0], b.bbox[0]) + Math.min(a.bbox[2], b.bbox[2])) / 2;
+        const [first, second] = a.bbox[0] + a.bbox[2] <= b.bbox[0] + b.bbox[2] ? [a, b] : [b, a];
+        if (boundary - first.bbox[0] < 8 || second.bbox[2] - boundary < 8) return false;
+        first.bbox[2] = boundary; second.bbox[0] = boundary; return true;
+      };
+      if (height <= width ? (splitVertical() || splitHorizontal()) : (splitHorizontal() || splitVertical())) changed = true;
+    }
+    if (!changed) break;
+  }
+  return out;
+}
+
 /** Source-derived changes only. Text, numbers and unrelated blocks are never
  * dropped to satisfy validation, and scans always retain the vision path. */
 export function repairExtractedLayout(layout: PdfPageLayout, native?: NativeGeometry): PdfPageLayout {
   const indexed=normalizeTableIndexes(layout);
   const regions=native ? nativeTableRegions(native) : [];
-  return {...indexed,elements:indexed.elements.filter(element=>!isEmptySemanticArtifact(element)).map(element=> {
+  return {...indexed,elements:separateOverlappingProse(indexed.elements.filter(element=>!isEmptySemanticArtifact(element)).map(element=> {
     if(element.kind==='table') {
       if(!native) return normalizeSafeTableEnvelope(element);
       const matches=regions.filter(b=>intersection(b,element.bbox)/Math.max(1,area(b)+area(element.bbox)-intersection(b,element.bbox))>0.55);
@@ -120,7 +158,7 @@ export function repairExtractedLayout(layout: PdfPageLayout, native?: NativeGeom
     if(!isTextualElement(element) || !element.text.trim()) return element;
     const bbox=matchNativeBox(element.text,element.bbox,native);
     return bbox ? {...element,bbox} : element;
-  })};
+  }))};
 }
 
 /** Extremely dense digital spreadsheet PDFs don't need model-generated cell

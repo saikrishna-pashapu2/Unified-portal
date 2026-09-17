@@ -391,7 +391,7 @@ export const defaultPdfxV2Requester: PdfxV2OpenAiRequester = {
     targetLanguage,
     model,
     reasoningEffort = 'low',
-    maxOutputTokens = 1_500,
+    maxOutputTokens = 6_000,
   }) {
     const response = await getClient().responses.create({
       model,
