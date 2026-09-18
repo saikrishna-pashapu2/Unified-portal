@@ -8,6 +8,7 @@ export const BACKGROUND_JOB_TYPES = [
   "pdf_translation_v4",
   "pdf_translation_v5",
   "pdf_translation_v5_native",
+  "pdf_translation_v6",
   "esg_workbook",
   "fitch_workbook",
   "esg_driver",
@@ -157,16 +158,14 @@ export async function enqueueBackgroundJob(
   database: RawDatabaseClient = esgPrisma,
 ): Promise<void> {
   try {
-    if (args.jobType === "esg_driver_excel_v3" || args.jobType === "esg_driver_excel_v4") {
-      // ESG driver domain creation and queue insertion share this transaction;
-      // serialize the active-job check with the legacy trigger/advisory key.
+    if (args.jobType === 'esg_driver_excel_v3' || args.jobType === 'esg_driver_excel_v4') {
+      // This helper is called inside the domain job transaction. The shared
+      // advisory key also serializes inserts against the legacy DB trigger.
       await database.$executeRaw`SELECT pg_advisory_xact_lock(${args.userId}::integer, hashtext('esg_driver'))`;
       const active = await database.$queryRaw<Array<{ id: string }>>`
         SELECT id::text FROM background_jobs
-        WHERE user_id = ${args.userId}
-          AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4')
-          AND status IN ('queued', 'processing')
-        LIMIT 1
+        WHERE user_id = ${args.userId} AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4')
+          AND status IN ('queued', 'processing') LIMIT 1
       `;
       if (active.length) throw new JobConcurrencyLimitError();
     }
@@ -200,6 +199,7 @@ export async function claimBackgroundJobs(
   leaseSeconds = 90,
   jobTypes: readonly BackgroundJobType[] = BACKGROUND_JOB_TYPES,
   workerKind: BackgroundWorkerKind = "generic",
+  onlyJobId?: string,
 ): Promise<ClaimedBackgroundJob[]> {
   if (!workerId.trim()) throw new Error("Background job worker id is required");
   const safeJobTypes = Array.from(new Set(jobTypes));
@@ -233,6 +233,7 @@ export async function claimBackgroundJobs(
         lease_expires_at = NULL, updated_at = now()
     WHERE cancel_requested = TRUE
       AND job_type = ANY(${safeJobTypes}::text[])
+      AND (${onlyJobId ?? null}::uuid IS NULL OR id = ${onlyJobId ?? null}::uuid)
       AND status IN ('queued', 'processing')
       AND (status = 'queued' OR lease_expires_at IS NULL OR lease_expires_at < now())
     RETURNING id::text, job_type, user_id
@@ -251,6 +252,7 @@ export async function claimBackgroundJobs(
         updated_at = now()
     WHERE status = 'processing'
       AND job_type = ANY(${safeJobTypes}::text[])
+      AND (${onlyJobId ?? null}::uuid IS NULL OR id = ${onlyJobId ?? null}::uuid)
       AND attempts >= max_attempts
       AND (lease_expires_at IS NULL OR lease_expires_at < now())
     RETURNING id::text, job_type, user_id
@@ -260,6 +262,11 @@ export async function claimBackgroundJobs(
     "error",
     "Worker lease expired after final attempt",
   );
+  for (const job of exhausted) {
+    console.error(
+      `[worker] ${job.job_type}/${job.id} failed (error): Worker lease expired after final attempt`,
+    );
+  }
   const rows = await esgPrisma.$queryRaw<BackgroundJobRow[]>`
     WITH candidates AS (
       SELECT id
@@ -272,6 +279,7 @@ export async function claimBackgroundJobs(
         )
       )
         AND job_type = ANY(${safeJobTypes}::text[])
+        AND (${onlyJobId ?? null}::uuid IS NULL OR id = ${onlyJobId ?? null}::uuid)
         AND attempts < max_attempts
         AND cancel_requested = FALSE
       ORDER BY available_at ASC, created_at ASC
@@ -421,7 +429,7 @@ export async function completePdfTranslationV2Job(
   userId: number,
   leaseOwner: string,
   args: {
-    jobType: Extract<BackgroundJobType, "pdf_translation_v2" | "pdf_translation_v3" | "pdf_translation_v4" | "pdf_translation_v5" | "pdf_translation_v5_native">;
+    jobType: Extract<BackgroundJobType, "pdf_translation_v2" | "pdf_translation_v3" | "pdf_translation_v4" | "pdf_translation_v5" | "pdf_translation_v5_native" | "pdf_translation_v6">;
     outputPdf: Buffer;
     metrics: unknown;
     result: unknown;
@@ -599,7 +607,7 @@ export async function cleanupTerminalPdfJobBlobs(
   return esgPrisma.$executeRaw`
     UPDATE background_jobs
     SET input_data = NULL, output_data = NULL, updated_at = now()
-    WHERE job_type IN ('pdf_translation_v2', 'pdf_translation_v3', 'pdf_translation_v4', 'pdf_translation_v5', 'pdf_translation_v5_native')
+    WHERE job_type IN ('pdf_translation_v2', 'pdf_translation_v3', 'pdf_translation_v4', 'pdf_translation_v5', 'pdf_translation_v5_native', 'pdf_translation_v6')
       AND status IN ('done', 'error', 'cancelled')
       AND completed_at < now() - (${retentionSeconds} * INTERVAL '1 second')
       AND (input_data IS NOT NULL OR output_data IS NOT NULL)
@@ -692,7 +700,8 @@ async function synchronizeReapedJobs(
       job.job_type === "pdf_translation_v3" ||
       job.job_type === "pdf_translation_v4" ||
       job.job_type === "pdf_translation_v5" ||
-      job.job_type === "pdf_translation_v5_native"
+      job.job_type === "pdf_translation_v5_native" ||
+      job.job_type === "pdf_translation_v6"
     ) {
       await esgPrisma.pdf_translation_v2_jobs.updateMany({
         where: {
@@ -708,11 +717,7 @@ async function synchronizeReapedJobs(
           completed_at: new Date(),
         },
       });
-    } else if (
-      job.job_type === "esg_driver" ||
-      job.job_type === "esg_driver_excel_v3" ||
-      job.job_type === "esg_driver_excel_v4"
-    ) {
+    } else if ((job.job_type === "esg_driver" || job.job_type === "esg_driver_excel_v3" || job.job_type === "esg_driver_excel_v4")) {
       await esgPrisma.$executeRaw`
         UPDATE esg_driver_jobs
         SET status = ${status}, progress = 100, stage = ${status},
@@ -778,7 +783,7 @@ export async function reconcileTerminalDomainJobs(): Promise<void> {
         updated_at = now()
     FROM background_jobs AS queue
     WHERE queue.id = domain.id
-      AND queue.job_type IN ('pdf_translation_v2', 'pdf_translation_v3', 'pdf_translation_v4', 'pdf_translation_v5', 'pdf_translation_v5_native')
+      AND queue.job_type IN ('pdf_translation_v2', 'pdf_translation_v3', 'pdf_translation_v4', 'pdf_translation_v5', 'pdf_translation_v5_native', 'pdf_translation_v6')
       AND queue.status IN ('error', 'cancelled')
       AND domain.status IN ('queued', 'processing', 'cancelling')
   `;

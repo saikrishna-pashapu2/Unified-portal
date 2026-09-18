@@ -21,8 +21,9 @@ export const PDFX_V2_PIPELINE_VERSION = 'luna-layout-v5-native-2026-09-14' as co
 // native v5 repair remains the v5 translator, but an already-running old v5
 // worker must be unable to claim jobs submitted by this build. This also makes
 // local testing safe when the local app deliberately points at production DB.
-export const PDFX_V2_QUEUE_JOB_TYPE = 'pdf_translation_v5_native' as const;
+export const PDFX_V2_QUEUE_JOB_TYPE = 'pdf_translation_v6' as const;
 export const PDFX_V2_LEGACY_QUEUE_JOB_TYPES = [
+  'pdf_translation_v5_native',
   'pdf_translation_v5',
   'pdf_translation_v4',
   'pdf_translation_v3',

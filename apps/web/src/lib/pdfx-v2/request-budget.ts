@@ -47,6 +47,19 @@ export function isPdfxTerminalError(error:unknown):boolean {
   return false;
 }
 
+/** A user-initiated page rerun is the only way to grant a flagged page a fresh
+ * request allowance. An extraction rerun clears both stages because a new
+ * layout invalidates the old translation; a translation rerun keeps the paid
+ * extraction budget untouched. */
+export function resetPageLedger(ledger: RequestLedger, page: number, stage: 'extraction' | 'translation'): RequestLedger {
+  const counts = { ...ledger.counts };
+  if (stage === 'extraction') delete counts[`extract:${page}`];
+  delete counts[`translate:${page}`];
+  const reservedOutputTokens = { ...(ledger.reservedOutputTokens ?? {}) };
+  delete reservedOutputTokens[`page:${page}`];
+  return { ...ledger, counts, reservedOutputTokens };
+}
+
 /** Durable per-job/page safety ceiling, NOT a daily/user quota. Reserve before
  * sending so timeouts and worker restarts cannot reset the spending allowance. */
 export function budgetedRequester(
@@ -62,7 +75,9 @@ export function budgetedRequester(
     const tokenKey = `page:${page}`;
     ledger.reservedOutputTokens ??= {};
     const available = (page === 0 ? 4000 : 60000) - (ledger.reservedOutputTokens[tokenKey] ?? 0);
-    const requestMaximum = stage === 'orientation' ? 1000 : stage === 'repair' ? 12000 : stage === 'context' ? 2000 : stage === 'validate' ? 1500 : stage === 'translate' ? 20000 : 40000;
+    // Reasoning tokens share the output cap on the Responses API; 1500 for
+    // validate truncated dense-page reviews into terminal failures.
+    const requestMaximum = stage === 'orientation' ? 1000 : stage === 'repair' ? 12000 : stage === 'context' ? 2000 : stage === 'validate' ? 6000 : stage === 'translate' ? 20000 : 40000;
     const maxOutputTokens = Math.min(requestMaximum, available);
     if (maxOutputTokens < Math.min(1000, requestMaximum)) {
       throw new PdfxRequestBudgetError(`Automatic output-token budget reached for page ${page}; no further API requests were sent.`);

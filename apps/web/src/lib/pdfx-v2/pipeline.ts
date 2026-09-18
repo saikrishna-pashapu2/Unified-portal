@@ -30,8 +30,10 @@ import {
   emptyRequestLedger,
   PdfxWorkerVersionError,
   isPdfxWorkerControlFlowError,
+  isPdfxTerminalError,
   type RequestLedger,
 } from './request-budget';
+import { assembleDraftPdf, type FlaggedPage } from './draft-assembly';
 import { parseExtractionRecovery } from './layout-repair';
 import { withPdfTranslationLease } from './lease-checkpoint';
 import { renderPdfxV2Document } from './render';
@@ -189,7 +191,7 @@ export async function processPdfTranslationV2Job(
     ? existing.metrics
     : {}) as StoredMetrics;
   if (
-    job.jobType === PDFX_V2_QUEUE_JOB_TYPE &&
+    (job.jobType === PDFX_V2_QUEUE_JOB_TYPE || job.jobType === 'pdf_translation_v5_native') &&
     (
       priorMetrics.requiredPipelineVersion !== PDFX_V2_PIPELINE_VERSION ||
       priorMetrics.requiredModel !== PDFX_V2_MODEL
@@ -319,7 +321,16 @@ export async function processPdfTranslationV2Job(
     const persistedPages = new Map(
       (checkpointCompatible ? existing.pages : []).map((page) => [page.page_number, page]),
     );
-    const sourceLayouts: StoredPdfPageLayout[] = [];
+    // Terminal content failures no longer fail the whole job: the page is
+    // flagged (null slot), skipped, and delivered as an original-page draft
+    // placeholder the user can rerun individually. Transient provider errors
+    // and control-flow errors still propagate for automatic job-level retry.
+    const flaggedPages = new Map<number, FlaggedPage>();
+    const pageFlaggable = (error: unknown) =>
+      !isPdfxWorkerControlFlowError(error) &&
+      !(error instanceof PdfxWorkerVersionError) &&
+      isPdfxTerminalError(error);
+    const sourceLayouts: (StoredPdfPageLayout | null)[] = [];
 
     for (let index = 0; index < pagePdfs.length; index += 1) {
       const pageNumber = index + 1;
@@ -370,7 +381,10 @@ export async function processPdfTranslationV2Job(
             error_message: errorMessage(error),
           },
         });
-        throw error;
+        if (!pageFlaggable(error)) throw error;
+        flaggedPages.set(pageNumber, { stage: 'extraction', error: errorMessage(error) });
+        sourceLayouts.push(null);
+        continue;
       }
       await throwIfJobCancelled(job.id, job.leaseOwner);
       const extractedLayout = withPhysicalPageSize(extracted.layout, pagePdfs[index]);
@@ -400,11 +414,14 @@ export async function processPdfTranslationV2Job(
       });
     }
 
+    const extractedLayouts = sourceLayouts.filter(
+      (layout): layout is StoredPdfPageLayout => layout !== null,
+    );
     let context = checkpointCompatible ? parseContext(existing.document_context) : null;
-    if (!context) {
+    if (!context && extractedLayouts.length > 0) {
       await reportProgress(47, 'context', 'Building document terminology context…');
       const contextResult = await buildDocumentContext(
-        sourceLayouts,
+        extractedLayouts,
         job.payload.targetLang,
         requester,
       );
@@ -429,6 +446,8 @@ export async function processPdfTranslationV2Job(
     const translatedLayouts: StoredPdfPageLayout[] = [];
     for (let index = 0; index < sourceLayouts.length; index += 1) {
       const source = sourceLayouts[index];
+      if (source === null) continue;
+      if (context === null) throw new Error('Document context is missing for translation');
       const pageNumber = source.pageNumber;
       const current = await esgPrisma.pdf_translation_v2_pages.findUnique({
         where: { job_id_page_number: { job_id: job.id, page_number: pageNumber } },
@@ -471,7 +490,9 @@ export async function processPdfTranslationV2Job(
             error_message: errorMessage(error),
           },
         }));
-        throw error;
+        if (!pageFlaggable(error)) throw error;
+        flaggedPages.set(pageNumber, { stage: 'translation', error: errorMessage(error) });
+        continue;
       }
       await throwIfJobCancelled(job.id, job.leaseOwner);
       const merged = mergePageTranslation(source, translated.translation) as StoredPdfPageLayout;
@@ -493,17 +514,34 @@ export async function processPdfTranslationV2Job(
 
     await reportProgress(94, 'rendering', 'Rendering translated tables and text…');
     await renderPdfxV2Document(translatedLayouts, outputPath, job.inputData);
-    const outputPdf = await fs.readFile(outputPath);
+    let outputPdf = await fs.readFile(outputPath);
+    if (flaggedPages.size > 0) {
+      // A partial result must be unmistakable: flagged pages keep the original
+      // source content under a visible NOT TRANSLATED banner.
+      outputPdf = await assembleDraftPdf({
+        renderedTranslatedPdf: outputPdf,
+        originalPdf: job.inputData,
+        translatedPageNumbers: translatedLayouts.map((layout) => layout.pageNumber),
+        flaggedPages,
+        totalPages: pagePdfs.length,
+      });
+    }
 
     const usage = await esgPrisma.pdf_translation_v2_pages.aggregate({
       where: { job_id: job.id },
       _sum: { input_tokens: true, output_tokens: true },
     });
+    const flaggedSummary = Array.from(flaggedPages.entries()).map(([page, flag]) => ({
+      page,
+      stage: flag.stage,
+      error: flag.error.slice(0, 600),
+    }));
     const metrics = {
       ...storedMetrics,
       pageInputTokens: usage._sum.input_tokens ?? 0,
       pageOutputTokens: usage._sum.output_tokens ?? 0,
       sourcePages: sourceLayouts.length,
+      flaggedPages: flaggedSummary,
       translator: 'openai-structured-v2',
       pipelineVersion: PDFX_V2_PIPELINE_VERSION,
       model: PDFX_V2_MODEL,
@@ -511,6 +549,7 @@ export async function processPdfTranslationV2Job(
     };
     const result = {
       pages: sourceLayouts.length,
+      flaggedPages: flaggedSummary.length,
       translator: 'openai-structured-v2',
       targetLanguage: job.payload.targetLang,
       pipelineVersion: PDFX_V2_PIPELINE_VERSION,
@@ -518,12 +557,15 @@ export async function processPdfTranslationV2Job(
       rendererVersion: PDFX_V2_RENDERER_VERSION,
     };
     await throwIfJobCancelled(job.id, job.leaseOwner);
+    const total = pagePdfs.length;
     await completePdfTranslationV2Job(job.id, job.userId, job.leaseOwner, {
       jobType: job.jobType,
       outputPdf,
       metrics,
       result,
-      message: `Done. ${sourceLayouts.length} ${sourceLayouts.length === 1 ? 'page' : 'pages'} translated and validated.`,
+      message: flaggedSummary.length
+        ? `Translated ${translatedLayouts.length} of ${total} pages. ${flaggedSummary.length} ${flaggedSummary.length === 1 ? 'page needs' : 'pages need'} review — the download is a draft with those pages marked NOT TRANSLATED; rerun them from the page list.`
+        : `Done. ${total} ${total === 1 ? 'page' : 'pages'} translated and validated.`,
     });
     return { queueCompleted: true, result };
   } finally {

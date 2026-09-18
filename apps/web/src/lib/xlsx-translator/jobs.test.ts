@@ -500,13 +500,17 @@ describe("Excel durable request budget", () => {
     j.inputData = row.input_data;
     j.payload = data.payload_json;
     mocks.request.mockRejectedValue(new Error("Request timeout"));
-    for (let i = 0; i < 3; i++) {
-      await expect(processExcelTranslation(j)).rejects.toThrow();
+    for (let i = 0; i < 2; i++) {
+      await expect(processExcelTranslation(j)).rejects.toThrow("bounded retry");
       j.result = mocks.update.mock.calls.at(-1)![0].data.result_json;
     }
+    // The exhausted batch no longer fails the job: it completes as a partial
+    // draft with the cell flagged, and no third request is ever sent.
+    const output = await processExcelTranslation(j);
+    expect((output.result as any).flaggedEntries).toBeGreaterThan(0);
     expect(mocks.request).toHaveBeenCalledTimes(2);
-    expect((j.result as any).requests).toBe(4);
-    expect((j.result as any).attempts["0"]).toBe(2);
+    expect((output.result as any).requests).toBe(4);
+    expect((output.result as any).attempts["0"]).toBe(2);
   });
   it("does not spend unused budgets on unrelated earlier failures during a cell addition", async () => {
     const row = incrementalRow();
@@ -532,7 +536,11 @@ describe("Excel durable request budget", () => {
       },
       usage: { inputTokens: 10, outputTokens: 5, cachedInputTokens: 0 },
     }));
-    await expect(processExcelTranslation(j)).rejects.toThrow("Earlier batch");
+    const output = await processExcelTranslation(j);
+    expect((output.result as any).flaggedReports?.[0]).toContain(
+      "Earlier batch",
+    );
+    expect((output.result as any).flaggedCells).toBeGreaterThan(0);
     expect(mocks.request).toHaveBeenCalledTimes(1);
     expect(mocks.request.mock.calls[0][0][0].cells).toEqual(['["Other","A1"]']);
   });
@@ -906,8 +914,10 @@ describe("Excel durable request budget", () => {
       },
       usage: { inputTokens: 10, outputTokens: 5, cachedInputTokens: 0 },
     }));
-    await expect(processExcelTranslation(makeJob(saved))).rejects.toThrow(
-      "three approved",
+    let output = await processExcelTranslation(makeJob(saved));
+    expect((output.result as any).flaggedEntries).toBe(1);
+    expect((output.result as any).flaggedReports?.[0]).toContain(
+      "3 approved request attempts",
     );
     expect(saved).toMatchObject({
       requests: 3,
@@ -915,9 +925,8 @@ describe("Excel durable request budget", () => {
       inputTokens: 110,
       outputTokens: 25,
     });
-    await expect(processExcelTranslation(makeJob(saved))).rejects.toThrow(
-      "three approved",
-    );
+    output = await processExcelTranslation(makeJob(saved));
+    expect((output.result as any).flaggedEntries).toBe(1);
     expect(mocks.request).toHaveBeenCalledTimes(1);
     expect(saved.rejectedCells).toBeDefined();
   });
@@ -952,8 +961,17 @@ describe("Excel durable request budget", () => {
       },
       usage: { inputTokens: 10, outputTokens: 5, cachedInputTokens: 0 },
     }));
-    await expect(processExcelTranslation(j)).rejects.toThrow(
+    const output = await processExcelTranslation(j);
+    expect((output.result as any).flaggedCells).toBe(1);
+    expect((output.result as any).flaggedReports?.[0]).toContain(
       "batch 1 exhausted",
+    );
+    const partialBook = inspectWorkbook(output.outputData!);
+    expect(partialBook.sheets[0].cells.get("A1")!.text).toBe(
+      "Quyosh panellari 1",
+    );
+    expect(partialBook.sheets[0].cells.get("A2")!.text).toBe(
+      "Солнечные панели 2",
     );
     expect(saved).toMatchObject({
       translatedCells: 40,
@@ -1045,9 +1063,9 @@ describe("Excel durable request budget", () => {
       },
       usage: { inputTokens: 100, outputTokens: 20, cachedInputTokens: 0 },
     }));
-    await expect(processExcelTranslation(twoCellJob())).rejects.toThrow(
-      "numeric",
-    );
+    const first = await processExcelTranslation(twoCellJob());
+    expect((first.result as any).flaggedCells).toBe(1);
+    expect((first.result as any).flaggedReports?.[0]).toContain("numeric");
     expect(saved).toMatchObject({
       translatedCells: 1,
       completedBatches: 0,
@@ -1057,7 +1075,8 @@ describe("Excel durable request budget", () => {
     });
     expect(Object.keys(saved.translations)).toHaveLength(1);
     expect(saved.batchIssues[0]).toHaveLength(1);
-    await expect(processExcelTranslation(twoCellJob(saved))).rejects.toThrow(
+    const second = await processExcelTranslation(twoCellJob(saved));
+    expect((second.result as any).flaggedReports?.[0]).toContain(
       saved.batchIssues[0][0].id,
     );
     expect(mocks.request).toHaveBeenCalledTimes(2);
@@ -1264,9 +1283,9 @@ describe("Excel durable request budget", () => {
     await expect(processExcelTranslation(makeJob(checkpoint))).rejects.toThrow(
       "bounded retry",
     );
-    await expect(processExcelTranslation(makeJob(checkpoint))).rejects.toThrow(
-      "exhausted",
-    );
+    const output = await processExcelTranslation(makeJob(checkpoint));
+    expect((output.result as any).flaggedReports?.[0]).toContain("exhausted");
+    expect((output.result as any).flaggedEntries).toBeGreaterThan(0);
     expect(mocks.request).toHaveBeenCalledTimes(2);
   });
   it("does not call the provider after cancellation or a lost reservation lease", async () => {

@@ -99,3 +99,49 @@ export async function rasterDetailStrips(png: Buffer): Promise<{ png: Buffer; to
     return { png: canvas.toBuffer('image/png'), top: top / source.height * 1000, bottom: bottom / source.height * 1000 };
   });
 }
+
+/** Distinguishes horizontal text lines from sideways ones without any model
+ * call. Printed lines make the per-row ink profile alternate strongly between
+ * text rows and gaps, while the per-column profile stays comparatively smooth;
+ * a quarter-turned page inverts that. Used only as a sanity gate on the
+ * model's orientation guess, never as the sole authority. */
+export async function textLineDirection(png: Buffer): Promise<'horizontal' | 'vertical' | 'unclear'> {
+  const { createCanvas, loadImage } = await import('@napi-rs/canvas');
+  const source = await loadImage(png);
+  const scale = Math.min(1, 700 / Math.max(source.width, source.height));
+  const width = Math.max(1, Math.round(source.width * scale));
+  const height = Math.max(1, Math.round(source.height * scale));
+  const canvas = createCanvas(width, height);
+  const context = canvas.getContext('2d');
+  context.drawImage(source, 0, 0, width, height);
+  const { data } = context.getImageData(0, 0, width, height);
+  const rows = new Float64Array(height);
+  const columns = new Float64Array(width);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const offset = (y * width + x) * 4;
+      const ink = 255 - (data[offset] * 0.299 + data[offset + 1] * 0.587 + data[offset + 2] * 0.114);
+      if (ink > 96) {
+        rows[y] += 1;
+        columns[x] += 1;
+      }
+    }
+  }
+  const alternation = (profile: Float64Array) => {
+    let mean = 0;
+    for (let index = 0; index < profile.length; index += 1) mean += profile[index];
+    mean /= profile.length;
+    if (mean <= 0) return 0;
+    let successive = 0;
+    for (let index = 1; index < profile.length; index += 1) {
+      successive += Math.abs(profile[index] - profile[index - 1]);
+    }
+    return successive / (profile.length - 1) / mean;
+  };
+  const rowAlternation = alternation(rows);
+  const columnAlternation = alternation(columns);
+  if (rowAlternation <= 0 && columnAlternation <= 0) return 'unclear';
+  if (rowAlternation > columnAlternation * 1.4) return 'horizontal';
+  if (columnAlternation > rowAlternation * 1.4) return 'vertical';
+  return 'unclear';
+}

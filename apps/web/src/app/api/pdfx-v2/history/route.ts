@@ -26,13 +26,19 @@ export async function GET(request: Request) {
         progress: true,
         total_pages: true,
         created_at: true,
+        _count: {
+          select: {
+            pages: { where: { status: { in: ['extraction_error', 'translation_error'] } } },
+          },
+        },
       },
     }),
     esgPrisma.pdf_translation_v2_jobs.count({ where: { user_id: auth.userId } }),
   ]);
   const response = NextResponse.json({
-    items: items.map((item) => ({
+    items: items.map(({ _count, ...item }) => ({
       ...item,
+      flaggedPages: ['completed', 'error'].includes(item.status) ? _count.pages : 0,
       message: item.status === 'error'
         ? 'Translation could not continue automatically. Please contact support.'
         : item.message,

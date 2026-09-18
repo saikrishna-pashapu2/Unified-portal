@@ -36,7 +36,9 @@ describe('production PDF worker retry ceiling', () => {
       isPdfxV2QueueJobType,
     } = await import('../constants');
 
-    expect(PDFX_V2_QUEUE_JOB_TYPE).toBe('pdf_translation_v5_native');
+    // v6 fences new jobs from pre-draft workers; v5_native drains as legacy.
+    expect(PDFX_V2_QUEUE_JOB_TYPE).toBe('pdf_translation_v6');
+    expect(isPdfxV2QueueJobType('pdf_translation_v5_native')).toBe(true);
     expect(BACKGROUND_JOB_TYPES).toContain(PDFX_V2_QUEUE_JOB_TYPE);
     expect(isPdfxV2QueueJobType(PDFX_V2_QUEUE_JOB_TYPE)).toBe(true);
   });

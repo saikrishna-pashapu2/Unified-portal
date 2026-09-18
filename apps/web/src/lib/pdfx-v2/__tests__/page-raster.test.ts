@@ -31,3 +31,37 @@ describe('PDF Translator page raster fallback', () => {
     expect(png.length).toBeGreaterThan(1_000);
   });
 });
+
+describe('textLineDirection', () => {
+  async function stripedPng(direction: 'horizontal' | 'vertical'): Promise<Buffer> {
+    const { createCanvas } = await import('@napi-rs/canvas');
+    const canvas = createCanvas(400, 560);
+    const context = canvas.getContext('2d');
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, 400, 560);
+    context.fillStyle = '#111111';
+    // Text-line-like stripes: ink bands with gaps, covering most of the page.
+    if (direction === 'horizontal') {
+      for (let y = 40; y < 520; y += 14) context.fillRect(30, y, 340, 7);
+    } else {
+      for (let x = 30; x < 370; x += 14) context.fillRect(x, 40, 7, 480);
+    }
+    return canvas.toBuffer('image/png');
+  }
+
+  it('recognizes horizontal text lines and their quarter-turned counterpart', async () => {
+    const { textLineDirection } = await import('../page-raster');
+    expect(await textLineDirection(await stripedPng('horizontal'))).toBe('horizontal');
+    expect(await textLineDirection(await stripedPng('vertical'))).toBe('vertical');
+  });
+
+  it('returns unclear for a blank page instead of guessing', async () => {
+    const { textLineDirection } = await import('../page-raster');
+    const { createCanvas } = await import('@napi-rs/canvas');
+    const canvas = createCanvas(200, 200);
+    const context = canvas.getContext('2d');
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, 200, 200);
+    expect(await textLineDirection(canvas.toBuffer('image/png'))).toBe('unclear');
+  });
+});

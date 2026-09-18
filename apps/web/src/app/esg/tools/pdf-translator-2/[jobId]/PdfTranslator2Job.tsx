@@ -38,6 +38,7 @@ type JobStatus = {
   totalPages: number;
   currentPage: number;
   completedPages: number;
+  flaggedPages?: { pageNumber: number; failedStage: 'extraction' | 'translation'; error: string }[];
   attempts: number;
   maxAttempts: number;
 };
@@ -74,6 +75,8 @@ export default function PdfTranslator2Job({ jobId }: { jobId: string }) {
   const [layoutZoomPercent, setLayoutZoomPercent] = useState(MIN_LAYOUT_ZOOM_PERCENT);
   const [error, setError] = useState('');
   const [cancelling, setCancelling] = useState(false);
+  const [rerunningPage, setRerunningPage] = useState<number | null>(null);
+  const [pollNonce, setPollNonce] = useState(0);
 
   const refresh = useCallback(async () => {
     const [statusResponse, pagesResponse] = await Promise.all([
@@ -107,7 +110,27 @@ export default function PdfTranslator2Job({ jobId }: { jobId: string }) {
     };
     void poll();
     return () => { stopped = true; if (timer) clearTimeout(timer); };
-  }, [refresh]);
+  }, [refresh, pollNonce]);
+
+  const rerunPage = async (pageNumber: number) => {
+    setRerunningPage(pageNumber);
+    try {
+      const response = await fetch(`/api/pdfx-v2/jobs/${encodeURIComponent(jobId)}/rerun-page`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pageNumber }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({})) as { error?: string };
+        setError(payload.error ?? 'Unable to rerun this page');
+      } else {
+        setError('');
+        setPollNonce((nonce) => nonce + 1);
+      }
+    } finally {
+      setRerunningPage(null);
+    }
+  };
 
   const cancel = async () => {
     setCancelling(true);
@@ -186,7 +209,47 @@ export default function PdfTranslator2Job({ jobId }: { jobId: string }) {
 
       <div className="mx-auto max-w-[1700px] px-4 py-5 sm:px-7">
         {error && <div className="mb-4 flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800"><AlertTriangle className="h-5 w-5" />{error}<button type="button" onClick={() => void refresh()} className="ml-auto inline-flex items-center gap-1 font-semibold"><RotateCcw className="h-4 w-4" />Retry</button></div>}
-        {job?.status === 'completed' && <div className="mb-4 flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900"><CheckCircle2 className="h-5 w-5" />Every accepted page passed structure, numeric, and target-language validation.</div>}
+        {job?.status === 'completed' && !(job.flaggedPages?.length) && <div className="mb-4 flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900"><CheckCircle2 className="h-5 w-5" />Every accepted page passed structure, numeric, and target-language validation.</div>}
+        {job?.status === 'completed' && (job.flaggedPages?.length ?? 0) > 0 && (
+          <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+            <div className="mb-3 flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+              <span>
+                <strong>Draft download.</strong> {job.flaggedPages!.length} of {job.totalPages}{' '}
+                {job.flaggedPages!.length === 1 ? 'page was' : 'pages were'} flagged and kept untranslated with a
+                NOT&nbsp;TRANSLATED banner. Rerun each flagged page below; the document reassembles automatically.
+              </span>
+            </div>
+            <ul className="space-y-2">
+              {job.flaggedPages!.map((flagged) => (
+                <li key={flagged.pageNumber} className="flex items-start justify-between gap-3 rounded-md border border-amber-200 bg-white/70 p-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold">
+                      Page {flagged.pageNumber}
+                      <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-amber-800">
+                        {flagged.failedStage === 'extraction' ? 'OCR failed' : 'Translation failed'}
+                      </span>
+                    </p>
+                    {flagged.error && <p className="mt-1 line-clamp-2 text-xs text-amber-800" title={flagged.error}>{flagged.error}</p>}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void rerunPage(flagged.pageNumber)}
+                    disabled={rerunningPage !== null}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-[#132a33] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#1c3a45] disabled:opacity-50"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    {rerunningPage === flagged.pageNumber
+                      ? 'Queuing…'
+                      : flagged.failedStage === 'extraction'
+                        ? 'Rerun OCR + translation'
+                        : 'Rerun translation'}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {job?.status === 'error' && <div className="mb-4 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><span><strong>Translation stopped safely.</strong> {job.message} {job.completedPages > 0 ? `${job.completedPages} completed ${job.completedPages === 1 ? 'page was' : 'pages were'} retained.` : 'No page reached a completed checkpoint.'}</span></div>}
 
         <div className="sticky top-[65px] z-30 mb-4 rounded-xl border border-slate-200 bg-white/95 p-3 shadow-sm backdrop-blur" aria-label="Document review controls">

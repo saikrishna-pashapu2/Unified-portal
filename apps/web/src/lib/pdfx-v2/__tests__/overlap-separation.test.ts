@@ -52,4 +52,40 @@ describe('blank document-number guard', () => {
     expect(numberPlaceholderFailure(source, 'протокол № 07-25 от «23» июля 2025 года', 'Russian')).toBeTruthy();
     expect(numberPlaceholderFailure(source, 'протокол от «23» июля 2025 года', 'Russian')).toBeTruthy();
   });
+  // The real page-2 pattern: a blank date «__.__.2025», a real numbered
+  // reference «№01-17-2110-сонли», and a numbered-blank «___-сонли», rendered
+  // faithfully in Russian without a «№» before the copied underscores.
+  const meetingSource =
+    '17.11.2025 йилдаги №01-17-2110-сонли Ишончнома; ' +
+    'иштирокчиларининг __.__.2025 йилдаги навбатдан ташқари ___-сонли умумий йиғилиши';
+  it('accepts bare underscore blanks copied without a № prefix', () => {
+    expect(numberPlaceholderFailure(
+      meetingSource,
+      'доверенность № 01-17-2110 от 17.11.2025; внеочередного ___-го общего собрания участников от __.__.2025',
+      'Russian',
+    )).toBeUndefined();
+    expect(numberPlaceholderFailure(
+      meetingSource,
+      'доверенность № 01-17-2110 от 17.11.2025; внеочередного общего собрания участников № ___ от __.__.2025',
+      'Russian',
+    )).toBeUndefined();
+  });
+  // Page footers of scanned protocols repeat the Uzbek footer verbatim on the
+  // translated page. A retained «___-сонли» is still a blank and must pass.
+  it('accepts the source footer retained verbatim on the translated page', () => {
+    const footer = '“Yashil Energiya” МЧЖ ҚК иштирокчиларининг __.__.2025 йилдаги навбатдан ташқари ___-сонли умумий йиғилиши 2 варақ жами 17 варақ';
+    expect(numberPlaceholderFailure(footer, footer, 'Russian')).toBeUndefined();
+    expect(numberPlaceholderFailure(
+      footer,
+      'переведённый текст страницы. ' + footer,
+      'Russian',
+    )).toBeUndefined();
+  });
+  it('still rejects that pattern when the numbered blank is dropped', () => {
+    expect(numberPlaceholderFailure(
+      meetingSource,
+      'доверенность № 01-17-2110 от 17.11.2025; внеочередного общего собрания участников от __.__.2025',
+      'Russian',
+    )).toBeTruthy();
+  });
 });

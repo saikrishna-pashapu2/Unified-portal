@@ -27,6 +27,7 @@ export type HistoryItem = {
   total_pages: number;
   created_at: string;
   canDownload: boolean;
+  flagged?: number;
 };
 export type HistoryResponse = {
   items: HistoryItem[];

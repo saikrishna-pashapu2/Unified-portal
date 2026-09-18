@@ -79,7 +79,11 @@ describe("Unified private history", () => {
     expect(sql.match(/WHERE user_id=/g)).toHaveLength(2);
     expect(sql).toContain("ORDER BY created_at DESC, id DESC, kind DESC");
     expect(sql).toContain("CASE WHEN status='done' THEN 'completed'");
-    expect(sql).not.toMatch(/input_data|output_data|result_json|last_error/);
+    // result_json may be read ONLY to extract the numeric flagged-cell count;
+    // checkpoints, binaries and raw provider errors stay unselectable.
+    expect(sql).not.toMatch(
+      /input_data|output_data|last_error|result_json(?!->>'flaggedCells')/,
+    );
     expect(r.headers.get("cache-control")).toBe("private, no-store");
   });
   it("applies literal Unicode search and file/status filters before pagination", async () => {

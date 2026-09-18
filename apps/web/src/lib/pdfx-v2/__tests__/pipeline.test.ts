@@ -112,7 +112,7 @@ describe('PDF Translator pipeline', () => {
       | undefined;
     expect(queueArgs?.data).toEqual(expect.objectContaining({
       id: jobId,
-      job_type: 'pdf_translation_v5_native',
+      job_type: 'pdf_translation_v6',
       max_attempts: 3,
       input_data: inputBuffer,
     }));
@@ -293,5 +293,109 @@ describe('PDF Translator pipeline', () => {
     expect(mocks.extract).not.toHaveBeenCalled();
     expect(mocks.context).not.toHaveBeenCalled();
     expect(mocks.translate).not.toHaveBeenCalled();
+  });
+
+  it('flags a terminally failed page, delivers a banner draft, and completes the job', async () => {
+    const { PdfxTranslationStopError } = await import('../request-budget');
+    const source1 = layout(1, 'Биринчи саҳифа 100');
+    const source2 = layout(2, 'Иккинчи саҳифа 200');
+    const documentContext = {
+      sourceLanguage: 'Uzbek', targetLanguage: 'Russian', documentType: 'Resolution',
+      summary: 'Legal', preserveTerms: [], terminology: [],
+    };
+    mocks.findJob.mockResolvedValue({
+      status: 'queued', output_pdf: null, total_pages: 2,
+      document_context: documentContext,
+      metrics: {
+        requiredPipelineVersion: 'luna-layout-v5-native-2026-09-14',
+        requiredModel: 'gpt-5.6-luna',
+        pipelineVersion: 'luna-layout-v5-native-2026-09-14',
+        model: 'gpt-5.6-luna',
+      },
+      pages: [
+        { page_number: 1, status: 'extracted', source_layout: source1, translated_layout: null },
+        { page_number: 2, status: 'extracted', source_layout: source2, translated_layout: null },
+      ],
+    });
+    mocks.findPage
+      .mockResolvedValueOnce({ status: 'extracted', translated_layout: null, validation: {} })
+      .mockResolvedValueOnce({ status: 'extracted', translated_layout: null, validation: {} });
+    mocks.translate.mockImplementation(async (source: PdfPageLayout) => {
+      if (source.pageNumber === 1) {
+        throw new PdfxTranslationStopError('OpenAI could not translate source page 1 safely: unresolved review failure.');
+      }
+      return {
+        translation: { pageNumber: 2, warnings: [], elements: [{ id: 'e001', text: 'Вторая страница 200', cells: [] }] },
+        layout: source2, attempts: 1, validation: { valid: true, failures: [], warnings: [] },
+        model: 'gpt-5.6-luna', responseId: 'translation-2', inputTokens: 30, outputTokens: 15,
+      };
+    });
+    mocks.render.mockImplementationOnce(async (_pages: unknown, outputPath: string) => {
+      const fs = await import('node:fs/promises');
+      await fs.writeFile(outputPath, await onePagePdf());
+    });
+
+    const { processPdfTranslationV2Job } = await import('../pipeline');
+    await processPdfTranslationV2Job({
+      id: '11111111-1111-4111-8111-111111111111',
+      jobType: 'pdf_translation_v5_native', userId: 7,
+      payload: { filename: 'legal.pdf', targetLang: 'Russian', pageCount: 2 },
+      inputData: await twoPagePdf(), outputData: null, result: null,
+      status: 'processing', progress: 10, attempts: 1, maxAttempts: 3,
+      progressData: null, lastError: null,
+      leaseOwner: 'worker-1', cancelRequested: false,
+      availableAt: new Date(), leaseExpiresAt: new Date(Date.now() + 60_000),
+      createdAt: new Date(), updatedAt: new Date(), completedAt: null,
+    });
+
+    expect(mocks.updatePage).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: 'translation_error' }),
+    }));
+    expect(mocks.complete).toHaveBeenCalledTimes(1);
+    const completion = (mocks.complete.mock.calls[0] as unknown[])[3] as {
+      outputPdf: Buffer; message: string; result: { flaggedPages: number };
+    };
+    expect(completion.message).toContain('1 page needs review');
+    expect(completion.result.flaggedPages).toBe(1);
+    const draft = await PDFDocument.load(completion.outputPdf);
+    expect(draft.getPageCount()).toBe(2);
+    expect(draft.getTitle()).toContain('DRAFT');
+  });
+
+  it('still fails the whole job on a transient provider error so the queue retries it', async () => {
+    const source1 = layout(1, 'Биринчи саҳифа 100');
+    const documentContext = {
+      sourceLanguage: 'Uzbek', targetLanguage: 'Russian', documentType: 'Resolution',
+      summary: 'Legal', preserveTerms: [], terminology: [],
+    };
+    mocks.findJob.mockResolvedValue({
+      status: 'queued', output_pdf: null, total_pages: 1,
+      document_context: documentContext,
+      metrics: {
+        requiredPipelineVersion: 'luna-layout-v5-native-2026-09-14',
+        requiredModel: 'gpt-5.6-luna',
+        pipelineVersion: 'luna-layout-v5-native-2026-09-14',
+        model: 'gpt-5.6-luna',
+      },
+      pages: [
+        { page_number: 1, status: 'extracted', source_layout: source1, translated_layout: null },
+      ],
+    });
+    mocks.findPage.mockResolvedValueOnce({ status: 'extracted', translated_layout: null, validation: {} });
+    mocks.translate.mockRejectedValue(new Error('fetch failed: ETIMEDOUT'));
+
+    const { processPdfTranslationV2Job } = await import('../pipeline');
+    await expect(processPdfTranslationV2Job({
+      id: '11111111-1111-4111-8111-111111111111',
+      jobType: 'pdf_translation_v5_native', userId: 7,
+      payload: { filename: 'legal.pdf', targetLang: 'Russian', pageCount: 1 },
+      inputData: await onePagePdf(), outputData: null, result: null,
+      status: 'processing', progress: 10, attempts: 1, maxAttempts: 3,
+      progressData: null, lastError: null,
+      leaseOwner: 'worker-1', cancelRequested: false,
+      availableAt: new Date(), leaseExpiresAt: new Date(Date.now() + 60_000),
+      createdAt: new Date(), updatedAt: new Date(), completedAt: null,
+    })).rejects.toThrow(/ETIMEDOUT/);
+    expect(mocks.complete).not.toHaveBeenCalled();
   });
 });

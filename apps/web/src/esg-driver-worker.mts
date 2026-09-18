@@ -35,6 +35,7 @@ import {
   PDFX_V2_MODEL,
   PDFX_V2_PIPELINE_VERSION,
   PDFX_V2_QUEUE_JOB_TYPE,
+  PDFX_V2_QUEUE_JOB_TYPES,
 } from "@/lib/pdfx-v2/constants";
 import { isPdfxTerminalError } from "@/lib/pdfx-v2/request-budget";
 import {
@@ -60,11 +61,7 @@ const enabledJobTypes = esgDriversOnly
   : [
       ...esgDriverJobTypes,
       "xlsx_translation_v1",
-      "pdf_translation_v2",
-      "pdf_translation_v3",
-      "pdf_translation_v4",
-      "pdf_translation_v5",
-      PDFX_V2_QUEUE_JOB_TYPE,
+      ...PDFX_V2_QUEUE_JOB_TYPES,
     ] as const;
 let stopping = false;
 let lastEmailPoll = 0;

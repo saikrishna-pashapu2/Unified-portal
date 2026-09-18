@@ -63,7 +63,8 @@ export function buildAdminTranslatorJobsQuery(
             'pdf_translation_v3',
             'pdf_translation_v4',
             'pdf_translation_v5',
-            'pdf_translation_v5_native'
+            'pdf_translation_v5_native',
+            'pdf_translation_v6'
           )
         WHERE ($1::timestamptz IS NULL OR j.created_at >= $1::timestamptz)
 
