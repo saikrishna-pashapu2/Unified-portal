@@ -27,12 +27,16 @@ export async function GET(request: Request) {
       Array<Omit<HistoryResponse, "page" | "size">>
     >`
       WITH jobs AS (
-        SELECT id, filename, target_lang, status, stage, progress, total_pages, created_at, 'pdf' AS kind
+        SELECT id, filename, target_lang, status, stage, progress, total_pages, created_at, 'pdf' AS kind,
+          (SELECT count(*)::int FROM pdf_translation_v2_pages p
+            WHERE p.job_id = pdf_translation_v2_jobs.id
+              AND p.status IN ('extraction_error', 'translation_error')) AS flagged
         FROM pdf_translation_v2_jobs WHERE user_id=${auth.userId}
         UNION ALL
         SELECT id, payload_json->>'filename' AS filename, payload_json->>'targetLang' AS target_lang,
           CASE WHEN status='done' THEN 'completed' ELSE status END AS status,
-          status AS stage, progress, 0 AS total_pages, created_at, 'xlsx' AS kind
+          status AS stage, progress, 0 AS total_pages, created_at, 'xlsx' AS kind,
+          COALESCE(NULLIF(result_json->>'flaggedCells', '')::int, 0) AS flagged
         FROM background_jobs WHERE user_id=${auth.userId} AND job_type=${XLSX_JOB_TYPE}
       ), searched AS (
         SELECT * FROM jobs
@@ -69,7 +73,9 @@ export async function GET(request: Request) {
           message:
             item.status === "error"
               ? "Open this job to review saved results and recovery options."
-              : null,
+              : item.status === "completed" && (item as { flagged?: number }).flagged
+                ? "Draft: some content is not translated yet. Open this job to rerun the flagged parts."
+                : null,
         })),
         page: p.page,
         size: p.pageSize,

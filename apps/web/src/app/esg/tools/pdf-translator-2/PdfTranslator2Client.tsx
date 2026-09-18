@@ -824,6 +824,24 @@ function HistoryRow({
       </td>
       <td className={styles.statusCell}>
         <StatusPill status={item.status} />
+        {item.status === "completed" && (item.flagged ?? 0) > 0 && (
+          <span
+            title={`${item.flagged} ${item.kind === "xlsx" ? "cell(s)" : "page(s)"} not translated — open to rerun`}
+            style={{
+              display: "inline-block",
+              marginLeft: 6,
+              padding: "2px 8px",
+              borderRadius: 999,
+              background: "#fef3c7",
+              border: "1px solid #f59e0b",
+              color: "#92400e",
+              fontSize: 11,
+              fontWeight: 600,
+            }}
+          >
+            Draft · {item.flagged} flagged
+          </span>
+        )}
         {active && (
           <div className={styles.progress}>
             <span>

@@ -85,6 +85,24 @@ export type ExcelPayload = {
     planVersion?: 2 | 3;
   }[];
 };
+/**
+ * Optional status metadata for a confirmed addition. This is deliberately
+ * additive so checkpoints written before this field was introduced remain
+ * readable. Counts are derived from the effective job plan and accepted
+ * translation entries, not from changed-cell totals.
+ */
+export type ExcelScopeProgress = {
+  latestAdditionId: string;
+  latestScope: {
+    totalEntries: number;
+    completedEntries: number;
+    pendingEntries: number;
+  };
+  earlier: {
+    pendingBatches: number;
+    pendingCells: number;
+  };
+};
 export type ExcelCheckpoint = {
   version: 1;
   translations: Record<string, string>;
@@ -108,6 +126,17 @@ export type ExcelCheckpoint = {
   recoveryGranted?: string[];
   recoveryApproved?: boolean;
   recoveryForAddition?: string;
+  /** Cumulative per-batch extra request allowance from explicit user
+   * recoveries. Each confirmed recovery adds one to a batch at its limit,
+   * making flagged batches individually re-runnable without counter resets. */
+  extraAttempts?: Record<string, number>;
+  /** Entries left in the source language when the job completed as a partial
+   * draft. The workbook download keeps their original text. */
+  flaggedEntries?: number;
+  flaggedCells?: number;
+  flaggedReports?: string[];
+  /** Optional, backward-compatible status detail for the latest addition. */
+  scopeProgress?: ExcelScopeProgress;
 };
 export type ExcelJobView = {
   id: string;
@@ -133,5 +162,8 @@ export type ExcelJobView = {
     | "recoveryGranted"
     | "recoveryApproved"
     | "recoveryForAddition"
+    | "extraAttempts"
+    | "flaggedReports"
+    | "scopeProgress"
   > | null;
 };

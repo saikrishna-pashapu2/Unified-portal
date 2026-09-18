@@ -35,6 +35,11 @@ export async function GET(request: Request) {
             pages: { where: { status: 'translated' } },
           },
         },
+        pages: {
+          where: { status: { in: ['extraction_error', 'translation_error'] } },
+          orderBy: { page_number: 'asc' },
+          select: { page_number: true, status: true, error_message: true },
+        },
       },
     }),
     esgPrisma.background_jobs.findFirst({
@@ -84,6 +89,15 @@ export async function GET(request: Request) {
       totalPages: row.total_pages,
       currentPage: row.current_page,
       completedPages: row._count.pages,
+      // Flagged pages are actionable: the finished draft keeps them as
+      // original-content placeholders and each one can be rerun individually.
+      flaggedPages: ['completed', 'error'].includes(status)
+        ? row.pages.map((page) => ({
+            pageNumber: page.page_number,
+            failedStage: page.status === 'extraction_error' ? 'extraction' : 'translation',
+            error: (page.error_message ?? '').slice(0, 600),
+          }))
+        : [],
       attempts: queue?.attempts ?? 0,
       maxAttempts: queue?.max_attempts ?? 0,
       createdAt: row.created_at,

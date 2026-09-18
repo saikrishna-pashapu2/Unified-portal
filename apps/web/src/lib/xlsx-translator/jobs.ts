@@ -15,6 +15,7 @@ import {
   type ExcelPayload,
   type ExcelCheckpoint,
   type ExcelJobView,
+  type ExcelScopeProgress,
 } from "./types";
 import {
   buildPlan,
@@ -65,6 +66,131 @@ const emptyCheckpoint = (): ExcelCheckpoint => ({
   totalBatches: 0,
   translatedCells: 0,
 });
+
+// Scope-progress is display metadata only. Keep malformed or unexpectedly
+// large persisted values out of user-facing status messages.
+const MAX_SCOPE_PROGRESS_COUNT = 1_000_000;
+
+type EffectiveJobPlan = ReturnType<typeof buildJobPlan>;
+
+function latestAdditionId(payload: ExcelPayload): string | null {
+  const additions = payload.additions;
+  if (!Array.isArray(additions) || additions.length === 0) return null;
+  const id = additions[additions.length - 1]?.id;
+  return typeof id === "string" && id.length > 0 ? id : null;
+}
+
+/**
+ * Build optional status detail from the effective plan. An entry is complete
+ * whenever an accepted translation exists, including an accepted unchanged
+ * result. Cell-change counts are intentionally not used here.
+ */
+function buildScopeProgress(
+  plan: EffectiveJobPlan,
+  translations: Record<string, string>,
+  latest: string,
+): ExcelScopeProgress {
+  let totalEntries = 0;
+  let completedEntries = 0;
+  let pendingEntries = 0;
+  let pendingBatches = 0;
+  let pendingCells = 0;
+
+  for (let i = 0; i < plan.batches.length; i++) {
+    const isLatest = plan.batchKeys[i].startsWith(`${latest}:`);
+    let batchPendingCells = 0;
+    for (const entry of plan.batches[i]) {
+      const accepted = translations[entry.id] !== undefined;
+      if (isLatest) {
+        totalEntries++;
+        if (accepted) completedEntries++;
+        else pendingEntries++;
+      } else if (!accepted) {
+        batchPendingCells += entry.cells.length;
+      }
+    }
+    if (!isLatest && batchPendingCells > 0) {
+      pendingBatches++;
+      pendingCells += batchPendingCells;
+    }
+  }
+
+  return {
+    latestAdditionId: latest,
+    latestScope: { totalEntries, completedEntries, pendingEntries },
+    earlier: { pendingBatches, pendingCells },
+  };
+}
+
+function isScopeProgressCount(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value >= 0 &&
+    value <= MAX_SCOPE_PROGRESS_COUNT
+  );
+}
+
+/**
+ * Validate only the invariants needed to safely describe the status. Old
+ * checkpoints and stale/mismatched metadata deliberately return null and use
+ * the existing generic error message.
+ */
+function validScopeProgress(
+  checkpoint: ExcelCheckpoint | null,
+  payload: ExcelPayload,
+): ExcelScopeProgress | null {
+  const progress = checkpoint?.scopeProgress,
+    latest = latestAdditionId(payload);
+  if (!progress || !latest || progress.latestAdditionId !== latest) return null;
+  const latestScope = progress.latestScope,
+    earlier = progress.earlier;
+  if (!latestScope || !earlier) return null;
+  if (
+    !isScopeProgressCount(latestScope.totalEntries) ||
+    !isScopeProgressCount(latestScope.completedEntries) ||
+    !isScopeProgressCount(latestScope.pendingEntries) ||
+    !isScopeProgressCount(earlier.pendingBatches) ||
+    !isScopeProgressCount(earlier.pendingCells) ||
+    latestScope.totalEntries === 0 ||
+    latestScope.completedEntries + latestScope.pendingEntries !==
+      latestScope.totalEntries ||
+    (earlier.pendingBatches === 0) !== (earlier.pendingCells === 0)
+  )
+    return null;
+  return progress;
+}
+
+function historicalScopeCompletionMessage(
+  checkpoint: ExcelCheckpoint | null,
+  payload: ExcelPayload,
+  canReviewRecovery: boolean,
+  canRecheckSaved: boolean,
+): string | null {
+  const progress = validScopeProgress(checkpoint, payload);
+  if (!progress) return null;
+  const { latestScope, earlier } = progress;
+  // Never claim an addition completed while any entry in that addition is
+  // still pending. This also keeps current-scope failures on the generic path.
+  if (
+    latestScope.pendingEntries !== 0 ||
+    latestScope.completedEntries !== latestScope.totalEntries ||
+    earlier.pendingBatches === 0 ||
+    earlier.pendingCells === 0
+  )
+    return null;
+  const batchLabel = earlier.pendingBatches === 1 ? "batch" : "batches";
+  const nextAction = canReviewRecovery
+    ? "Review recovery options to resume eligible earlier work"
+    : canRecheckSaved
+      ? "Recheck saved results before choosing another selection"
+      : "Review the saved results before choosing another selection";
+  return (
+    `Latest selected work completed (${latestScope.completedEntries} of ${latestScope.totalEntries} entries). ` +
+    `Earlier selected cells still need review (${earlier.pendingCells} across ${earlier.pendingBatches} ${batchLabel}). ` +
+    `${nextAction}; a new selection does not automatically authorize requests for earlier selected cells.`
+  );
+}
 export const planHash = (selections: unknown, target: string) =>
   createHash("sha256")
     // JSONB does not preserve object key order. Rebuild schema fields in their
@@ -178,6 +304,27 @@ export function excelJobView(
   const p = row.payload_json as unknown as ExcelPayload,
     c = row.result_json as unknown as ExcelCheckpoint | null;
   const status = row.status === "done" ? "completed" : row.status;
+  const flaggedCells = (c?.flaggedCells ?? 0) > 0 ? c!.flaggedCells! : 0;
+  const canReviewRecovery =
+      ((status === "error" && !!c && !c.recoveryApproved) ||
+        (status === "completed" && flaggedCells > 0)) &&
+      !!c &&
+      c.requests > 0 &&
+      validSelection(p),
+    canRecheckSaved =
+      status === "error" &&
+      !!c &&
+      Object.keys(c.rejectedCells || {}).length > 0 &&
+      validSelection(p),
+    historicalCompletionMessage =
+      status === "error"
+        ? historicalScopeCompletionMessage(
+            c,
+            p,
+            canReviewRecovery,
+            canRecheckSaved,
+          )
+        : null;
   return {
     id: row.id,
     filename: p.filename,
@@ -190,33 +337,27 @@ export function excelJobView(
     canRestoreDraft: canRestoreDraft(row),
     canExtend:
       ["done", "error"].includes(row.status) && !!c && validSelection(p),
-    canRecheckSaved:
-      status === "error" &&
-      !!c &&
-      Object.keys(c.rejectedCells || {}).length > 0 &&
-      validSelection(p),
-    canReviewRecovery:
-      status === "error" &&
-      !!c &&
-      c.requests > 0 &&
-      !c.recoveryApproved &&
-      validSelection(p),
+    canRecheckSaved,
+    canReviewRecovery,
     message:
       status === "draft"
         ? "Choose the tables and columns to translate."
         : status === "error"
           ? canRestoreDraft(row)
             ? "Translation did not start because of a saved-selection compatibility error. No translation API requests were made. Return to review to try again."
-            : Object.keys(c?.translations || {}).length
-              ? "Translation stopped. Validated cells are retained; the preview is partial and no incomplete download is offered."
-              : "Translation stopped before any translated cells were saved. Only the original workbook is available."
+            : historicalCompletionMessage ||
+              (Object.keys(c?.translations || {}).length
+                ? "Translation stopped. Validated cells are retained; the preview is partial and no incomplete download is offered."
+                : "Translation stopped before any translated cells were saved. Only the original workbook is available.")
           : status === "cancelled"
             ? "Translation cancelled."
             : status === "completed"
-              ? c &&
-                c.requests > 0 &&
-                Object.keys(c.translations || {}).length > 0 &&
-                c.translatedCells === 0
+              ? flaggedCells > 0
+                ? `Partial draft: ${flaggedCells} selected ${flaggedCells === 1 ? "cell keeps" : "cells keep"} the original source text after exhausting their translation attempts. Review recovery to rerun only those cells; everything else is translated and saved.`
+                : c &&
+                  c.requests > 0 &&
+                  Object.keys(c.translations || {}).length > 0 &&
+                  c.translatedCells === 0
                 ? "Selected text reviewed; no text changes were needed in the saved results. It may already be in the target language or contain protected content. You can select another cell or worksheet to continue."
                 : "Selected cells processed. Protected and unselected content preserved. You can select another cell or worksheet to continue."
               : `${c?.completedBatches || 0} of ${c?.totalBatches || 0} text batches completed`,
@@ -548,6 +689,10 @@ export async function addExcelTranslation(
     ],
   };
   const checkpoint = { ...c, totalBatches: c.totalBatches + review.batches };
+  // The new addition is not processing yet. Discard status detail from the
+  // previous scope so a queued job can never claim stale completion; the
+  // worker recomputes it from the effective plan before each checkpoint save.
+  delete checkpoint.scopeProgress;
   const changed = await esgPrisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(${userId}::integer, hashtext(${XLSX_JOB_TYPE}))`;
     const active = await tx.background_jobs.count({
@@ -594,13 +739,20 @@ async function recoveryDetails(id: string, userId: number) {
   const row = await ownedExcelJob(id, userId, true);
   const c = row?.result_json as unknown as ExcelCheckpoint | null;
   const p = row?.payload_json as unknown as ExcelPayload;
+  // A completed job with flagged (untranslated) cells is re-runnable any
+  // number of times: each confirmed recovery grants one more attempt to each
+  // exhausted batch. Legacy failed jobs keep the one-shot error-state flow.
+  const completedWithFlags =
+    row?.status === "done" &&
+    !!c &&
+    ((c.flaggedCells ?? 0) > 0 || (c.flaggedEntries ?? 0) > 0);
   if (
     !row ||
     !row.input_data ||
-    row.status !== "error" ||
+    !(row.status === "error" || completedWithFlags) ||
     !c ||
     !c.requests ||
-    c.recoveryApproved ||
+    (row.status === "error" && c.recoveryApproved) ||
     !validSelection(p)
   )
     throw new WorkbookInputError(
@@ -617,15 +769,19 @@ async function recoveryDetails(id: string, userId: number) {
     if (!pending.length) continue;
     pendingEntries += pending.length;
     const key = plan.batchKeys[i];
+    const limit = Math.max(
+      c.recoveryGranted?.includes(key) ? 3 : 2,
+      2 + (c.extraAttempts?.[key] ?? 0),
+    );
     const attempts = c.attempts[key] || 0;
-    if (!Number.isInteger(attempts) || attempts < 0 || attempts > 2)
+    if (!Number.isInteger(attempts) || attempts < 0 || attempts > limit)
       throw new WorkbookInputError(
         "Invalid saved request counters; contact support.",
       );
-    if (attempts === 2) {
+    if (attempts >= limit) {
       granted.push(key);
       maxRequests++;
-    } else maxRequests += 2 - attempts;
+    } else maxRequests += limit - attempts;
   }
   if (!maxRequests)
     throw new WorkbookInputError(
@@ -684,7 +840,7 @@ export async function resumeExcelJob(
         id,
         user_id: userId,
         job_type: XLSX_JOB_TYPE,
-        status: "error",
+        status: row.status,
         payload_json: { equals: row.payload_json as any },
         result_json: { equals: row.result_json as any },
       },
@@ -705,6 +861,19 @@ export async function resumeExcelJob(
           recoveryForAddition:
             (row.payload_json as unknown as ExcelPayload).additions?.at(-1)
               ?.id || "",
+          // Raise each exhausted batch to exactly one attempt past its
+          // consumed counter, so repeated confirmed recoveries keep working
+          // without ever resetting paid counters.
+          extraAttempts: Object.fromEntries([
+            ...Object.entries(c.extraAttempts ?? {}),
+            ...granted.map((key) => [
+              key,
+              Math.max(
+                (c.extraAttempts?.[key] ?? 0) + 1,
+                (c.attempts[key] ?? 0) - 1,
+              ),
+            ]),
+          ]),
         } as any,
       },
     });
@@ -779,10 +948,12 @@ export async function processExcelTranslation(job: ClaimedBackgroundJob) {
       continue;
     }
     let complete = false;
-    const limit =
+    const limit = Math.max(
       checkpoint.recoveryApproved && checkpoint.recoveryGranted?.includes(key)
         ? 3
-        : 2;
+        : 2,
+      2 + (checkpoint.extraAttempts?.[key] ?? 0),
+    );
     while ((checkpoint.attempts[key] || 0) < limit) {
       const pending = batch.filter(
         (e) => checkpoint.translations[e.id] === undefined,
@@ -854,7 +1025,7 @@ export async function processExcelTranslation(job: ClaimedBackgroundJob) {
     }
     if (!complete)
       unresolved.push(
-        `Spreadsheet batch ${i + 1} exhausted its ${limit === 2 ? "two" : "three approved"} request attempts. No further API calls will be made for this batch. ` +
+        `Spreadsheet batch ${i + 1} exhausted its ${limit} approved request attempt${limit === 1 ? "" : "s"}. No further API calls will be made for this batch. ` +
           (checkpoint.batchIssues?.[key]?.length
             ? checkpoint.batchIssues[key]
                 .map((issue) => `${issue.id}: ${issue.reason}`)
@@ -872,16 +1043,29 @@ export async function processExcelTranslation(job: ClaimedBackgroundJob) {
       },
     );
   }
-  if (unresolved.length)
-    throw new ExcelRequestBudgetError(unresolved.join("\n"));
+  // A batch that exhausted its request budget no longer fails the whole job.
+  // Its cells keep their source text in the delivered workbook, are counted
+  // as flagged, and can be re-run through an explicit recovery approval.
   const replacements: Record<string, string> = {};
+  let flaggedEntries = 0;
+  let flaggedCells = 0;
   for (const entry of plan.entries) {
     const text = checkpoint.translations[entry.id];
-    if (text === undefined)
-      throw new Error("A translation checkpoint is missing.");
+    if (text === undefined) {
+      flaggedEntries += 1;
+      flaggedCells += entry.cells.length;
+      continue;
+    }
     if (text !== entry.source)
       for (const key of entry.cells) replacements[key] = text;
   }
+  checkpoint.flaggedEntries = flaggedEntries;
+  checkpoint.flaggedCells = flaggedCells;
+  if (unresolved.length)
+    checkpoint.flaggedReports = unresolved
+      .map((report) => report.slice(0, 400))
+      .slice(0, 100);
+  else delete checkpoint.flaggedReports;
   await throwIfJobCancelled(job.id, job.leaseOwner);
   const outputData = writeTranslations(book, replacements);
   checkpoint.translatedCells = Object.keys(replacements).length;

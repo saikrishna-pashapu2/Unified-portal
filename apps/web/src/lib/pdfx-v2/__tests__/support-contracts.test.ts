@@ -21,7 +21,7 @@ describe('PDF translator support contracts', () => {
   });
 
   it('fences new jobs from obsolete workers and pins every pass to Luna', () => {
-    expect(PDFX_V2_QUEUE_JOB_TYPE).toBe('pdf_translation_v5_native');
+    expect(PDFX_V2_QUEUE_JOB_TYPE).toBe('pdf_translation_v6');
     expect(PDFX_V2_MODEL).toBe('gpt-5.6-luna');
     expect(PDFX_V2_RENDERER_VERSION).toBe('clean-layout-v2-2026-09-14');
   });
