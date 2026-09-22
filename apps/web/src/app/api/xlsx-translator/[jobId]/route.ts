@@ -142,13 +142,18 @@ export async function GET(request: Request, context: Context) {
             },
             410,
           );
+        const c = row.result_json as unknown as ExcelCheckpoint | null;
         const { unavailable } = checkpointPreviewData(
           inspectWorkbook(Buffer.from(row.input_data)),
           p,
-          row.result_json as unknown as ExcelCheckpoint | null,
+          c,
           row.status,
         );
-        if (unavailable.size)
+        // A deliberate partial draft is downloadable: the worker recorded the
+        // flagged cells, the workbook keeps their original source text, and
+        // the job view explains the per-batch rerun path. Only a completed
+        // job with unexplained gaps (no flag bookkeeping) still refuses.
+        if (unavailable.size && !c?.flaggedCells && !c?.flaggedEntries)
           return json(
             {
               error: missingResultsAdvice,
@@ -156,6 +161,9 @@ export async function GET(request: Request, context: Context) {
             409,
           );
       }
+      const finished = row.result_json as unknown as ExcelCheckpoint | null;
+      const partialDraft =
+        (finished?.flaggedCells ?? 0) > 0 || (finished?.flaggedEntries ?? 0) > 0;
       return new NextResponse(
         new Uint8Array(valuesOnlyWorkbook(Buffer.from(row.output_data))),
         {
@@ -164,7 +172,7 @@ export async function GET(request: Request, context: Context) {
               "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             "Content-Disposition": buildPdfContentDisposition(
               "attachment",
-              `translated_${p.filename}`,
+              `${partialDraft ? "draft_" : "translated_"}${p.filename}`,
             ),
             "Cache-Control": "private, no-store",
             "X-Content-Type-Options": "nosniff",
