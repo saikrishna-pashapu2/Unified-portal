@@ -341,7 +341,7 @@ describe('PDF Translator pipeline', () => {
       jobType: 'pdf_translation_v5_native', userId: 7,
       payload: { filename: 'legal.pdf', targetLang: 'Russian', pageCount: 2 },
       inputData: await twoPagePdf(), outputData: null, result: null,
-      status: 'processing', progress: 10, attempts: 1, maxAttempts: 3,
+      status: 'processing' as const, progress: 10, attempts: 1, maxAttempts: 3,
       progressData: null, lastError: null,
       leaseOwner: 'worker-1', cancelRequested: false,
       availableAt: new Date(), leaseExpiresAt: new Date(Date.now() + 60_000),
@@ -390,12 +390,130 @@ describe('PDF Translator pipeline', () => {
       jobType: 'pdf_translation_v5_native', userId: 7,
       payload: { filename: 'legal.pdf', targetLang: 'Russian', pageCount: 1 },
       inputData: await onePagePdf(), outputData: null, result: null,
-      status: 'processing', progress: 10, attempts: 1, maxAttempts: 3,
+      status: 'processing' as const, progress: 10, attempts: 1, maxAttempts: 3,
       progressData: null, lastError: null,
       leaseOwner: 'worker-1', cancelRequested: false,
       availableAt: new Date(), leaseExpiresAt: new Date(Date.now() + 60_000),
       createdAt: new Date(), updatedAt: new Date(), completedAt: null,
     })).rejects.toThrow(/ETIMEDOUT/);
     expect(mocks.complete).not.toHaveBeenCalled();
+  });
+
+  describe('document translation memory for repeated headers', () => {
+    const HEADER = '221-сон 04.05.2026. Барқарор ривожланиш ва корпоратив бошқарув тамойиллари';
+    const HEADER_RU = '№ 221 от 04.05.2026. Принципы устойчивого развития и корпоративного управления';
+    const documentContext = {
+      sourceLanguage: 'Uzbek', targetLanguage: 'Russian', documentType: 'Resolution',
+      summary: 'Legal', preserveTerms: [], terminology: [],
+    };
+    const withHeader = (pageNumber: number, body: string): PdfPageLayout => ({
+      ...layout(pageNumber, body),
+      elements: [
+        { id: 'e001', kind: 'header', order: 0, level: 0, translate: true, text: HEADER,
+          bbox: [15, 21, 447, 31], columnCount: 0, rowCount: 0, rows: [] },
+        { ...layout(pageNumber, body).elements[0], id: 'e002', order: 1, bbox: [50, 100, 950, 300] },
+      ],
+    });
+    const source1 = withHeader(1, 'Биринчи саҳифа 100');
+    const source2 = withHeader(2, 'Иккинчи саҳифа 200');
+    const bodyRu: Record<number, string> = { 1: 'Первая страница 100', 2: 'Вторая страница 200' };
+    const job = async () => ({
+      id: '11111111-1111-4111-8111-111111111111',
+      jobType: 'pdf_translation_v6' as const, userId: 7,
+      payload: { filename: 'legal.pdf', targetLang: 'Russian' as const, pageCount: 2 },
+      inputData: await twoPagePdf(), outputData: null, result: null,
+      status: 'processing' as const, progress: 10, attempts: 1, maxAttempts: 3,
+      progressData: null, lastError: null,
+      leaseOwner: 'worker-1', cancelRequested: false,
+      availableAt: new Date(), leaseExpiresAt: new Date(Date.now() + 60_000),
+      createdAt: new Date(), updatedAt: new Date(), completedAt: null,
+    });
+    const extractedJob = (metrics: Record<string, unknown> = {}) => ({
+      status: 'queued', output_pdf: null, total_pages: 2, document_context: documentContext,
+      metrics: {
+        requiredPipelineVersion: 'luna-layout-v5-native-2026-09-14', requiredModel: 'gpt-5.6-luna',
+        pipelineVersion: 'luna-layout-v5-native-2026-09-14', model: 'gpt-5.6-luna', ...metrics,
+      },
+      pages: [
+        { page_number: 1, status: 'extracted', source_layout: source1, translated_layout: null },
+        { page_number: 2, status: 'extracted', source_layout: source2, translated_layout: null },
+      ],
+    });
+    const ok = (source: PdfPageLayout, elements: { id: string; text: string; cells: never[] }[]) => ({
+      translation: { pageNumber: source.pageNumber, warnings: [], elements },
+      layout: source, attempts: 1, validation: { valid: true, failures: [], warnings: [] },
+      model: 'gpt-5.6-luna', responseId: 'r', inputTokens: 10, outputTokens: 5,
+    });
+    const savedMemory = () => (mocks.updateJob.mock.calls as unknown as [{ data: { metrics?: { translationMemory?: unknown } } }][])
+      .map(([args]) => args.data.metrics?.translationMemory)
+      .filter(Boolean)
+      .at(-1) as { entries: Record<string, string>; failure?: string } | undefined;
+
+    it('translates the header once, then pins it on every page and translates only page bodies', async () => {
+      mocks.findJob.mockResolvedValue(extractedJob());
+      mocks.findPage.mockResolvedValue({ status: 'extracted', translated_layout: null, validation: {} });
+      mocks.translate.mockImplementation(async (source: PdfPageLayout) => source.pageNumber === 1_000_000
+        ? ok(source, [{ id: 's001', text: HEADER_RU, cells: [] }])
+        : ok(source, source.elements.map((element) => ({ id: element.id, text: bodyRu[source.pageNumber], cells: [] }))));
+
+      const { processPdfTranslationV2Job } = await import('../pipeline');
+      await processPdfTranslationV2Job(await job());
+
+      expect(mocks.translate).toHaveBeenCalledTimes(3);
+      const calls = mocks.translate.mock.calls as unknown as [PdfPageLayout][];
+      expect(calls[0][0].pageNumber).toBe(1_000_000);
+      expect(calls.slice(1).map(([source]) => source.elements.map((element) => element.id))).toEqual([['e002'], ['e002']]);
+      const rendered = mocks.render.mock.calls[0][0] as unknown as PdfPageLayout[];
+      expect(rendered.map((page) => page.elements.map((element) => element.text))).toEqual([
+        [HEADER_RU, 'Первая страница 100'],
+        [HEADER_RU, 'Вторая страница 200'],
+      ]);
+      expect(Object.values(savedMemory()?.entries ?? {})).toEqual([HEADER_RU]);
+      expect((mocks.complete.mock.calls[0] as unknown[])[3]).toMatchObject({ message: 'Done. 2 pages translated and validated.' });
+    });
+
+    it('keeps translating whole pages when the shared pass fails, adopting the first reviewed header', async () => {
+      const { PdfxTranslationStopError } = await import('../request-budget');
+      mocks.findJob.mockResolvedValue(extractedJob());
+      mocks.findPage.mockResolvedValue({ status: 'extracted', translated_layout: null, validation: {} });
+      mocks.translate.mockImplementation(async (source: PdfPageLayout) => {
+        if (source.pageNumber === 1_000_000) throw new PdfxTranslationStopError('shared header rejected twice');
+        return ok(source, source.elements.map((element) => ({
+          id: element.id, text: element.id === 'e001' ? HEADER_RU : bodyRu[source.pageNumber], cells: [],
+        })));
+      });
+
+      const { processPdfTranslationV2Job } = await import('../pipeline');
+      await processPdfTranslationV2Job(await job());
+
+      const calls = mocks.translate.mock.calls as unknown as [PdfPageLayout][];
+      // Page 1 translates its own header; page 2 reuses the harvested rendering.
+      expect(calls.slice(1).map(([source]) => source.elements.map((element) => element.id))).toEqual([['e001', 'e002'], ['e002']]);
+      const memory = savedMemory();
+      expect(memory?.failure).toBe('shared header rejected twice');
+      expect(Object.values(memory?.entries ?? {})).toEqual([HEADER_RU]);
+      expect(mocks.complete).toHaveBeenCalledTimes(1);
+    });
+
+    it('resumes a page with exactly the pins its saved checkpoint was computed from', async () => {
+      const retained = { version: 'page-translation-v1', fingerprint: 'reduced-layout', passes: {} };
+      mocks.findJob.mockResolvedValue(extractedJob({
+        translationMemory: { version: 'shared-blocks-v1', keys: [], entries: {} },
+      }));
+      mocks.findPage
+        .mockResolvedValueOnce({ status: 'extracted', translated_layout: null, validation: { translationRecovery: retained, pinnedFromMemory: { e001: HEADER_RU } } })
+        .mockResolvedValueOnce({ status: 'extracted', translated_layout: null, validation: {} });
+      mocks.translate.mockImplementation(async (source: PdfPageLayout) =>
+        ok(source, source.elements.map((element) => ({ id: element.id, text: element.id === 'e001' ? HEADER_RU : bodyRu[source.pageNumber], cells: [] }))));
+
+      const { processPdfTranslationV2Job } = await import('../pipeline');
+      await processPdfTranslationV2Job(await job());
+
+      const calls = mocks.translate.mock.calls as unknown as [PdfPageLayout, unknown, unknown, unknown, { resume?: unknown }][];
+      // Memory is empty, but page 1 had pinned the header when it was checkpointed.
+      expect(calls[0][0].elements.map((element) => element.id)).toEqual(['e002']);
+      expect(calls[0][4].resume).toEqual(retained);
+      expect(calls[1][0].elements.map((element) => element.id)).toEqual(['e001', 'e002']);
+    });
   });
 });
