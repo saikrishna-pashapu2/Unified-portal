@@ -123,5 +123,5 @@ export function budgetedRequester(
       ledger.reservedOutputTokens![tokenKey] -= Math.max(0, maxOutputTokens - usage.outputTokens);
     }
   };
-  return { remainingTranslationRequests: (pageNumber) => Math.max(0, 12 - (ledger.counts[`translate:${pageNumber}`] ?? 0)), ...(requester.nativeGeometry ? {nativeGeometry:requester.nativeGeometry} : {}), ...(requester.repair ? {repair:wrap('repair')} : {}), ...(requester.orientation ? { orientation: wrap('orientation') } : {}), extract: wrap('extract'), context: wrap('context'), translate: wrap('translate'), validate: wrap('validate') };
+  return { remainingTranslationRequests: (pageNumber) => Math.max(0, 12 - (ledger.counts[`translate:${pageNumber}`] ?? 0)), ...(requester.nativeGeometry ? {nativeGeometry:requester.nativeGeometry} : {}), ...(requester.nativeTextRotation ? {nativeTextRotation:requester.nativeTextRotation} : {}), ...(requester.repair ? {repair:wrap('repair')} : {}), ...(requester.orientation ? { orientation: wrap('orientation') } : {}), extract: wrap('extract'), context: wrap('context'), translate: wrap('translate'), validate: wrap('validate') };
 }
