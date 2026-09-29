@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio';
-import { getPdfJsStandardFontDataUrl } from '@/lib/pdfjs-node';
+import { getPdfJsStandardFontDataUrl, loadNodePdfJs } from '@/lib/pdfjs-node';
 
 export const MAX_EXCEL_SOURCE_CHARS = 500_000;
 const MAX_PDF_PAGES = 500;
@@ -28,10 +28,7 @@ export async function extractExcelPdf(buffer: Buffer): Promise<string> {
 }
 
 export async function extractExcelPdfDocument(buffer: Buffer): Promise<{ text: string; title?: string }> {
-  const globals = globalThis as typeof globalThis & { DOMMatrix?: unknown; Path2D?: unknown };
-  globals.DOMMatrix ||= class {} as unknown as typeof DOMMatrix;
-  globals.Path2D ||= class {} as unknown as typeof Path2D;
-  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const pdfjs = await loadNodePdfJs();
   const task = pdfjs.getDocument({ data: new Uint8Array(buffer), useWorkerFetch: false, isEvalSupported: false, disableFontFace: true, standardFontDataUrl: getPdfJsStandardFontDataUrl(), verbosity: pdfjs.VerbosityLevel.ERRORS });
   const document = await task.promise;
   try {

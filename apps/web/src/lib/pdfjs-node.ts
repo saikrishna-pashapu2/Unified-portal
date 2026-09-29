@@ -6,6 +6,23 @@ const STANDARD_FONT_SENTINEL = "LiberationSans-Regular.ttf";
 
 type FileExists = (path: string) => boolean;
 
+/**
+ * All Node PDF readers share one graphics runtime, including text-only readers.
+ * PDF.js only supplies missing globals: an empty Path2D/DOMMatrix shim installed
+ * by another job would otherwise survive and fail when a later job draws text.
+ * Install the constructors from the same native package used by our canvases
+ * before importing PDF.js. Reassert them on every load, even after module caching.
+ * Keep both imports lazy and server-external for Next.js and standalone workers.
+ */
+export async function loadNodePdfJs(): Promise<typeof import("pdfjs-dist/legacy/build/pdf.mjs")> {
+  if (typeof window !== "undefined") {
+    throw new Error("The Node PDF graphics runtime cannot be loaded in a browser");
+  }
+  const { Path2D, DOMMatrix, ImageData } = await import("@napi-rs/canvas");
+  Object.assign(globalThis, { Path2D, DOMMatrix, ImageData });
+  return import("pdfjs-dist/legacy/build/pdf.mjs");
+}
+
 function candidateStandardFontDirectories(startDirectory: string): string[] {
   const candidates = new Set<string>();
   let current = resolve(startDirectory);
