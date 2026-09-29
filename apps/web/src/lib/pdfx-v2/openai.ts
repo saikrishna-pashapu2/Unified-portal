@@ -181,6 +181,7 @@ function contextPrompt(
     `Create a concise document-wide translation context for a complete translation into ${targetLanguage}.`,
     'Identify the real source language and script, the legal or professional document type, proper names that must remain stable, and a consistent terminology glossary.',
     'preserveTerms is for proper names and identifiers, not ordinary currency/unit labels or untranslated prose. Put their target-language equivalents in terminology instead.',
+    'Every terminology entry and note must be consistent with every other entry and with the printed source wording. Never add a note prescribing a conventional expansion of an abbreviation (for example ESG) that contradicts an entry for the words the source actually prints; one source phrase gets exactly one target rendering.',
     'For Uzbek Cyrillic or Uzbek Latin input, translate semantically rather than transliterating. Preserve official abbreviations, numbers, article references, and organization names when appropriate.',
     'Do not translate the document itself in this response.',
     sourcePages.map((text, index) => `[[PAGE ${index + 1}]]\n${text}`).join('\n\n'),
@@ -459,6 +460,14 @@ export async function extractPageWithOpenAi(
     `OpenAI could not extract source page ${pageNumber} safely: ${state.failures.join('; ') || state.firstFailure || 'extraction could not be completed'}`+
     (state.firstFailure && !state.failures.includes(state.firstFailure) ? ` First failure: ${state.firstFailure}` : '')+
     (state.requestFailure ? ` Last request failure: ${state.requestFailure}` : ''),state);
+  // Last resort once re-extraction is exhausted: a retained candidate whose
+  // only remaining defect is a few blank table grid positions is accepted
+  // with a page warning instead of failing the page. Never used earlier.
+  const salvage=(candidate:PdfPageLayout, geometry:NativeGeometry|undefined, usage:{inputTokens:number;outputTokens:number}):ExtractedPageResult|null=>{
+    const layout=enforceEnglishProtection(repairExtractedLayout(candidate,geometry,{fillTableHoles:true}),targetLanguage);
+    if(!validateExtractedPage(layout,pageNumber,{extraction:true}).valid) return null;
+    return {layout,attempts:state.attempts,model:PDFX_V2_MODEL,responseId:'retained-layout-salvage',...usage};
+  };
   if(state.terminal) {
     if(!state.candidate) throw stop();
     // A newer deterministic repair may be able to recover a retained terminal
@@ -478,7 +487,7 @@ export async function extractPageWithOpenAi(
       repairExtractedLayout(state.candidate,retainedNative),
       targetLanguage,
     );
-    const retainedValidation=validateExtractedPage(retainedCandidate,pageNumber);
+    const retainedValidation=validateExtractedPage(retainedCandidate,pageNumber,{extraction:true});
     if(retainedValidation.valid) {
       return {
         layout:retainedCandidate,
@@ -489,6 +498,8 @@ export async function extractPageWithOpenAi(
         outputTokens:0,
       };
     }
+    const salvaged=salvage(state.candidate,retainedNative,{inputTokens:0,outputTokens:0});
+    if(salvaged) return salvaged;
     throw stop();
   }
   let lastError: unknown;
@@ -503,7 +514,7 @@ export async function extractPageWithOpenAi(
   });
   if(!state.candidate && state.rotation===undefined && native) {
     const dense=nativeDensePage(native,pageNumber,targetLanguage);
-    if(dense && validateExtractedPage(dense,pageNumber).valid) return {layout:dense,attempts:0,model:'native-pdf-text',responseId:'native-digital-table',inputTokens:0,outputTokens:0};
+    if(dense && validateExtractedPage(dense,pageNumber,{extraction:true}).valid) return {layout:dense,attempts:0,model:'native-pdf-text',responseId:'native-digital-table',inputTokens:0,outputTokens:0};
   }
   if(state.rotation===undefined) {
     try {
@@ -529,7 +540,7 @@ export async function extractPageWithOpenAi(
   const prepare=(layout:PdfPageLayout)=>enforceEnglishProtection(repairExtractedLayout(layout,native),targetLanguage);
   if(state.candidate) {
     state.candidate=prepare(state.candidate);
-    const retainedValidation=validateExtractedPage(state.candidate,pageNumber);
+    const retainedValidation=validateExtractedPage(state.candidate,pageNumber,{extraction:true});
     if(retainedValidation.valid) return {layout:state.candidate,attempts:state.attempts,model:PDFX_V2_MODEL,responseId:'retained-layout-repair',inputTokens:0,outputTokens:0};
     state.failures=retainedValidation.failures;
   }
@@ -550,7 +561,12 @@ export async function extractPageWithOpenAi(
       }
     } catch(error) {
       lastError=error;
-      if(isPdfxBudgetError(error)) {state.terminal=true;await save();throw new PdfxExtractionStopError(`${stop().message}. ${failureMessage(error)}`,state,{cause:error});}
+      if(isPdfxBudgetError(error)) {
+        state.terminal=true;await save();
+        const salvaged=state.candidate ? salvage(state.candidate,native,{inputTokens,outputTokens}) : null;
+        if(salvaged) return salvaged;
+        throw new PdfxExtractionStopError(`${stop().message}. ${failureMessage(error)}`,state,{cause:error});
+      }
       state.requestFailure=failureMessage(error);
       // Keep the failed region IDs after a timeout or malformed patch. Losing
       // them would turn the next attempt back into an expensive full-page OCR.
@@ -562,7 +578,7 @@ export async function extractPageWithOpenAi(
     inputTokens+=result.inputTokens;outputTokens+=result.outputTokens;responseIds.push(result.responseId);
     delete state.requestFailure;
     const candidate=prepare(result.value);
-    const validation=validateExtractedPage(candidate,pageNumber);
+    const validation=validateExtractedPage(candidate,pageNumber,{extraction:true});
     if(validation.valid) return {...result,inputTokens,outputTokens,responseId:responseIds.join(','),layout:candidate,attempts:state.attempts};
     // Targeted repairs cannot mutate blocks outside the requested region, even
     // with a custom requester. Keep the previous candidate if they make it worse.
@@ -575,6 +591,8 @@ export async function extractPageWithOpenAi(
     if(state.terminal) break;
   }
   state.terminal=true;await save();
+  const salvaged=state.candidate ? salvage(state.candidate,native,{inputTokens,outputTokens}) : null;
+  if(salvaged) return salvaged;
   throw new PdfxExtractionStopError(stop().message,state,{cause:lastError});
 }
 

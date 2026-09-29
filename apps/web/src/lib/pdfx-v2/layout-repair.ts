@@ -1,4 +1,4 @@
-import type { PdfElement, PdfPageLayout, StoredPdfPageLayout } from './schemas';
+import type { PdfCell, PdfElement, PdfPageLayout, StoredPdfPageLayout } from './schemas';
 import { PdfPageLayoutSchema } from './schemas';
 import { isTextualElement } from './serialize';
 import { normalizeTableIndexes } from './table-indexes';
@@ -142,23 +142,203 @@ function separateOverlappingProse(elements: PdfElement[]): PdfElement[] {
   return out;
 }
 
+/** A running header or caption printed just outside a table often gets a box
+ * that bleeds a few units into the table's edge. When the text element's
+ * centre lies outside the table, pull that edge back to the table border, but
+ * only when at least half of the element survives; a text block genuinely
+ * inside a table still fails validation. Thresholds mirror validateExtractedPage. */
+function clearTableEdges(elements: PdfElement[]): PdfElement[] {
+  const tables = elements.filter(element => element.kind === 'table');
+  if (!tables.length) return elements;
+  return elements.map(element => {
+    if (element.kind === 'table' || !isTextualElement(element)) return element;
+    const bbox = [...element.bbox] as PdfElement['bbox'];
+    for (const table of tables) {
+      const overlap = intersection(bbox, table.bbox);
+      const smaller = Math.min(area(bbox), area(table.bbox));
+      if (smaller <= 0 || overlap <= 300 || overlap / smaller <= 0.15) continue;
+      const centreX = (bbox[0] + bbox[2]) / 2, centreY = (bbox[1] + bbox[3]) / 2;
+      const height = bbox[3] - bbox[1], width = bbox[2] - bbox[0];
+      if (centreY < table.bbox[1] && table.bbox[1] - bbox[1] >= height / 2) bbox[3] = table.bbox[1];
+      else if (centreY > table.bbox[3] && bbox[3] - table.bbox[3] >= height / 2) bbox[1] = table.bbox[3];
+      else if (centreX < table.bbox[0] && table.bbox[0] - bbox[0] >= width / 2) bbox[2] = table.bbox[0];
+      else if (centreX > table.bbox[2] && bbox[2] - table.bbox[2] >= width / 2) bbox[0] = table.bbox[2];
+    }
+    return bbox.every((value, index) => value === element.bbox[index]) ? element : { ...element, bbox };
+  });
+}
+
+// Filling a few blank holes is geometry; filling many could hide cells the
+// vision model failed to read, so those grids are re-extracted instead.
+const MAX_FILLED_TABLE_HOLES = 4;
+
+function medianOf(values: number[]): number | undefined {
+  if (!values.length) return undefined;
+  const sorted = [...values].sort((left, right) => left - right);
+  return sorted[Math.floor(sorted.length / 2)];
+}
+
+/** Resolve each grid line from the cells that actually touch it, then
+ * interpolate unknown lines between known neighbours (table edges as limits). */
+function gridLines(count: number, known: Map<number, number[]>, start: number, end: number): number[] | null {
+  const lines: (number | undefined)[] = Array.from({ length: count + 1 }, (_, index) => medianOf(known.get(index) ?? []));
+  lines[0] ??= start;
+  lines[count] ??= end;
+  for (let index = 1; index < count; index += 1) {
+    if (lines[index] !== undefined) continue;
+    let next = index + 1;
+    while (lines[next] === undefined) next += 1;
+    const previous = lines[index - 1]!;
+    lines[index] = previous + (lines[next]! - previous) / (next - index + 1);
+  }
+  const resolved = lines as number[];
+  return resolved.every((value, index) => index === 0 || value > resolved[index - 1]) ? resolved : null;
+}
+
+/** Vision grids on scans commonly let an empty merged cell run over the next
+ * cell's origin, repeat an origin, or leave one or two blank holes. Trim a span
+ * at the first foreign origin it covers, fold a repeated origin's text into the
+ * first cell and shrink any remaining overlap; cell text is never dropped.
+ * A hole may be a printed cell the model skipped, so holes are filled with
+ * empty cells only when the caller has exhausted re-extraction (fillHoles).
+ * Changed and new cells take their boxes from the grid's own row and column lines. */
+function repairTableGrid(table: PdfElement, fillHoles: boolean): { table: PdfElement; filled: number } {
+  const unchanged = { table, filled: 0 };
+  if (table.kind !== 'table' || table.rowCount < 1 || table.columnCount < 1 ||
+      table.rowCount > 2_000 || table.columnCount > 200) return unchanged;
+  const source = table.rows.flatMap(row => row.cells);
+  if (!source.length || source.some(cell =>
+    cell.rowIndex < 0 || cell.columnIndex < 0 || cell.rowSpan < 1 || cell.columnSpan < 1 ||
+    cell.rowIndex >= table.rowCount || cell.columnIndex >= table.columnCount ||
+    !isValidNormalizedBox(cell.bbox))) return unchanged;
+
+  const changed = new Set<PdfCell>();
+  const origins = new Map<string, PdfCell>();
+  let folded = false;
+  let cells: PdfCell[] = [];
+  for (const original of [...source].sort((a, b) => a.rowIndex - b.rowIndex || a.columnIndex - b.columnIndex)) {
+    const cell = { ...original, bbox: [...original.bbox] as PdfCell['bbox'] };
+    cell.rowSpan = Math.min(cell.rowSpan, table.rowCount - cell.rowIndex);
+    cell.columnSpan = Math.min(cell.columnSpan, table.columnCount - cell.columnIndex);
+    if (cell.rowSpan !== original.rowSpan || cell.columnSpan !== original.columnSpan) changed.add(cell);
+    const key = `${cell.rowIndex},${cell.columnIndex}`;
+    const first = origins.get(key);
+    if (!first) { origins.set(key, cell); cells.push(cell); continue; }
+    folded = true;
+    if (cell.text.trim() && cell.text.trim() !== first.text.trim()) {
+      first.text = first.text.trim() ? `${first.text.trim()} ${cell.text.trim()}` : cell.text;
+      first.translate ||= cell.translate;
+    }
+    changed.add(first);
+  }
+
+  for (const cell of cells) {
+    for (const other of cells) {
+      if (other === cell) continue;
+      const insideRows = other.rowIndex >= cell.rowIndex && other.rowIndex < cell.rowIndex + cell.rowSpan;
+      const insideColumns = other.columnIndex >= cell.columnIndex && other.columnIndex < cell.columnIndex + cell.columnSpan;
+      if (!insideRows || !insideColumns) continue;
+      if (other.rowIndex > cell.rowIndex) cell.rowSpan = other.rowIndex - cell.rowIndex;
+      else cell.columnSpan = other.columnIndex - cell.columnIndex;
+      changed.add(cell);
+    }
+  }
+
+  const owner: (PdfCell | undefined)[][] = Array.from({ length: table.rowCount }, () => Array(table.columnCount).fill(undefined));
+  const covers = (cell: PdfCell) => {
+    for (let r = cell.rowIndex; r < cell.rowIndex + cell.rowSpan; r += 1)
+      for (let c = cell.columnIndex; c < cell.columnIndex + cell.columnSpan; c += 1)
+        if (owner[r][c]) return true;
+    return false;
+  };
+  for (const cell of cells) {
+    while (covers(cell) && (cell.rowSpan > 1 || cell.columnSpan > 1)) {
+      if (cell.columnSpan > 1) cell.columnSpan -= 1; else cell.rowSpan -= 1;
+      changed.add(cell);
+    }
+    if (covers(cell)) return unchanged;
+    for (let r = cell.rowIndex; r < cell.rowIndex + cell.rowSpan; r += 1)
+      for (let c = cell.columnIndex; c < cell.columnIndex + cell.columnSpan; c += 1) owner[r][c] = cell;
+  }
+
+  const found: [number, number][] = [];
+  owner.forEach((row, r) => row.forEach((cell, c) => { if (!cell) found.push([r, c]); }));
+  // A repeated origin next to a hole most likely belongs in that hole; folding
+  // it would shift or drop a printed value, so such grids are re-extracted.
+  if (folded && found.length) return unchanged;
+  const wholeRowOrColumn = owner.some(row => row.every(cell => !cell)) ||
+    Array.from({ length: table.columnCount }, (_, c) => c).some(c => owner.every(row => !row[c]));
+  const holes = fillHoles && found.length <= MAX_FILLED_TABLE_HOLES && !wholeRowOrColumn ? found : [];
+  if (!changed.size && !holes.length) return unchanged;
+
+  const lefts = new Map<number, number[]>(), tops = new Map<number, number[]>();
+  const add = (map: Map<number, number[]>, key: number, value: number) => map.set(key, [...(map.get(key) ?? []), value]);
+  for (const cell of source) {
+    add(lefts, cell.columnIndex, cell.bbox[0]); add(lefts, cell.columnIndex + cell.columnSpan, cell.bbox[2]);
+    add(tops, cell.rowIndex, cell.bbox[1]); add(tops, cell.rowIndex + cell.rowSpan, cell.bbox[3]);
+  }
+  const xs = gridLines(table.columnCount, lefts, table.bbox[0], table.bbox[2]);
+  const ys = gridLines(table.rowCount, tops, table.bbox[1], table.bbox[3]);
+  if (!xs || !ys) return unchanged;
+  const boxFor = (cell: PdfCell): PdfCell['bbox'] => [
+    xs[cell.columnIndex], ys[cell.rowIndex], xs[cell.columnIndex + cell.columnSpan], ys[cell.rowIndex + cell.rowSpan],
+  ];
+  Array.from(changed).forEach(cell => { cell.bbox = boxFor(cell); });
+
+  const ids = new Set(cells.map(cell => cell.id));
+  for (const [rowIndex, columnIndex] of holes) {
+    let id = `${table.id}-r${String(rowIndex).padStart(3, '0')}-c${String(columnIndex).padStart(3, '0')}`;
+    while (ids.has(id)) id += '-f';
+    ids.add(id);
+    const filler: PdfCell = { ...source[0], id, rowIndex, columnIndex, rowSpan: 1, columnSpan: 1, isHeader: false, translate: false, text: '', bbox: [0, 0, 1, 1] };
+    filler.bbox = boxFor(filler);
+    cells.push(filler);
+  }
+  cells = cells.sort((a, b) => a.rowIndex - b.rowIndex || a.columnIndex - b.columnIndex);
+  const rowIndexes = Array.from(new Set(table.rows.map(row => row.rowIndex).concat(cells.map(cell => cell.rowIndex)))).sort((a, b) => a - b);
+  return {
+    table: {
+      ...table,
+      rows: rowIndexes.map(rowIndex => ({ rowIndex, cells: cells.filter(cell => cell.rowIndex === rowIndex) })),
+    },
+    filled: holes.length,
+  };
+}
+
 /** Source-derived changes only. Text, numbers and unrelated blocks are never
- * dropped to satisfy validation, and scans always retain the vision path. */
-export function repairExtractedLayout(layout: PdfPageLayout, native?: NativeGeometry): PdfPageLayout {
+ * dropped to satisfy validation, and scans always retain the vision path.
+ * fillTableHoles is a last resort after re-extraction is exhausted; every
+ * filled position is reported as a page warning. */
+export function repairExtractedLayout(
+  layout: PdfPageLayout,
+  native?: NativeGeometry,
+  options: { fillTableHoles?: boolean } = {},
+): PdfPageLayout {
   const indexed=normalizeTableIndexes(layout);
   const regions=native ? nativeTableRegions(native) : [];
-  return {...indexed,elements:separateOverlappingProse(indexed.elements.filter(element=>!isEmptySemanticArtifact(element)).map(element=> {
+  let filled=0;
+  const repairGrid=(table:PdfElement)=>{
+    const repaired=repairTableGrid(table,!!options.fillTableHoles);
+    filled+=repaired.filled;
+    return repaired.table;
+  };
+  const elements=clearTableEdges(separateOverlappingProse(indexed.elements.filter(element=>!isEmptySemanticArtifact(element)).map(element=> {
     if(element.kind==='table') {
-      if(!native) return normalizeSafeTableEnvelope(element);
+      if(!native) return normalizeSafeTableEnvelope(repairGrid(element));
       const matches=regions.filter(b=>intersection(b,element.bbox)/Math.max(1,area(b)+area(element.bbox)-intersection(b,element.bbox))>0.55);
       const rebuilt=rebuildNativeTable({...element,bbox:matches.length===1?matches[0]:element.bbox},native);
-      return normalizeSafeTableEnvelope(rebuilt ?? element);
+      return normalizeSafeTableEnvelope(repairGrid(rebuilt ?? element));
     }
     if(!native) return element;
     if(!isTextualElement(element) || !element.text.trim()) return element;
     const bbox=matchNativeBox(element.text,element.bbox,native);
     return bbox ? {...element,bbox} : element;
-  }))};
+  })));
+  return {
+    ...indexed,
+    elements,
+    ...(filled ? { warnings: [...indexed.warnings, `Grid repair: ${filled} blank grid position(s) were added as empty cells after the retry limit; check this table against the source.`] } : {}),
+  };
 }
 
 /** Extremely dense digital spreadsheet PDFs don't need model-generated cell

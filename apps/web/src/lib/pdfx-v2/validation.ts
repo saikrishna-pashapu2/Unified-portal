@@ -110,10 +110,18 @@ function likelyUnsuppressedParallelLanguages(layout: PdfPageLayout): boolean {
 export function validateExtractedPage(
   layout: PdfPageLayout,
   expectedPageNumber: number,
+  options: { extraction?: boolean } = {},
 ): PdfxV2Validation {
   const failures: string[] = [];
   const warnings = [...layout.warnings];
-  if (warnings.some((warning) => /(?:table|printed|typed).*(?:unreadable|illegible|omitted|incomplete|difficult to distinguish|cannot read|could not read)|(?:omitted|incomplete|unreadable).*(?:table|rows|cells|printed)/i.test(warning))) {
+  if (warnings.some((warning) =>
+    /(?:table|printed|typed).*(?:unreadable|illegible|omitted|incomplete|difficult to distinguish|cannot read|could not read)|(?:omitted|incomplete|unreadable).*(?:table|rows|cells|printed)/i.test(warning) ||
+    // Mid-page omissions phrased without the words above. Deliberately narrow:
+    // text cut off at a page boundary continues on the next page and is not an
+    // omission (measured against 1,055 stored pages: only real omissions match).
+    // Extraction only: rendering re-validates already accepted pages together
+    // with translation warnings and must never fail them retroactively.
+    (options.extraction === true && /only (?:the )?(?:clearly )?recoverable|not fully transcribed/i.test(warning)))) {
     failures.push('OCR reported incomplete printed content; re-read the detailed page views instead of accepting missing text');
   }
   if (!layout.elements.some((element) => element.text.trim() || allCells(element).some((cell) => cell.text.trim())) &&

@@ -37,8 +37,21 @@ import { assembleDraftPdf, type FlaggedPage } from './draft-assembly';
 import { parseExtractionRecovery } from './layout-repair';
 import { withPdfTranslationLease } from './lease-checkpoint';
 import { renderPdfxV2Document } from './render';
-import { mergePageTranslation, pageLayoutToPlainText } from './serialize';
-import type { PdfxV2JobPayload, PdfxV2Stage } from './types';
+import { hasTranslatableText, mergePageTranslation, pageLayoutToPlainText } from './serialize';
+import { validateTranslatedPage } from './validation';
+import {
+  combineTranslation,
+  harvestTranslationMemory,
+  memoryEntries,
+  parsePinnedTranslations,
+  parseTranslationMemory,
+  pinnedTranslations,
+  recurringBlocks,
+  sharedBlocksLayout,
+  withoutPinned,
+  type TranslationMemory,
+} from './translation-memory';
+import type { PdfxV2JobPayload, PdfxV2Stage, TranslatedPageResult } from './types';
 import {
   isPdfxV2QueueJobType,
   PDFX_V2_MODEL,
@@ -58,6 +71,10 @@ type StoredMetrics = {
   contextOutputTokens?: number;
   contextModel?: string;
   contextResponseId?: string;
+  translationMemory?: TranslationMemory;
+  sharedBlocksRecovery?: unknown;
+  sharedBlocksInputTokens?: number;
+  sharedBlocksOutputTokens?: number;
 };
 
 // Worker replays cannot extend the durable per-page API allowance.
@@ -241,12 +258,17 @@ export async function processPdfTranslationV2Job(
       storedMetrics.contextInputTokens = (storedMetrics.contextInputTokens ?? 0) + response.inputTokens;
       storedMetrics.contextOutputTokens = (storedMetrics.contextOutputTokens ?? 0) + response.outputTokens;
     }
+    const sharedBlocksPass = !!response && response.page > job.payload.pageCount;
+    if (response && sharedBlocksPass) {
+      storedMetrics.sharedBlocksInputTokens = (storedMetrics.sharedBlocksInputTokens ?? 0) + response.inputTokens;
+      storedMetrics.sharedBlocksOutputTokens = (storedMetrics.sharedBlocksOutputTokens ?? 0) + response.outputTokens;
+    }
     await withPdfTranslationLease(job.id, job.leaseOwner, async transaction => {
       const saved = await transaction.pdf_translation_v2_jobs.updateMany({
         where: { id: job.id, user_id: job.userId, status: 'processing' },
         data: { metrics: jsonValue(storedMetrics) },
       });
-      if (response && response.page > 0) {
+      if (response && response.page > 0 && !sharedBlocksPass) {
         await transaction.pdf_translation_v2_pages.upsert({
           where: { job_id_page_number: { job_id: job.id, page_number: response.page } },
           create: { job_id: job.id, page_number: response.page, status: 'extracting', warnings: [],
@@ -443,6 +465,50 @@ export async function processPdfTranslationV2Job(
       });
     }
 
+    // Metrics carry the request ledger; write them only while holding the lease.
+    const saveMetrics = async () => {
+      await throwIfJobCancelled(job.id, job.leaseOwner);
+      await withPdfTranslationLease(job.id, job.leaseOwner, async (transaction) => {
+        const saved = await transaction.pdf_translation_v2_jobs.updateMany({
+          where: { id: job.id, user_id: job.userId, status: 'processing' },
+          data: { metrics: jsonValue(storedMetrics) },
+        });
+        if (saved.count !== 1) throw new Error('PDF Translator job is no longer active');
+      });
+    };
+
+    let memory = parseTranslationMemory(storedMetrics.translationMemory);
+    const blocks = context && !memory ? recurringBlocks(extractedLayouts) : [];
+    if (context && blocks.length) {
+      await reportProgress(48, 'context', 'Translating repeated headers once for the whole document…');
+      const shared: TranslationMemory = { version: 'shared-blocks-v1', keys: blocks.map((block) => block.key), entries: {} };
+      try {
+        const result = await translatePageWithOpenAi(
+          sharedBlocksLayout(blocks, extractedLayouts[0]),
+          context,
+          job.payload.targetLang,
+          requester,
+          {
+            resume: storedMetrics.sharedBlocksRecovery,
+            save: async (state) => {
+              storedMetrics.sharedBlocksRecovery = state;
+              await saveMetrics();
+            },
+          },
+        );
+        shared.entries = memoryEntries(blocks, result.translation);
+      } catch (error) {
+        // A stubborn shared block only loses the reuse: each page still
+        // translates it, and the first accepted page supplies the memory.
+        if (!pageFlaggable(error)) throw error;
+        shared.failure = errorMessage(error).slice(0, 600);
+      }
+      memory = shared;
+      storedMetrics.translationMemory = shared;
+      delete storedMetrics.sharedBlocksRecovery;
+      await saveMetrics();
+    }
+
     const translatedLayouts: StoredPdfPageLayout[] = [];
     for (let index = 0; index < sourceLayouts.length; index += 1) {
       const source = sourceLayouts[index];
@@ -464,23 +530,69 @@ export async function processPdfTranslationV2Job(
         `Translating and validating page ${pageNumber}/${sourceLayouts.length}…`,
         pageNumber,
       );
-      let translated: Awaited<ReturnType<typeof translatePageWithOpenAi>>;
-      try {
-        translated = await translatePageWithOpenAi(
-          source,
-          context,
-          job.payload.targetLang,
-          requester,
-          {
-            resume:current?.validation && typeof current.validation==='object'
-              ? (current.validation as {translationRecovery?:unknown;denseTranslation?:unknown}).translationRecovery ?? (current.validation as {denseTranslation?:unknown}).denseTranslation
-              : undefined,
-            save:async(state)=> {
-              await withPdfTranslationLease(job.id, job.leaseOwner, transaction =>
-                transaction.pdf_translation_v2_pages.update({where:{job_id_page_number:{job_id:job.id,page_number:pageNumber}},data:{validation:jsonValue(state.version === 'native-cell-batches-v1' ? {denseTranslation:state} : {translationRecovery:state})}}));
+      const prior = (current?.validation && typeof current.validation === 'object'
+        ? current.validation
+        : {}) as { translationRecovery?: unknown; denseTranslation?: unknown; pinnedFromMemory?: unknown };
+      const priorRecovery = prior.translationRecovery ?? prior.denseTranslation;
+      // Pins are saved with the page checkpoint: a resumed page must rebuild
+      // exactly the source layout its recovery fingerprint was computed from.
+      const pins = source.nativeTable
+        ? {}
+        : parsePinnedTranslations(prior.pinnedFromMemory) ?? (priorRecovery ? {} : pinnedTranslations(source, memory));
+      const pinnedCount = Object.keys(pins).length;
+      const saveRecovery = (withPins: boolean) => async (state: { version?: string }) => {
+        await withPdfTranslationLease(job.id, job.leaseOwner, transaction =>
+          transaction.pdf_translation_v2_pages.update({
+            where: { job_id_page_number: { job_id: job.id, page_number: pageNumber } },
+            data: {
+              validation: jsonValue({
+                ...(state.version === 'native-cell-batches-v1' ? { denseTranslation: state } : { translationRecovery: state }),
+                ...(withPins ? { pinnedFromMemory: pins } : {}),
+              }),
             },
-          },
-        );
+          }));
+      };
+      let translated: TranslatedPageResult;
+      try {
+        if (!pinnedCount) {
+          translated = await translatePageWithOpenAi(source, context, job.payload.targetLang, requester, {
+            resume: priorRecovery,
+            save: saveRecovery(false),
+          });
+        } else {
+          const remaining = withoutPinned(source, pins);
+          const partial = hasTranslatableText(remaining)
+            ? await translatePageWithOpenAi(remaining, context, job.payload.targetLang, requester, {
+                resume: priorRecovery,
+                save: saveRecovery(true),
+              })
+            : null;
+          const combined = combineTranslation(source, pins, partial?.translation ?? null);
+          const validation = validateTranslatedPage(source, combined, job.payload.targetLang);
+          translated = validation.valid
+            ? {
+                translation: combined,
+                layout: source,
+                attempts: partial?.attempts ?? 0,
+                model: partial?.model ?? PDFX_V2_MODEL,
+                responseId: partial?.responseId ?? 'translation-memory',
+                inputTokens: partial?.inputTokens ?? 0,
+                outputTokens: partial?.outputTokens ?? 0,
+                validation: {
+                  ...validation,
+                  warnings: Array.from(new Set([
+                    ...validation.warnings,
+                    ...(partial?.validation.warnings ?? []),
+                    `Reused ${pinnedCount} repeated block(s) from the document translation memory.`,
+                  ])),
+                },
+              }
+            // Whole-page validation is the authority; a combination it rejects
+            // falls back to translating the page without the memory.
+            : await translatePageWithOpenAi(source, context, job.payload.targetLang, requester, {
+                save: saveRecovery(false),
+              });
+        }
       } catch (error) {
         if (isPdfxWorkerControlFlowError(error)) throw error;
         await withPdfTranslationLease(job.id, job.leaseOwner, transaction => transaction.pdf_translation_v2_pages.update({
@@ -510,6 +622,10 @@ export async function processPdfTranslationV2Job(
           error_message: null,
         },
       }));
+      if (memory && harvestTranslationMemory(memory, source, translated.translation)) {
+        storedMetrics.translationMemory = memory;
+        await saveMetrics();
+      }
     }
 
     await reportProgress(94, 'rendering', 'Rendering translated tables and text…');
