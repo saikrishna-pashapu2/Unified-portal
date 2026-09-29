@@ -25,6 +25,40 @@ export function readNativeGeometry(pdf: Buffer, clockwiseRotation = 0): Promise<
   return result;
 }
 
+export type SourceRotation = 0 | 90 | 180 | 270;
+
+/**
+ * The page's own text layer states its reading direction exactly, so a digital
+ * page never needs a model guess (a low-detail guess once turned upright pages
+ * upside down). Returns the clockwise source rotation extraction uses: the
+ * angle of the dominant text baseline as displayed. Undefined unless the layer
+ * is substantial and nearly uniform (scans without text, mixed layouts).
+ */
+export async function nativeTextRotation(pdf: Buffer): Promise<SourceRotation | undefined> {
+  const pdfjs = await loadNodePdfJs();
+  const document = await pdfjs.getDocument({ data: new Uint8Array(pdf), standardFontDataUrl: getPdfJsStandardFontDataUrl(), useSystemFonts: true, verbosity: 0 }).promise;
+  try {
+    const page = await document.getPage(1);
+    const viewport = page.getViewport({ scale: 1, rotation: page.rotate });
+    const content = await page.getTextContent();
+    const characters = [0, 0, 0, 0];
+    for (const item of content.items) {
+      if (!('str' in item)) continue;
+      const count = item.str.replace(/\s+/g, '').length;
+      if (!count) continue;
+      const t = pdfjs.Util.transform(viewport.transform, item.transform);
+      const angle = (Math.atan2(t[1], t[0]) * 180 / Math.PI + 360) % 360;
+      const bucket = Math.round(angle / 90) % 4;
+      const offset = Math.min(Math.abs(angle - bucket * 90), Math.abs(angle - bucket * 90 - 360));
+      if (offset <= 10) characters[bucket] += count;
+    }
+    const total = characters.reduce((sum, count) => sum + count, 0);
+    const best = characters.indexOf(Math.max(...characters));
+    if (total < 40 || characters[best] < total * 0.9) return undefined;
+    return (best * 90) as SourceRotation;
+  } finally { await document.destroy(); }
+}
+
 async function read(pdf: Buffer, clockwiseRotation: number): Promise<NativeGeometry> {
   const pdfjs = await loadNodePdfJs();
   const document = await pdfjs.getDocument({ data: new Uint8Array(pdf), standardFontDataUrl: getPdfJsStandardFontDataUrl(), useSystemFonts: true, verbosity: 0 }).promise;

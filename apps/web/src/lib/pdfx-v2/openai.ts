@@ -32,7 +32,7 @@ import {
   PdfxRequestBudgetError,
   PdfxTranslationStopError,
 } from './request-budget';
-import { readNativeGeometry, type NativeGeometry } from './native-geometry';
+import { nativeTextRotation, readNativeGeometry, type NativeGeometry, type SourceRotation } from './native-geometry';
 import { repairExtractedLayout, nativeDensePage, failedElementIds, mergeExtractionPatch, repairRegion, failureScore, PdfxExtractionStopError, EXTRACTION_RECOVERY_VERSION, type ExtractionRecovery } from './layout-repair';
 import { planNativeTableBatches } from './native-table-batches';
 import { PDFX_V2_MODEL } from './constants';
@@ -80,6 +80,7 @@ type ProviderResult<T> = {
 export interface PdfxV2OpenAiRequester {
   remainingTranslationRequests?(pageNumber: number): number;
   nativeGeometry?(pagePdf:Buffer, clockwiseRotation:number):Promise<NativeGeometry>;
+  nativeTextRotation?(pagePdf:Buffer):Promise<SourceRotation|undefined>;
   repair?(args: {
     pagePdf:Buffer; pageNumber:number; targetLanguage:PdfxV2TargetLanguage; model:string;
     source:PdfPageLayout; elementIds:string[]; validationFailure:string; sourceRotation:number; maxOutputTokens?:number;
@@ -256,6 +257,7 @@ function reviewPrompt(args: {
 
 export const defaultPdfxV2Requester: PdfxV2OpenAiRequester = {
   nativeGeometry: readNativeGeometry,
+  nativeTextRotation,
   async repair({pagePdf,pageNumber,targetLanguage,model,source,elementIds,validationFailure,sourceRotation,maxOutputTokens=12000}) {
     const raster=await rasterizeSinglePagePdf(pagePdf,(360-sourceRotation)%360);
     const region=repairRegion(source,elementIds);
@@ -517,7 +519,14 @@ export async function extractPageWithOpenAi(
     if(dense && validateExtractedPage(dense,pageNumber,{extraction:true}).valid) return {layout:dense,attempts:0,model:'native-pdf-text',responseId:'native-digital-table',inputTokens:0,outputTokens:0};
   }
   if(state.rotation===undefined) {
-    try {
+    // A digital page's text layer states its orientation exactly; the paid
+    // model guess is only for pages without a reliable text layer (scans).
+    const textRotation=await requester.nativeTextRotation?.(pagePdf).catch((error) => {
+      console.warn(`[pdfx-v2] text-layer orientation unavailable for source page ${pageNumber}: ${failureMessage(error)}`);
+      return undefined;
+    });
+    if(textRotation!==undefined) state.rotation=textRotation;
+    else try {
       const orientation=requester.orientation ? await requester.orientation({pagePdf,pageNumber,model:PDFX_V2_MODEL}) : null;
       state.rotation=orientation ? (360-orientation.value.rotation)%360 : 0;
     } catch (error) {
