@@ -4,7 +4,7 @@ import { isIP, type LookupFunction } from "node:net";
 import * as cheerio from "cheerio";
 import { Agent } from "undici";
 import { env } from "@/lib/config/env";
-import { getPdfJsStandardFontDataUrl } from "@/lib/pdfjs-node";
+import { getPdfJsStandardFontDataUrl, loadNodePdfJs } from "@/lib/pdfjs-node";
 import { assertWorkbookUrlAllowed } from './workbook-types';
 import { extractExcelHtml, extractExcelPdfDocument, MAX_EXCEL_SOURCE_CHARS } from './excel-extraction';
 import {
@@ -2374,11 +2374,7 @@ async function extractPdfText(
   buffer: Buffer,
   pageReferences: readonly string[],
 ): Promise<{ text: string; title?: string }> {
-  const globalScope = globalThis as any;
-  globalScope.DOMMatrix ||= class {};
-  globalScope.Path2D ||= class {};
-
-  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const pdfjs = await loadNodePdfJs();
   const loadingTask = pdfjs.getDocument({
     data: new Uint8Array(buffer),
     useWorkerFetch: false,

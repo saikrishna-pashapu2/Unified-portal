@@ -1,4 +1,4 @@
-import { getPdfJsStandardFontDataUrl } from '@/lib/pdfjs-node';
+import { getPdfJsStandardFontDataUrl, loadNodePdfJs } from '@/lib/pdfjs-node';
 
 const MAX_RASTER_DIMENSION = 2_600;
 
@@ -30,7 +30,7 @@ export async function rasterizePdfPage(pdf: Buffer, pageNumber: number, clockwis
   if (!Number.isSafeInteger(pageNumber) || pageNumber < 1) {
     throw new Error(`Invalid PDF page number: ${pageNumber}`);
   }
-  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const pdfjs = await loadNodePdfJs();
   const loadingTask = pdfjs.getDocument({
     data: new Uint8Array(pdf),
     standardFontDataUrl: getPdfJsStandardFontDataUrl(),

@@ -1,4 +1,4 @@
-import { getPdfJsStandardFontDataUrl } from '@/lib/pdfjs-node';
+import { getPdfJsStandardFontDataUrl, loadNodePdfJs } from '@/lib/pdfjs-node';
 import type { PdfElement } from './schemas';
 
 export type Box = [number, number, number, number];
@@ -26,7 +26,7 @@ export function readNativeGeometry(pdf: Buffer, clockwiseRotation = 0): Promise<
 }
 
 async function read(pdf: Buffer, clockwiseRotation: number): Promise<NativeGeometry> {
-  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const pdfjs = await loadNodePdfJs();
   const document = await pdfjs.getDocument({ data: new Uint8Array(pdf), standardFontDataUrl: getPdfJsStandardFontDataUrl(), useSystemFonts: true, verbosity: 0 }).promise;
   try {
     const page = await document.getPage(1);
