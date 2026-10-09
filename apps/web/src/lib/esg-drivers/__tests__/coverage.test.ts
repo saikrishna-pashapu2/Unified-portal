@@ -49,4 +49,14 @@ describe("ESG driver evidence coverage", () => {
       "Real Estate",
     ]);
   });
+
+  it("matches uploaded labels exactly and does not collapse unknown Unicode labels", () => {
+    const countries = ["ألمانيا", "Россия"];
+    const sectors = ["Banca minorista", "Энергетика"];
+
+    expect(canonicalizeEsgDriverCountry("ألمانيا", countries)).toBe("ألمانيا");
+    expect(canonicalizeEsgDriverCountry("日本", countries)).toBeNull();
+    expect(canonicalizeEsgDriverSector("Banca minorista", sectors)).toBe("Banca minorista");
+    expect(canonicalizeEsgDriverSector("金融", sectors)).toBeNull();
+  });
 });

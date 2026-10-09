@@ -22,6 +22,8 @@ import type {
 } from "./types";
 import { isTransientEsgDriverError } from "./errors";
 import { createWorkbookCheckpoint } from "./workbook";
+import { canonicalizeEsgDriverCountry, canonicalizeEsgDriverSector } from "./coverage";
+import { getActiveDriverCatalog } from "./catalog-store";
 import { assertWorkbookResult, ESG_DRIVER_QUEUE_TYPE, ESG_EVIDENCE_CONTRACT, savedResultError } from './result-integrity';
 import { ESG_DRIVER_QUALITY_POLICY } from './quality-policy';
 import { DRIVER_SELECTION_POLICY, RELEVANCE_ASSESSMENT_VERSION } from './ranking-policy';
@@ -41,6 +43,9 @@ interface EsgDriverJobRow {
   checkpoint_json: AnyEsgDriverCheckpoint | null;
   catalog_version: string | null;
   checkpoint_catalog_version?: string | null;
+  checkpoint_catalog_version_id?: string | null;
+  checkpoint_workbook?: string | null;
+  checkpoint_workbook_sha256?: string | null;
   checkpoint_summary?: { selectionPolicy?: string; candidateCount?: number; candidateAssessedCount?: number } | null;
   parent_job_id: string | null;
   activity_json: EsgDriverJobActivity[] | null;
@@ -83,6 +88,28 @@ export interface CreateEsgDriverJobOptions {
   catalogVersion?: string;
 }
 
+export class EsgDriverCatalogVersionConflictError extends Error {
+  readonly status = 409;
+  readonly expectedVersion: string;
+  readonly activeVersion: string;
+
+  constructor(expectedVersion: string, activeVersion: string) {
+    super("The ESG Driver workbook catalog changed. Refresh and try again.");
+    this.name = "EsgDriverCatalogVersionConflictError";
+    this.expectedVersion = expectedVersion;
+    this.activeVersion = activeVersion;
+  }
+}
+
+export class EsgDriverScopeValidationError extends Error {
+  readonly status = 400;
+
+  constructor() {
+    super("Choose a country and sector present in the active workbook catalog.");
+    this.name = "EsgDriverScopeValidationError";
+  }
+}
+
 export class InvalidEsgDriverJobsCursorError extends Error {
   constructor() {
     super("Invalid ESG driver history cursor.");
@@ -122,7 +149,6 @@ export async function createEsgDriverJob(
 ): Promise<EsgDriverJob> {
   await ensureEsgDriverJobsTable();
 
-  const checkpoint = options.checkpoint || createWorkbookCheckpoint(input);
   const id = randomUUID();
   const initialActivity = [
     buildActivityEvent({
@@ -132,14 +158,63 @@ export async function createEsgDriverJob(
     }),
   ];
   await esgPrisma.$transaction(async (transaction) => {
+    // New jobs snapshot the active catalog under the catalog singleton lock in
+    // this same transaction as the domain and queue inserts. A supplied
+    // checkpoint is an internal/legacy pinned retry and must never resolve a
+    // newer active catalog.
+    let checkpoint = options.checkpoint;
+    let canonicalInput: GenerateEsgDriversInput;
+    if (!checkpoint) {
+      const active = await getActiveDriverCatalog(transaction);
+      if (input.expectedWorkbookVersion && input.expectedWorkbookVersion !== active.summary.version) {
+        throw new EsgDriverCatalogVersionConflictError(input.expectedWorkbookVersion, active.summary.version);
+      }
+      try {
+        checkpoint = createWorkbookCheckpoint(input, active.catalog, active.summary.id);
+      } catch {
+        throw new EsgDriverScopeValidationError();
+      }
+      canonicalInput = checkpoint.input;
+    } else if (checkpoint.version === 2) {
+      canonicalInput = checkpoint.input;
+      if (
+        input.country !== checkpoint.input.country ||
+        input.sector !== checkpoint.input.sector ||
+        input.language !== checkpoint.input.language
+      ) {
+        throw new EsgDriverScopeValidationError();
+      }
+    } else {
+      // Legacy callers can still provide a pinned v1 checkpoint. They retain
+      // their original queue type and payload semantics for compatibility.
+      canonicalInput = {
+        country: checkpoint.selectionPlan.input.country,
+        sector: checkpoint.selectionPlan.input.sector,
+        language: checkpoint.selectionPlan.input.language,
+      };
+      if (
+        canonicalizeEsgDriverCountry(input.country, [canonicalInput.country]) !== canonicalInput.country ||
+        canonicalizeEsgDriverSector(input.sector, [canonicalInput.sector]) !== canonicalInput.sector ||
+        input.language !== canonicalInput.language
+      ) {
+        throw new EsgDriverScopeValidationError();
+      }
+    }
+    // Transaction-created checkpoints carry the catalog row id and use the
+    // v5 fence. A supplied v2 checkpoint without that identity is an older
+    // pinned report; retain its v4 queue contract so existing workers can
+    // finish/retry it without treating it as a newly selected catalog job.
+    const queueType = checkpoint.version === 2
+      ? checkpoint.catalogVersionId ? ESG_DRIVER_QUEUE_TYPE : "esg_driver_excel_v4"
+      : "esg_driver";
     await transaction.$executeRaw`
       INSERT INTO esg_driver_jobs (
         id, user_id, country, sector, language, status, progress, stage,
         checkpoint_json, catalog_version, parent_job_id,
         activity_json, created_at, updated_at
       ) VALUES (
-        ${id}::uuid, ${userId}, ${input.country}, ${input.sector},
-        ${input.language}, 'queued', 0, 'queued',
+        ${id}::uuid, ${userId}, ${canonicalInput.country}, ${canonicalInput.sector},
+        ${canonicalInput.language}, 'queued', 0, 'queued',
         ${JSON.stringify(checkpoint)}::jsonb,
         ${checkpoint.catalogVersion},
         NULL,
@@ -149,14 +224,14 @@ export async function createEsgDriverJob(
     await enqueueBackgroundJob(
       {
         id,
-        jobType: ESG_DRIVER_QUEUE_TYPE,
+        jobType: queueType,
         userId,
-        payload: input,
+        payload: canonicalInput,
         maxAttempts: 2,
       },
       transaction,
     );
-  });
+  }, { timeout: 30_000 });
 
   const job = await getEsgDriverJob(id, userId);
   if (!job) {
@@ -267,7 +342,7 @@ export async function createEsgDriverResumeJob(
     await enqueueBackgroundJob(
       {
         id: childId,
-        jobType: ESG_DRIVER_QUEUE_TYPE,
+        jobType: checkpoint.catalogVersionId ? ESG_DRIVER_QUEUE_TYPE : "esg_driver_excel_v4",
         userId,
         payload: input,
         maxAttempts: 2,
@@ -312,7 +387,7 @@ export async function updateEsgDriverJobProgress(
           lease_expires_at = now() + (90 * INTERVAL '1 second'),
           updated_at = now()
       WHERE id = ${id}::uuid
-        AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4')
+        AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5')
         AND status = 'processing'
         AND lease_owner = ${leaseOwner}
         AND lease_expires_at >= now()
@@ -363,7 +438,7 @@ export async function updateEsgDriverJobCheckpoint(
           lease_expires_at = now() + (90 * INTERVAL '1 second'),
           updated_at = now()
       WHERE id = ${id}::uuid
-        AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4')
+        AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5')
         AND status = 'processing'
         AND lease_owner = ${leaseOwner}
         AND lease_expires_at >= now()
@@ -372,7 +447,6 @@ export async function updateEsgDriverJobCheckpoint(
     )
     UPDATE esg_driver_jobs AS domain
     SET checkpoint_json = ${JSON.stringify(checkpoint)}::jsonb,
-        catalog_version = ${checkpoint.catalogVersion},
         updated_at = now()
     FROM owned_queue
     WHERE domain.id = owned_queue.id
@@ -384,6 +458,7 @@ export async function updateEsgDriverJobCheckpoint(
           AND domain.checkpoint_json->'allowedSources' = ${JSON.stringify(checkpoint.version === 2 ? checkpoint.allowedSources : null)}::jsonb
           AND domain.checkpoint_json->'input' = ${JSON.stringify(checkpoint.version === 2 ? checkpoint.input : null)}::jsonb
           AND domain.checkpoint_json->>'catalogVersion' = ${checkpoint.catalogVersion}
+          AND domain.checkpoint_json->>'catalogVersionId' IS NOT DISTINCT FROM ${checkpoint.version === 2 ? checkpoint.catalogVersionId ?? null : null}
           AND domain.checkpoint_json->>'workbookSha256' = ${checkpoint.version === 2 ? checkpoint.workbookSha256 : null}
           AND domain.checkpoint_json->>'workbook' = ${checkpoint.version === 2 ? checkpoint.workbook : null}
           AND domain.checkpoint_json->>'selectionPolicy' IS NOT DISTINCT FROM ${checkpoint.version === 2 ? checkpoint.selectionPolicy ?? null : null}
@@ -418,7 +493,7 @@ export async function completeEsgDriverJob(
       SELECT user_id, status, attempts, max_attempts, cancel_requested,
              lease_owner, lease_expires_at >= now() AS lease_valid
       FROM background_jobs
-      WHERE id = ${id}::uuid AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4')
+      WHERE id = ${id}::uuid AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5')
       FOR UPDATE
     `;
     const queue = queueRows[0];
@@ -452,7 +527,6 @@ export async function completeEsgDriverJob(
           error_message = NULL,
           result_json = ${JSON.stringify(result)}::jsonb,
           evidence_json = ${JSON.stringify(result.evidence)}::jsonb,
-          catalog_version = ${result.catalogVersion},
           activity_json = activity_json || ${JSON.stringify([
             buildActivityEvent({
               status: "done",
@@ -473,7 +547,7 @@ export async function completeEsgDriverJob(
           lease_owner = NULL, lease_expires_at = NULL,
           heartbeat_at = now(), completed_at = now(), updated_at = now()
       WHERE id = ${id}::uuid
-        AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4')
+        AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5')
         AND status = 'processing'
         AND lease_owner = ${leaseOwner}
         AND lease_expires_at >= now()
@@ -500,7 +574,7 @@ export async function failEsgDriverJob(
       SELECT user_id, status, attempts, max_attempts, cancel_requested,
              lease_owner, lease_expires_at >= now() AS lease_valid
       FROM background_jobs
-      WHERE id = ${job.id}::uuid AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4')
+      WHERE id = ${job.id}::uuid AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5')
       FOR UPDATE
     `;
     const queue = queueRows[0];
@@ -540,7 +614,7 @@ export async function failEsgDriverJob(
           completed_at = CASE WHEN ${retry} THEN NULL ELSE now() END,
           updated_at = now()
       WHERE id = ${job.id}::uuid
-        AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4')
+        AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5')
         AND status = 'processing'
         AND lease_owner = ${job.leaseOwner}
         AND lease_expires_at >= now()
@@ -584,7 +658,7 @@ export async function markEsgDriverJobCancelled(
       SELECT user_id, status, attempts, max_attempts, cancel_requested,
              lease_owner, lease_expires_at >= now() AS lease_valid
       FROM background_jobs
-      WHERE id = ${id}::uuid AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4')
+      WHERE id = ${id}::uuid AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5')
       FOR UPDATE
     `;
     const queue = queueRows[0];
@@ -604,7 +678,7 @@ export async function markEsgDriverJobCancelled(
           lease_owner = NULL, lease_expires_at = NULL,
           completed_at = now(), updated_at = now()
       WHERE id = ${id}::uuid
-        AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4')
+        AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5')
         AND status = 'processing'
         AND lease_owner = ${leaseOwner}
         AND lease_expires_at >= now()
@@ -665,6 +739,10 @@ export async function getEsgDriverJob(
              OR assessed.slot->'driver'->'relevanceFailure'->'assessment'->>'assessmentVersion' = ${RELEVANCE_ASSESSMENT_VERSION})
       ) END AS checkpoint_summary,
       catalog_version,
+      checkpoint_json->>'catalogVersion' AS checkpoint_catalog_version,
+      checkpoint_json->>'catalogVersionId' AS checkpoint_catalog_version_id,
+      checkpoint_json->>'workbook' AS checkpoint_workbook,
+      checkpoint_json->>'workbookSha256' AS checkpoint_workbook_sha256,
       parent_job_id::text,
       created_at,
       updated_at,
@@ -697,6 +775,9 @@ export async function listEsgDriverJobsPage(
         SELECT id::text, user_id, country, sector, language, status, progress,
                stage, activity_json, error_message, result_json, evidence_json,
                NULL::jsonb AS checkpoint_json, catalog_version, checkpoint_json->>'catalogVersion' AS checkpoint_catalog_version, parent_job_id::text,
+               checkpoint_json->>'catalogVersionId' AS checkpoint_catalog_version_id,
+               checkpoint_json->>'workbook' AS checkpoint_workbook,
+               checkpoint_json->>'workbookSha256' AS checkpoint_workbook_sha256,
                CASE WHEN checkpoint_json->>'version' = '2' THEN jsonb_build_object(
                  'selectionPolicy', checkpoint_json->>'selectionPolicy',
                  'candidateCount', jsonb_array_length(checkpoint_json->'definitions'),
@@ -723,6 +804,9 @@ export async function listEsgDriverJobsPage(
         SELECT id::text, user_id, country, sector, language, status, progress,
                stage, activity_json, error_message, result_json, evidence_json,
                NULL::jsonb AS checkpoint_json, catalog_version, checkpoint_json->>'catalogVersion' AS checkpoint_catalog_version, parent_job_id::text,
+               checkpoint_json->>'catalogVersionId' AS checkpoint_catalog_version_id,
+               checkpoint_json->>'workbook' AS checkpoint_workbook,
+               checkpoint_json->>'workbookSha256' AS checkpoint_workbook_sha256,
                CASE WHEN checkpoint_json->>'version' = '2' THEN jsonb_build_object(
                  'selectionPolicy', checkpoint_json->>'selectionPolicy',
                  'candidateCount', jsonb_array_length(checkpoint_json->'definitions'),
@@ -784,7 +868,7 @@ export async function deleteEsgDriverJob(
     // cannot acquire this job until the cancellation or deletion commits.
     const queueRows = await transaction.$queryRaw<Array<{ status: BackgroundJobStatus }>>`
       SELECT status FROM background_jobs
-      WHERE id = ${id}::uuid AND user_id = ${userId} AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4')
+      WHERE id = ${id}::uuid AND user_id = ${userId} AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5')
       FOR UPDATE
     `;
     const queue = queueRows[0];
@@ -910,10 +994,13 @@ function mapJobRow(row: EsgDriverJobRow): EsgDriverJob {
 	    stage: integrityError ? 'result failed verification' : row.stage,
 	    error: integrityError || row.error_message,
 	    result: integrityError ? null : row.result_json,
-	    evidence: integrityError ? [] : row.evidence_json || row.result_json?.evidence || [],
-	    checkpoint: row.checkpoint_json,
-	    catalogVersion: row.catalog_version,
-	    parentJobId: row.parent_job_id,
+    evidence: integrityError ? [] : row.evidence_json || row.result_json?.evidence || [],
+    checkpoint: row.checkpoint_json,
+    catalogVersion: row.checkpoint_catalog_version || row.catalog_version || row.result_json?.catalogVersion || null,
+    catalogVersionId: row.checkpoint_catalog_version_id || row.result_json?.catalogVersionId || null,
+    workbook: row.checkpoint_workbook || row.result_json?.workbook || null,
+    workbookSha256: row.checkpoint_workbook_sha256 || row.result_json?.workbookSha256 || null,
+    parentJobId: row.parent_job_id,
 	    activity: row.activity_json || [],
 	    createdAt: toIso(row.created_at),
     updatedAt: toIso(row.updated_at),

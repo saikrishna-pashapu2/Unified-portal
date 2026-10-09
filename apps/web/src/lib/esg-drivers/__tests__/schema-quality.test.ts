@@ -6,19 +6,19 @@ import {
 } from "../schema";
 
 describe("ESG driver request coverage", () => {
-  it("canonicalizes supported country and sector aliases", () => {
+  it("trims bounded scope labels without selecting from the bundled catalog", () => {
     expect(
       generateDriversRequestSchema.parse({
         country: "  United Arab Emirates ",
         sector: " financial services ",
         language: " Arabic ",
       }),
-    ).toEqual({ country: "UAE", sector: "Banking", language: "Arabic" });
+    ).toEqual({ country: "United Arab Emirates", sector: "financial services", language: "Arabic" });
   });
 
-  it("rejects countries and sectors not present in the workbook", () => {
-    expect(generateDriversRequestSchema.safeParse({ country: "Germany", sector: "Aviation", language: "English" }).success).toBe(false);
-    expect(generateDriversRequestSchema.safeParse({ country: "UAE", sector: "Construction", language: "English" }).success).toBe(false);
+  it("accepts labels that an active uploaded catalog may define", () => {
+    expect(generateDriversRequestSchema.safeParse({ country: "Germany", sector: "Aviation", language: "English" }).success).toBe(true);
+    expect(generateDriversRequestSchema.safeParse({ country: "Uzbekistan", sector: "Construction", language: "English" }).success).toBe(true);
   });
 
   it("still enforces a minimum length for country and sector", () => {

@@ -1,7 +1,9 @@
 # ESG driver workbook workflow
 
-The ESG Domain Tools page uses `apps/web/data/esg-drivers/ESG_Drivers_September.xlsx`.
-Its five sector worksheets contain 685 named rows. A run selects every global row
+The ESG Domain Tools page uses the shared active workbook stored in the ESG
+database. The bundled `apps/web/data/esg-drivers/ESG_Drivers_September.xlsx`
+initializes the catalog on first use after migration; its five sector worksheets
+contain 685 named rows. A run selects every global row
 and every row for the chosen country, preserving the workbook's order, names,
 section/country labels, and driver types. UAE / Banking assesses 52 candidates.
 New reports publish up to 15 source-supported drivers in relevance order; the
@@ -9,15 +11,67 @@ complete candidate assessment remains available in the audit/export.
 English, Russian, and Arabic are supported for the updated narrative; canonical
 names and original workbook text retain their original spelling and language.
 
-## Workbook import
+## Updating the shared workbook
 
-Columns A–I define section/country, type, name, logic, evidence/KPI, key sources,
-and links. Blank category cells continue the preceding category. A new country
+Every signed-in user can open **Manage driver workbook** on the ESG Drivers page.
+Upload an `.xlsx` file, review validation warnings and the changes compared with
+the active version, then explicitly activate it. Uploading alone does not change
+the active workbook. The preview includes added, removed and edited drivers,
+source URL changes by worksheet, and row reordering. Large previews contain
+bounded excerpts and say when details are truncated.
+
+Activation changes the country/sector options and candidate counts for everyone's
+new jobs. History shows the uploader, upload time, active version and activation
+audit. Preview and activate an older version to roll back. Identical file bytes
+reuse the existing version. If another user activates a workbook while a preview
+is open, the stale activation is rejected and the user must refresh the preview.
+
+Version rows retain the original upload, parsed catalog and SHA-256 identity.
+New jobs lock the active state and snapshot their candidate rows and exact URL
+allowlist in the same transaction as queue creation. A generation request from
+stale country/sector options is rejected. Running jobs, saved reports and retries
+keep their original workbook; retrying never reads a newly active catalog.
+
+Uploads are limited to 5 MiB and parsed in a bounded worker. Supported workbooks
+have 1–20 sector worksheets, at most 2,000 rows and 32 columns per worksheet,
+and 100,000 cells overall. A country/sector selection, including global rows,
+may contain at most 150 candidates. Each worksheet may contain up to 250 source
+URLs, with 1,000 across the workbook. Driver names and types are limited to 160
+characters each, logic and evidence/KPI to 2,000 each, and key-source labels to
+4,096. Overlong values are rejected with their cell location, never truncated.
+Archive expansion, parsing time, memory
+and concurrent parsers are bounded. Formulas, Excel errors, macros, embedded
+objects and external workbook links are rejected; use values and embedded
+HTTP(S) hyperlinks. Unlinked source labels are reported as warnings and never
+turned into guessed URLs. Each sector needs country-specific drivers and at
+least one permitted source URL. Uploads are rate limited; activation requests are
+limited to 20 per user per day to bound shared-workbook churn. Catalog storage is
+capped at 200 versions and 256 MiB; an exhausted catalog needs operator attention.
+
+### Workbook layout
+
+Columns A–F must be headed `Driver Section/Country`, `Driver Type`, `Driver Name`,
+`Driver Logic`, `Evidence/KPI`, and `Key Sources`. Columns G onward contain
+`Link`/`Links` columns. Each worksheet name is a sector; country labels and
+`Global Driver`/`Global Drivers` sections come from column A. Blank category
+cells continue the preceding category. A new country
 resets the type. Literal URLs and embedded hyperlink targets in source columns
 are imported with their cell locations. Baseline logic and KPIs are retained as
 unverified reference data, never substituted for retrieved evidence.
 
-After updating the workbook in the repository, run:
+Uploads report standalone notes/headings in column A and repeated column headers
+as warnings, without treating them as drivers. Both reset the category context;
+the next driver must state its section/country and type explicitly. Rows with
+other driver or source content still require a Driver Name. A compact summary
+row containing only section/country, type and name is skipped with a warning only
+when those values exactly match an earlier detailed driver in the same worksheet.
+The original complete row is retained. New named summary rows and rows with
+different details remain candidates; source links are never inferred from labels.
+
+### Bundled bootstrap maintenance
+
+Normal workbook updates use the portal and need no release. To change the bundled
+bootstrap for a fresh installation, update the repository workbook and run:
 
 ```powershell
 pnpm -C apps/web catalog:generate
@@ -25,11 +79,28 @@ pnpm -C apps/web catalog:check
 ```
 
 Commit the workbook and both generated JSON files together. CI checks that the
-generated catalog matches the workbook. The compact options file supplies the
-country/sector choices and counts to the UI. Jobs snapshot the selection and
-allowlist at creation, so a subsequent workbook release cannot change a retry.
+generated catalog matches the workbook. Runtime UI options come from the active
+database catalog; changing bundled files does not replace an already active
+database version. Jobs snapshot the selection and allowlist at creation, so a
+subsequent workbook release cannot change a retry.
 The old catalog and harness remain for legacy compatibility; the active generator
 does not select or research through them.
+
+### Deployment contract
+
+Apply ESG migration `20261009120000_esg_driver_workbook_catalog` with the documented
+migration credentials before starting the updated web application and workers.
+It adds catalog versions, active state and activation audit tables; it does not
+change scraper-owned tables. Missing tables produce an explicit catalog-unavailable
+response, leaving existing saved reports readable. New generation is disabled
+until catalog loading succeeds.
+
+Deploy the web application and ESG workers together. New jobs use queue type
+`esg_driver_excel_v5`, which prevents older workers from claiming workbook-catalog
+jobs. The updated workers continue to accept earlier queue versions. Version 5
+jobs require their persisted workbook snapshot and fail clearly if it is missing;
+they must never fall back to a bundled or newly active workbook. No migration or
+worker restart is needed for subsequent uploads or activations.
 
 ## Restricted research and verification
 
@@ -213,7 +284,7 @@ child, rechecks supported rows against their saved source versions and quotation
 unavailable rows and relevance assessment gaps. Results from the older catalog remain readable/exportable, but
 legacy checkpoints cannot resume into this restricted workflow. Start a new run
 for those packs. No database migration is required for the JSON checkpoint format.
-New jobs use `esg_driver_excel_v4`, which older workers do not claim. General
+New jobs use `esg_driver_excel_v5`, which older workers do not claim. General
 workers also support older queue versions. Before
 completion, the domain transaction checks the result against the saved workbook
 rows, allowlist, citations, model review records and relevance evidence fingerprints.
@@ -230,9 +301,9 @@ for both writing and verification, with low reasoning for the first draft,
 medium for the first repair and reviews, and high for the final repair. The provider's returned model and response ID are
 recorded for both stages of each supported driver. Avoid switching a worker binary while it is actively
 processing a job; allow it to stop gracefully first.
-Refresh every local worker that can claim `esg_driver_excel_v4`, including a
-general worker started by another terminal. Restarting only the ESG-only process
-does not prevent an older general worker from claiming new jobs. Worker logs
+Refresh every local worker to support `esg_driver_excel_v5`, including a
+general worker started by another terminal. Older workers cannot claim version 5
+jobs; leaving only older workers running leaves new jobs queued. Worker logs
 record the job ID, claiming process identity and quality policy for new ESG jobs.
 Creating a retry keeps the parent read, checkpoint copy and child queue entry in
 one transaction, with a bounded 30-second timeout for evidence-rich checkpoints.
@@ -248,7 +319,8 @@ maintenance or unrelated document jobs.
 
 ```powershell
 pnpm -C apps/web exec vitest run src/lib/esg-drivers src/app/api/esg/drivers src/app/esg/tools/__tests__/drivers-client.test.ts
-pnpm type-check
+pnpm -C apps/web exec tsc --noEmit --incremental false
+pnpm -C apps/web exec tsc -p tsconfig.esg-driver-worker.json --noEmit --incremental false
 pnpm -C apps/web exec playwright test --config playwright.esg-drivers.config.ts
 ```
 
@@ -256,3 +328,8 @@ The isolated browser configuration renders the actual client with mocked APIs an
 a test router. It does not create a user, contact the database, or call the model.
 The regular Playwright configuration uses the existing authentication/DB fixture
 and should run only against a dedicated test database.
+
+`e2e/esg-driver-workbook.integration.spec.ts` additionally tests authenticated
+upload, activation, dynamic coverage, revision conflicts and rollback through
+the real application routes. It requires the disposable `esg_catalog_test`
+database on loopback, or CI's disposable `portal_esg` database. Run it against the production build to cover Excel module resolution inside the parser worker.

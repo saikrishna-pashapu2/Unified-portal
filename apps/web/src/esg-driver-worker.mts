@@ -55,9 +55,14 @@ const esgDriversOnly = process.argv.includes("--esg-drivers-only");
 const concurrency = boundedInteger(process.env.WORKER_CONCURRENCY, 2, 1, 10);
 const emailPollMs = boundedInteger(process.env.WORKER_EMAIL_POLL_MS, 5_000, 1_000, 60_000);
 const esgEventsDigestPollMs = 60_000;
-const esgDriverJobTypes = ["esg_driver", "esg_driver_excel_v3", "esg_driver_excel_v4"] as const;
+const esgDriverJobTypes = [
+  "esg_driver",
+  "esg_driver_excel_v3",
+  "esg_driver_excel_v4",
+  "esg_driver_excel_v5",
+] as const;
 const enabledJobTypes = esgDriversOnly
-  ? (["esg_driver_excel_v4"] as const)
+  ? (["esg_driver_excel_v5"] as const)
   : [
       ...esgDriverJobTypes,
       "xlsx_translation_v1",
@@ -307,7 +312,12 @@ async function verifyWorkerSchema(): Promise<void> {
 }
 
 function isEsgDriverJobType(jobType: string): boolean {
-  return jobType === "esg_driver" || jobType === "esg_driver_excel_v3" || jobType === "esg_driver_excel_v4";
+  return (
+    jobType === "esg_driver" ||
+    jobType === "esg_driver_excel_v3" ||
+    jobType === "esg_driver_excel_v4" ||
+    jobType === "esg_driver_excel_v5"
+  );
 }
 
 async function synchronizePdfV2DomainJob(

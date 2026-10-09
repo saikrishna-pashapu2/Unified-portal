@@ -226,7 +226,10 @@ function makeRankedResult(
   };
 }
 
-async function mockDriverApis(page: Page) {
+async function mockDriverApis(
+  page: Page,
+  options: { delayedCatalogPagination?: boolean; delayedHistoryPreview?: boolean } = {},
+) {
   const parentResult = makeResult("partial");
   const childResult = makeResult("complete");
   const rankedCompleteResult = makeRankedResult(15, 0);
@@ -250,6 +253,150 @@ async function mockDriverApis(page: Page) {
     "ranked-child-job": rankedCompleteResult,
     "ranked-unscored-job": rankedUnscoredResult,
   };
+
+  const activeWorkbook = {
+    id: "catalog-active-v3",
+    version: "2026-09-09-v3",
+    workbook: "ESG_Drivers_September.xlsx",
+    sha256: "active-sha256",
+    uploadedAt: NOW,
+    uploadedBy: { id: 1, name: "Catalog owner" },
+    driverCount: 92,
+    sheetCount: 5,
+    sourceCount: 17,
+    isActive: true,
+    isBundled: true,
+  };
+  const previousWorkbook = {
+    ...activeWorkbook,
+    id: "catalog-previous-v2",
+    version: "2026-08-20-v2",
+    workbook: "ESG_Drivers_August.xlsx",
+    sha256: "previous-sha256",
+    uploadedAt: "2026-08-20T09:00:00.000Z",
+    uploadedBy: { id: 2, name: "Previous uploader" },
+    driverCount: 91,
+    sourceCount: 16,
+    isActive: false,
+    isBundled: false,
+  };
+  const uploadedWorkbook = {
+    ...activeWorkbook,
+    id: "catalog-upload-v4",
+    version: "2026-09-09-v4",
+    workbook: "ESG_Drivers_September_new.xlsx",
+    uploadedBy: { id: 9, name: "Test uploader" },
+    isActive: false,
+    isBundled: false,
+    uploadedAt: NOW,
+  };
+  const catalogOptions: {
+    workbook: string;
+    version: string;
+    countries: string[];
+    sectors: string[];
+    counts: Record<string, Record<string, number>>;
+  } = {
+    workbook: activeWorkbook.workbook,
+    version: activeWorkbook.version,
+    countries: ["Kazakhstan", "Uzbekistan", "UAE", "Saudi Arabia"],
+    sectors: ["Banking", "Energy", "Oil & Gas", "Mining & Metals", "Real Estate"],
+    counts: {
+      Banking: { UAE: 52, Kazakhstan: 52, Uzbekistan: 52, "Saudi Arabia": 52 },
+      Energy: { UAE: 45, Kazakhstan: 45, Uzbekistan: 40, "Saudi Arabia": 45 },
+      "Oil & Gas": { UAE: 36, Kazakhstan: 36, Uzbekistan: 36, "Saudi Arabia": 36 },
+      "Mining & Metals": { UAE: 28, Kazakhstan: 28, Uzbekistan: 28, "Saudi Arabia": 28 },
+      "Real Estate": { UAE: 40, Kazakhstan: 40, Uzbekistan: 40, "Saudi Arabia": 40 },
+    },
+  };
+  let catalogRevision = 7;
+  let currentActive = activeWorkbook;
+  let currentOptions = catalogOptions;
+  let currentVersions = [activeWorkbook, previousWorkbook];
+  const catalogActivations = [{
+    id: "activation-v3",
+    versionId: activeWorkbook.id,
+    workbook: activeWorkbook.workbook,
+    activatedAt: NOW,
+    activatedBy: { id: 1, name: "Catalog owner" },
+    revision: catalogRevision,
+  }];
+  const catalogList = () => ({
+    active: currentActive,
+    options: currentOptions,
+    revision: catalogRevision,
+    versions: currentVersions,
+    nextCursor: options.delayedCatalogPagination ? "delayed-cursor" : null,
+    activations: catalogActivations,
+  });
+  const previewFor = (version: typeof activeWorkbook) => ({
+    version,
+    active: currentActive,
+    revision: catalogRevision,
+    diff: {
+      addedDrivers: version.id === currentActive.id ? 0 : 1,
+      removedDrivers: version.id === currentActive.id ? 0 : 2,
+      changedDrivers: version.id === currentActive.id ? 0 : 3,
+      addedSources: version.id === currentActive.id ? 0 : 1,
+      removedSources: version.id === currentActive.id ? 0 : 1,
+      addedSourceUrls: version.id === currentActive.id ? [] : ["https://example.com/new-source"],
+      removedSourceUrls: version.id === currentActive.id ? [] : ["https://example.com/old-source"],
+      changes: version.id === currentActive.id ? [] : [{
+        kind: "changed",
+        sheet: "Banking",
+        driverName: "Board oversight",
+        fields: ["Driver Logic", "Evidence/KPI"],
+        before: { id: "old-board", sheet: "Banking", row: 14, section: "UAE", type: "Governance", name: "Board oversight", logic: "Old logic", evidenceKpi: "Old KPI", keySources: "Old source", sourceUrls: ["https://example.com/old-source"] },
+        after: { id: "new-board", sheet: "Banking", row: 14, section: "UAE", type: "Governance", name: "Board oversight", logic: "New logic", evidenceKpi: "New KPI", keySources: "New source", sourceUrls: ["https://example.com/new-source"] },
+      }],
+      truncated: false,
+    },
+    warnings: version.id === currentActive.id ? [] : [{ sheet: "Banking", cell: "D14", message: "Source link retained from the previous version." }],
+  });
+
+  await page.route("**/api/esg/drivers/workbooks", async (route) => {
+    if (route.request().method() === "POST") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        ...previewFor(uploadedWorkbook),
+        version: uploadedWorkbook,
+      }) });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(catalogList()) });
+  });
+  if (options.delayedCatalogPagination) {
+    await page.route("**/api/esg/drivers/workbooks?cursor=delayed-cursor", async (route) => {
+      const stalePage = JSON.parse(JSON.stringify(catalogList()));
+      await new Promise((resolve) => setTimeout(resolve, 900));
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(stalePage) });
+    });
+  }
+  await page.route("**/api/esg/drivers/workbooks/catalog-previous-v2", async (route) => {
+    if (options.delayedHistoryPreview) {
+      await new Promise((resolve) => setTimeout(resolve, 900));
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(previewFor(previousWorkbook)) });
+  });
+  await page.route("**/api/esg/drivers/workbooks/catalog-active-v3", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(previewFor(activeWorkbook)) });
+  });
+  await page.route("**/api/esg/drivers/workbooks/catalog-upload-v4/activate", async (route) => {
+    expect(route.request().method()).toBe("POST");
+    currentActive.isActive = false;
+    uploadedWorkbook.isActive = true;
+    currentActive = uploadedWorkbook;
+    currentOptions = {
+      ...catalogOptions,
+      workbook: uploadedWorkbook.workbook,
+      version: uploadedWorkbook.version,
+      countries: [...catalogOptions.countries, "Qatar"],
+      sectors: [...catalogOptions.sectors, "FinTech"],
+      counts: { ...catalogOptions.counts, FinTech: { UAE: 18, Qatar: 22 } },
+    };
+    currentVersions = [uploadedWorkbook, activeWorkbook, previousWorkbook];
+    catalogRevision += 1;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(catalogList()) });
+  });
 
   await page.route("**/api/esg/drivers/history?*", async (route) => {
     await route.fulfill({
@@ -416,6 +563,214 @@ test('offers workbook countries/sectors and previews the exact count', async ({ 
   await page.getByLabel('Sector').selectOption('Energy');
   await page.getByLabel('Language').selectOption('Russian');
   await expect(page.getByText(/Up to 15 ranked drivers are published from 40 workbook candidates/)).toBeVisible();
+});
+
+test("pins new generation to the active workbook version", async ({ page }) => {
+  if (!process.env.ESG_DRIVERS_ISOLATED_UI_TEST) await authenticateE2eUser(page);
+  await mockDriverApis(page);
+  let generationBody: Record<string, unknown> | null = null;
+  await page.route("**/api/esg/drivers/generate", async (route) => {
+    generationBody = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ jobId: "generated-job", job: { status: "queued", progress: 0, stage: "queued", activity: [] } }) });
+  });
+  await page.goto("/esg/tools?tool=drivers&view=new");
+  await page.getByLabel("Country").selectOption("Uzbekistan");
+  await page.getByLabel("Sector").selectOption("Energy");
+  await page.getByRole("button", { name: "Generate driver pack" }).click();
+  await expect.poll(() => generationBody).toMatchObject({ country: "Uzbekistan", sector: "Energy", expectedWorkbookVersion: "2026-09-09-v3" });
+});
+
+test("validates an uploaded workbook without activating it", async ({ page }) => {
+  if (!process.env.ESG_DRIVERS_ISOLATED_UI_TEST) await authenticateE2eUser(page);
+  await mockDriverApis(page);
+  const activationRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "POST" && request.url().includes("/activate")) activationRequests.push(request.url());
+  });
+  await page.goto("/esg/tools?tool=drivers&view=new");
+  await page.getByRole("button", { name: "Manage driver workbook" }).click();
+  await expect(page.getByRole("dialog", { name: "Manage driver workbooks" })).toBeVisible();
+  await page.getByLabel("Workbook file").setInputFiles({
+    name: "candidate.xlsx",
+    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    buffer: Buffer.from("values-only workbook"),
+  });
+  await page.getByRole("button", { name: "Validate workbook" }).click();
+  await expect(page.getByText("Upload preview · draft")).toBeVisible();
+  await expect(page.getByText("Drivers changed")).toBeVisible();
+  await expect(page.getByText("Old logic")).toBeVisible();
+  await expect(page.getByText("New logic")).toBeVisible();
+  await expect(page.getByText("Source link retained from the previous version.")).toBeVisible();
+  await expect(page.getByText(/Limits: names\/types 160 characters/)).toBeVisible();
+  if (process.env.ESG_DRIVERS_ISOLATED_UI_TEST) {
+    const previewPanel = page
+      .getByText("Upload preview · draft", { exact: true })
+      .locator("xpath=ancestor::section[1]");
+    await previewPanel.screenshot({
+      path: "../../docs/audits/esg-drivers-2026-09-09/ui-workbook-manager.png",
+    });
+  }
+  expect(activationRequests).toHaveLength(0);
+});
+
+test("traps workbook manager focus and restores focus after confirmation and close", async ({ page }) => {
+  if (!process.env.ESG_DRIVERS_ISOLATED_UI_TEST) await authenticateE2eUser(page);
+  await mockDriverApis(page);
+  await page.goto("/esg/tools?tool=drivers&view=new");
+
+  const opener = page.getByRole("button", { name: "Manage driver workbook" });
+  await opener.click();
+  const dialog = page.getByRole("dialog", { name: "Manage driver workbooks" });
+  const closeButton = dialog.getByRole("button", { name: "Close workbook manager" });
+  await expect(dialog).toBeVisible();
+  await expect(closeButton).toBeFocused();
+
+  await page.keyboard.press("Shift+Tab");
+  expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+  await page.keyboard.press("Tab");
+  await expect(closeButton).toBeFocused();
+
+  await page.getByLabel("Workbook file").setInputFiles({
+    name: "candidate.xlsx",
+    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    buffer: Buffer.from("values-only workbook"),
+  });
+  await page.getByRole("button", { name: "Validate workbook" }).click();
+  await page.getByRole("button", { name: "Review activation" }).click();
+  const activationDialog = page.getByRole("alertdialog", { name: "Activate this shared workbook?" });
+  const activateButton = activationDialog.getByRole("button", { name: "Activate shared workbook" });
+  await expect(activationDialog).toBeVisible();
+  await expect(activateButton).toBeFocused();
+
+  await activationDialog.getByRole("button", { name: "Keep reviewing" }).click();
+  await expect(dialog.getByRole("button", { name: "Review activation" })).toBeFocused();
+
+  await closeButton.click();
+  await expect(opener).toBeFocused();
+});
+
+test("requires explicit activation and sends the active revision", async ({ page }) => {
+  if (!process.env.ESG_DRIVERS_ISOLATED_UI_TEST) await authenticateE2eUser(page);
+  await mockDriverApis(page);
+  let activationBody: Record<string, unknown> | null = null;
+  page.on("request", (request) => {
+    if (request.method() === "POST" && request.url().includes("catalog-upload-v4/activate")) {
+      activationBody = request.postDataJSON() as Record<string, unknown>;
+    }
+  });
+  await page.goto("/esg/tools?tool=drivers&view=new");
+  await page.getByRole("button", { name: "Manage driver workbook" }).click();
+  await page.getByLabel("Workbook file").setInputFiles({ name: "candidate.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer: Buffer.from("values-only workbook") });
+  await page.getByRole("button", { name: "Validate workbook" }).click();
+  await page.getByRole("button", { name: "Review activation" }).click();
+  await expect(page.getByText(/everyone's new jobs/)).toBeVisible();
+  await expect(page.getByText(/Running jobs, retried jobs, and saved jobs/)).toBeVisible();
+  await page.getByRole("button", { name: "Activate shared workbook" }).click();
+  await expect.poll(() => activationBody).toEqual({ expectedRevision: 7 });
+  await page.getByRole("button", { name: "Close workbook manager" }).click();
+  await page.getByLabel("Country").selectOption("Qatar");
+  await expect(page.getByLabel("Country")).toHaveValue("Qatar");
+  await page.getByLabel("Sector").selectOption("FinTech");
+  await expect(page.getByLabel("Sector")).toHaveValue("FinTech");
+});
+
+test("does not let delayed catalog pagination overwrite an activation", async ({ page }) => {
+  if (!process.env.ESG_DRIVERS_ISOLATED_UI_TEST) await authenticateE2eUser(page);
+  await mockDriverApis(page, { delayedCatalogPagination: true });
+  await page.goto("/esg/tools?tool=drivers&view=new");
+
+  await page.getByRole("button", { name: "Manage driver workbook" }).click();
+  const dialog = page.getByRole("dialog", { name: "Manage driver workbooks" });
+  await dialog.getByRole("button", { name: "Load older versions" }).click();
+
+  await dialog.getByLabel("Workbook file").setInputFiles({
+    name: "candidate.xlsx",
+    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    buffer: Buffer.from("values-only workbook"),
+  });
+  await dialog.getByRole("button", { name: "Validate workbook" }).click();
+  await dialog.getByRole("button", { name: "Review activation" }).click();
+  await dialog.getByRole("button", { name: "Activate shared workbook" }).click();
+  await expect(dialog.getByText("ESG_Drivers_September_new.xlsx").first()).toBeVisible();
+
+  await page.waitForTimeout(1100);
+  await expect(dialog.getByText("ESG_Drivers_September_new.xlsx").first()).toBeVisible();
+  await dialog.getByRole("button", { name: "Close workbook manager" }).click();
+  await page.getByLabel("Country").selectOption("Qatar");
+  await page.getByLabel("Sector").selectOption("FinTech");
+  await expect(page.getByLabel("Country")).toHaveValue("Qatar");
+  await expect(page.getByLabel("Sector")).toHaveValue("FinTech");
+});
+
+test("previews an older workbook for rollback through the same confirmation", async ({ page }) => {
+  if (!process.env.ESG_DRIVERS_ISOLATED_UI_TEST) await authenticateE2eUser(page);
+  await mockDriverApis(page);
+  await page.goto("/esg/tools?tool=drivers");
+  await page.getByRole("button", { name: "Manage driver workbook" }).click();
+  await page.getByRole("button", { name: "Preview" }).last().click();
+  await expect(page.getByText("History preview")).toBeVisible();
+  await expect(page.getByText("ESG_Drivers_August.xlsx").first()).toBeVisible();
+  await page.getByRole("button", { name: "Review activation" }).click();
+  await expect(page.getByText(/Activate this shared workbook/)).toBeVisible();
+  await expect(page.getByText(/everyone's new jobs/)).toBeVisible();
+});
+
+test("discards a slow history preview after the manager closes", async ({ page }) => {
+  if (!process.env.ESG_DRIVERS_ISOLATED_UI_TEST) await authenticateE2eUser(page);
+  await mockDriverApis(page, { delayedHistoryPreview: true });
+  await page.goto("/esg/tools?tool=drivers");
+
+  const opener = page.getByRole("button", { name: "Manage driver workbook" });
+  await opener.click();
+  const dialog = page.getByRole("dialog", { name: "Manage driver workbooks" });
+  const previewRequest = page.waitForRequest(
+    (request) => request.method() === "GET" && request.url().includes("catalog-previous-v2"),
+  );
+  await dialog.getByRole("button", { name: "Preview" }).last().click();
+  await previewRequest;
+
+  await dialog.getByRole("button", { name: "Close workbook manager" }).click();
+  await expect(dialog).toHaveCount(0);
+  await page.waitForTimeout(1100);
+
+  await opener.click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText("History preview", { exact: true })).toHaveCount(0);
+  await expect(dialog.getByRole("heading", { name: "ESG_Drivers_September.xlsx" })).toBeVisible();
+});
+
+test("shows a stale activation message and never regenerates a job", async ({ page }) => {
+  if (!process.env.ESG_DRIVERS_ISOLATED_UI_TEST) await authenticateE2eUser(page);
+  await mockDriverApis(page);
+  await page.route("**/api/esg/drivers/workbooks/catalog-upload-v4/activate", async (route) => {
+    await route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "Workbook revision is stale." }) });
+  });
+  const generateRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "POST" && request.url().endsWith("/api/esg/drivers/generate")) generateRequests.push(request.url());
+  });
+  await page.goto("/esg/tools?tool=drivers&view=new");
+  await page.getByRole("button", { name: "Manage driver workbook" }).click();
+  await page.getByLabel("Workbook file").setInputFiles({ name: "candidate.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer: Buffer.from("values-only workbook") });
+  await page.getByRole("button", { name: "Validate workbook" }).click();
+  await page.getByRole("button", { name: "Review activation" }).click();
+  await page.getByRole("button", { name: "Activate shared workbook" }).click();
+  await expect(page.getByText(/changed while you were reviewing it/)).toBeVisible();
+  expect(generateRequests).toHaveLength(0);
+});
+
+test("rejects an invalid workbook before sending an upload request", async ({ page }) => {
+  if (!process.env.ESG_DRIVERS_ISOLATED_UI_TEST) await authenticateE2eUser(page);
+  await mockDriverApis(page);
+  const uploadRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "POST" && request.url().endsWith("/api/esg/drivers/workbooks")) uploadRequests.push(request.url());
+  });
+  await page.goto("/esg/tools?tool=drivers");
+  await page.getByRole("button", { name: "Manage driver workbook" }).click();
+  await page.getByLabel("Workbook file").setInputFiles({ name: "candidate.pdf", mimeType: "application/pdf", buffer: Buffer.from("not an xlsx") });
+  await expect(page.getByText(/Choose an .xlsx workbook/)).toBeVisible();
+  expect(uploadRequests).toHaveLength(0);
 });
 
 test('shows 52 processing rows and restores scope on direct navigation', async ({ page }) => {

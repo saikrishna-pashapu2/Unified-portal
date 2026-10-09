@@ -1,6 +1,7 @@
 import "server-only";
 
 import { generateEsgDriverResult } from "./generator";
+import { generateEsgDriverResult as generateLegacyEsgDriverResult } from "./harness";
 import {
   completeEsgDriverJob,
   getEsgDriverJob,
@@ -15,6 +16,21 @@ import type {
 import type { ClaimedBackgroundJob } from "@/lib/jobs/queue";
 import { throwIfJobCancelled } from "@/lib/jobs/queue";
 import { assertWorkbookResult } from './result-integrity';
+import { canonicalizeEsgDriverCountry, canonicalizeEsgDriverSector } from './coverage';
+
+function payloadMatchesPinnedScope(
+  payload: GenerateEsgDriversInput,
+  checkpoint: Extract<AnyEsgDriverCheckpoint, { version: 2 }>,
+): boolean {
+  // The v3/v4 compatibility queues may contain payloads written before the
+  // request schema canonicalized bundled aliases (for example, "United Arab
+  // Emirates" alongside a checkpoint's "UAE"). Restrict normalization to the
+  // checkpoint's own labels so custom uploaded labels can never be rewritten by
+  // a bundled alias.
+  const country = canonicalizeEsgDriverCountry(payload.country, [checkpoint.input.country]);
+  const sector = canonicalizeEsgDriverSector(payload.sector, [checkpoint.input.sector]);
+  return country === checkpoint.input.country && sector === checkpoint.input.sector && payload.language === checkpoint.input.language;
+}
 
 export async function runEsgDriverGenerationJob(
   job: ClaimedBackgroundJob<GenerateEsgDriversInput>,
@@ -23,8 +39,32 @@ export async function runEsgDriverGenerationJob(
     const existing = await getEsgDriverJob(job.id, job.userId, {
       includeCheckpoint: true,
     });
+    const checkpoint = existing?.checkpoint;
+    if (job.jobType === "esg_driver_excel_v5" && checkpoint?.version !== 2) {
+      throw new Error("ESG Driver v5 jobs require an immutable workbook checkpoint.");
+    }
+    if (checkpoint?.version === 2) {
+      const payload = job.payload as GenerateEsgDriversInput & {
+        catalogVersionId?: unknown;
+        workbookSha256?: unknown;
+      };
+      if (!payloadMatchesPinnedScope(payload, checkpoint)) {
+        throw new Error("ESG Driver queue payload does not match its pinned workbook checkpoint.");
+      }
+      if (payload.expectedWorkbookVersion && payload.expectedWorkbookVersion !== checkpoint.catalogVersion) {
+        throw new Error("ESG Driver queue payload has an invalid pinned workbook version.");
+      }
+      if (payload.catalogVersionId !== undefined && payload.catalogVersionId !== checkpoint.catalogVersionId) {
+        throw new Error("ESG Driver queue payload has an invalid pinned workbook catalog id.");
+      }
+      if (payload.workbookSha256 !== undefined && payload.workbookSha256 !== checkpoint.workbookSha256) {
+        throw new Error("ESG Driver queue payload has an invalid pinned workbook hash.");
+      }
+    }
     if (existing?.status === "done" && existing.result) {
-      assertWorkbookResult(existing.result, existing.checkpoint, true);
+      if (existing.checkpoint?.version === 2) {
+        assertWorkbookResult(existing.result, existing.checkpoint, true);
+      }
       return {
         queueCompleted: false,
         result: { generatedDrivers: existing.result.drivers.length, reused: true },
@@ -41,7 +81,13 @@ export async function runEsgDriverGenerationJob(
       stage: existing?.checkpoint?.version === 2 && existing.checkpoint.slots.length ? "resuming from checkpoint" : "starting",
     });
 
-    const result = await generateEsgDriverResult(job.payload, {
+    // The unversioned queue and v3/v4 rows may still carry the original
+    // selection-runtime checkpoint. Keep those jobs on the legacy harness;
+    // version 5 is always the catalog-pinned workbook workflow above.
+    const generate = job.jobType !== "esg_driver_excel_v5" && checkpoint?.version !== 2
+      ? generateLegacyEsgDriverResult
+      : generateEsgDriverResult;
+    const result = await (generate as typeof generateEsgDriverResult)(job.payload, {
       checkpoint: existing?.checkpoint ?? undefined,
       onProgress: async (
         stage: string,

@@ -6,6 +6,9 @@ const nextConfig = {
   outputFileTracingRoot: path.join(__dirname, '../..'),
   outputFileTracingIncludes: {
     '/*': ['./node_modules/pdfjs-dist/standard_fonts/**/*'],
+    // The catalog parser resolves SheetJS inside an unbundled worker. Include
+    // its runtime files explicitly because the tracer cannot see that import.
+    '/api/esg/drivers/workbooks': ['./node_modules/xlsx/**/*'],
   },
   transpilePackages: ['@esgcredit/db-esg', '@esgcredit/db-credit'],
   serverExternalPackages: [
