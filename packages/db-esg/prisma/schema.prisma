@@ -199,6 +199,8 @@ model users {
   user_preferences                               user_preferences[]
   user_activity                                  user_activity[]
   background_jobs                                background_jobs[]
+  esg_driver_catalog_versions                    esg_driver_catalog_versions[]
+  esg_driver_catalog_activations                 esg_driver_catalog_activations[]
 
   @@index([team], map: "ix_users_team")
 }
@@ -549,6 +551,57 @@ model esg_driver_jobs {
   @@index([user_id, created_at(sort: Desc)], map: "idx_esg_driver_jobs_user_created")
   @@index([parent_job_id], map: "idx_esg_driver_jobs_parent")
   @@map("esg_driver_jobs")
+}
+
+/// Immutable shared ESG Driver workbook catalogs uploaded by authenticated users.
+model esg_driver_catalog_versions {
+  id                    String                          @id @db.Uuid
+  version               String                          @db.VarChar(120)
+  workbook              String                          @db.VarChar(255)
+  sha256                String                          @unique(map: "uq_esg_driver_catalog_versions_sha256") @db.Char(64)
+  display_name          String                          @db.VarChar(255)
+  catalog_json          Json
+  file_data             Bytes?
+  warnings_json         Json                            @default("[]")
+  driver_count          Int
+  sheet_count           Int
+  source_count          Int
+  is_bundled            Boolean                         @default(false)
+  uploaded_at           DateTime                        @default(now()) @db.Timestamptz(6)
+  uploaded_by_user_id   Int?
+  uploaded_by           users?                          @relation(fields: [uploaded_by_user_id], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "esg_driver_catalog_versions_uploaded_by_fkey")
+  active_state          esg_driver_catalog_state?       @relation("esg_driver_catalog_state_active_version")
+  activations           esg_driver_catalog_activations[]
+
+  @@index([uploaded_at(sort: Desc), id(sort: Desc)], map: "idx_esg_driver_catalog_versions_uploaded_at")
+  @@index([uploaded_by_user_id], map: "idx_esg_driver_catalog_versions_uploaded_by")
+  @@map("esg_driver_catalog_versions")
+}
+
+/// Singleton pointer and optimistic-concurrency revision for the active catalog.
+model esg_driver_catalog_state {
+  id                Int                           @id
+  active_version_id String                        @unique(map: "uq_esg_driver_catalog_state_active_version") @db.Uuid
+  revision          Int                           @default(0)
+  active_version    esg_driver_catalog_versions   @relation("esg_driver_catalog_state_active_version", fields: [active_version_id], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "esg_driver_catalog_state_active_version_fkey")
+
+  @@map("esg_driver_catalog_state")
+}
+
+/// Append-only audit trail for active catalog changes.
+model esg_driver_catalog_activations {
+  id                  String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  version_id          String                        @db.Uuid
+  activated_by_user_id Int?
+  revision            Int
+  activated_at        DateTime                      @default(now()) @db.Timestamptz(6)
+  version             esg_driver_catalog_versions   @relation(fields: [version_id], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "esg_driver_catalog_activations_version_fkey")
+  activated_by        users?                        @relation(fields: [activated_by_user_id], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "esg_driver_catalog_activations_user_fkey")
+
+  @@index([activated_at(sort: Desc), id(sort: Desc)], map: "idx_esg_driver_catalog_activations_at")
+  @@index([version_id], map: "idx_esg_driver_catalog_activations_version")
+  @@index([activated_by_user_id], map: "idx_esg_driver_catalog_activations_user")
+  @@map("esg_driver_catalog_activations")
 }
 
 model decisions {

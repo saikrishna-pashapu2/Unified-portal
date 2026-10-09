@@ -6,8 +6,8 @@ import { relevanceEvidenceFingerprint } from './relevance-evidence';
 import { isPlausibleSourceDate } from './excel-source-metadata';
 
 export const ESG_EVIDENCE_CONTRACT = 'excel-evidence-v3' as const;
-export const ESG_DRIVER_QUEUE_TYPE = 'esg_driver_excel_v4' as const;
-export const isEsgDriverJobType = (type: string) => type === ESG_DRIVER_QUEUE_TYPE || type === 'esg_driver_excel_v3' || type === 'esg_driver';
+export const ESG_DRIVER_QUEUE_TYPE = 'esg_driver_excel_v5' as const;
+export const isEsgDriverJobType = (type: string) => type === ESG_DRIVER_QUEUE_TYPE || type === 'esg_driver_excel_v4' || type === 'esg_driver_excel_v3' || type === 'esg_driver';
 
 // JSONB reorders object keys; compare values canonically across the DB boundary.
 const canonicalJson = (value: unknown): string => JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item) ? Object.fromEntries(Object.keys(item).sort().map((key) => [key, item[key]])) : item);
@@ -26,6 +26,12 @@ export function workbookResultIssues(result: EsgDriverResult, checkpoint: EsgWor
   const allowed = new Set(checkpoint.allowedSources.map((s) => normalizeWorkbookUrl(s.url)));
   const allowedUrl = (url: string) => { try { return allowed.has(normalizeWorkbookUrl(url)); } catch { return false; } };
   if (result.workflow !== 'excel-sources' || result.catalogVersion !== checkpoint.catalogVersion || result.workbook !== checkpoint.workbook) issue('The result was produced by a different workbook workflow.');
+  // Legacy reports and checkpoints predate the catalog row identity fields.
+  // When the pinned checkpoint has them, the result must carry the exact same
+  // immutable identity; absence on older saved packs remains valid.
+  if (checkpoint.catalogVersionId && result.catalogVersionId !== checkpoint.catalogVersionId) issue('The result does not match the pinned workbook catalog version.');
+  if (checkpoint.workbookSha256 && result.workbookSha256 && result.workbookSha256 !== checkpoint.workbookSha256) issue('The result does not match the pinned workbook hash.');
+  if (checkpoint.workbookSha256 && !result.workbookSha256 && checkpoint.catalogVersionId) issue('The result is missing the pinned workbook hash.');
   if (['country', 'sector', 'language'].some((key) => result[key as keyof typeof checkpoint.input] !== checkpoint.input[key as keyof typeof checkpoint.input])) issue('The result does not match the requested country, sector and language.');
   const ranked = checkpoint.selectionPolicy === DRIVER_SELECTION_POLICY;
   if (checkpoint.selectionPolicy && !ranked) issue('Unsupported driver selection policy.');
@@ -97,6 +103,10 @@ export function workbookResultIssues(result: EsgDriverResult, checkpoint: EsgWor
 }
 
 export function assertWorkbookResult(result: EsgDriverResult, checkpoint: AnyEsgDriverCheckpoint | null | undefined, requireSavedSlots = false): void {
+  // Version-1 jobs predate the restricted workbook workflow. Keep their
+  // already-supported queue/result contract readable and processable; only
+  // version-2 catalog checkpoints enter the workbook integrity gate.
+  if (checkpoint?.version === 1) return;
   if (checkpoint?.version !== 2) throw new EsgDriverQualityGateError(['A pinned workbook checkpoint is required. Start a new workbook run.']);
   const issues = workbookResultIssues(result, checkpoint);
   const candidates = checkpoint.selectionPolicy === DRIVER_SELECTION_POLICY ? result.candidatePool || [] : result.drivers;

@@ -1,7 +1,5 @@
 import { z } from "zod";
 import {
-  canonicalizeEsgDriverCountry,
-  canonicalizeEsgDriverSector,
   ESG_DRIVER_COUNTRY_OPTIONS,
   ESG_DRIVER_SECTOR_OPTIONS,
 } from "./coverage";
@@ -17,22 +15,20 @@ const verificationMessageSchema = nonBlankString.max(500);
 export const SUPPORTED_ESG_DRIVER_COUNTRIES = ESG_DRIVER_COUNTRY_OPTIONS;
 export const SUPPORTED_ESG_DRIVER_SECTORS = ESG_DRIVER_SECTOR_OPTIONS;
 
-// The worksheet defines coverage; unsupported scopes cannot produce a generic pack.
+// Scope validation is performed against the active, transaction-pinned catalog
+// when a job is created. Request parsing only bounds untrusted text so uploaded
+// catalogs can introduce new country and sector labels safely.
 const supportedCountrySchema = z
   .string()
   .trim()
   .min(2)
-  .max(120)
-  .transform((value) => canonicalizeEsgDriverCountry(value) || value)
-  .refine((value) => ESG_DRIVER_COUNTRY_OPTIONS.includes(value), 'Choose a country in the workbook.');
+  .max(120);
 
 const supportedSectorSchema = z
   .string()
   .trim()
   .min(2)
-  .max(160)
-  .transform((value) => canonicalizeEsgDriverSector(value) || value)
-  .refine((value) => ESG_DRIVER_SECTOR_OPTIONS.includes(value), 'Choose a sector worksheet in the workbook.');
+  .max(160);
 
 export const driverSectionSchema = z.enum([
   "Global Drivers",
@@ -180,6 +176,7 @@ export const generateDriversRequestSchema = z.object({
   country: supportedCountrySchema,
   sector: supportedSectorSchema,
   language: z.string().trim().pipe(z.enum(['English', 'Russian', 'Arabic'])).default("English"),
+  expectedWorkbookVersion: z.string().trim().min(1).max(120).optional(),
 });
 
 export type GeneratedDriverPack = z.infer<typeof generatedDriverPackSchema>;

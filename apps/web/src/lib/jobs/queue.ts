@@ -14,6 +14,7 @@ export const BACKGROUND_JOB_TYPES = [
   "esg_driver",
   "esg_driver_excel_v3",
   "esg_driver_excel_v4",
+  "esg_driver_excel_v5",
 ] as const;
 
 export type BackgroundJobType = (typeof BACKGROUND_JOB_TYPES)[number];
@@ -24,6 +25,20 @@ export type BackgroundJobStatus =
   | "done"
   | "error"
   | "cancelled";
+
+export function isEsgDriverQueueType(
+  jobType: BackgroundJobType | string,
+): jobType is Extract<
+  BackgroundJobType,
+  "esg_driver" | "esg_driver_excel_v3" | "esg_driver_excel_v4" | "esg_driver_excel_v5"
+> {
+  return (
+    jobType === "esg_driver" ||
+    jobType === "esg_driver_excel_v3" ||
+    jobType === "esg_driver_excel_v4" ||
+    jobType === "esg_driver_excel_v5"
+  );
+}
 
 export interface BackgroundJob<TPayload = Record<string, unknown>> {
   id: string;
@@ -158,13 +173,13 @@ export async function enqueueBackgroundJob(
   database: RawDatabaseClient = esgPrisma,
 ): Promise<void> {
   try {
-    if (args.jobType === 'esg_driver_excel_v3' || args.jobType === 'esg_driver_excel_v4') {
+    if (isEsgDriverQueueType(args.jobType)) {
       // This helper is called inside the domain job transaction. The shared
       // advisory key also serializes inserts against the legacy DB trigger.
       await database.$executeRaw`SELECT pg_advisory_xact_lock(${args.userId}::integer, hashtext('esg_driver'))`;
       const active = await database.$queryRaw<Array<{ id: string }>>`
         SELECT id::text FROM background_jobs
-        WHERE user_id = ${args.userId} AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4')
+        WHERE user_id = ${args.userId} AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5')
           AND status IN ('queued', 'processing') LIMIT 1
       `;
       if (active.length) throw new JobConcurrencyLimitError();
@@ -632,14 +647,21 @@ export async function countActiveJobs(
   userId: number,
   jobType?: BackgroundJobType,
 ): Promise<number> {
-  const rows = jobType
+  const rows = jobType === "esg_driver"
     ? await esgPrisma.$queryRaw<Array<{ count: number }>>`
+        SELECT COUNT(*)::int AS count FROM background_jobs
+        WHERE user_id = ${userId}
+          AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5')
+          AND status IN ('queued', 'processing')
+      `
+    : jobType
+      ? await esgPrisma.$queryRaw<Array<{ count: number }>>`
         SELECT COUNT(*)::int AS count FROM background_jobs
         WHERE user_id = ${userId}
           AND job_type = ${jobType}
           AND status IN ('queued', 'processing')
       `
-    : await esgPrisma.$queryRaw<Array<{ count: number }>>`
+      : await esgPrisma.$queryRaw<Array<{ count: number }>>`
         SELECT COUNT(*)::int AS count FROM background_jobs
         WHERE user_id = ${userId} AND status IN ('queued', 'processing')
       `;
@@ -717,7 +739,7 @@ async function synchronizeReapedJobs(
           completed_at: new Date(),
         },
       });
-    } else if ((job.job_type === "esg_driver" || job.job_type === "esg_driver_excel_v3" || job.job_type === "esg_driver_excel_v4")) {
+    } else if (isEsgDriverQueueType(job.job_type)) {
       await esgPrisma.$executeRaw`
         UPDATE esg_driver_jobs
         SET status = ${status}, progress = 100, stage = ${status},
@@ -747,7 +769,7 @@ export async function reconcileEsgDriverDomainJobs(): Promise<void> {
         updated_at = now()
     FROM background_jobs AS queue
     WHERE queue.id = domain.id
-      AND queue.job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4')
+      AND queue.job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5')
       AND queue.status IN ('error', 'cancelled')
       AND domain.status IN ('queued', 'processing')
   `;

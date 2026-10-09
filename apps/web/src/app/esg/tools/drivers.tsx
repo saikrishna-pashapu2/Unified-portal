@@ -4,6 +4,7 @@ import {
   Fragment,
   FormEvent,
   type ReactNode,
+  type RefObject,
   useCallback,
   useEffect,
   useMemo,
@@ -27,6 +28,7 @@ import {
   Download,
   ExternalLink,
   FileText,
+  FileSpreadsheet,
   Globe2,
   History,
   Languages,
@@ -49,13 +51,6 @@ import type {
   DriverRelevance,
 } from "@/lib/esg-drivers/types";
 import {
-  ESG_DRIVER_COUNTRY_OPTIONS,
-  ESG_DRIVER_SECTOR_OPTIONS,
-  workbookDriverCount,
-  canonicalizeEsgDriverCountry,
-  canonicalizeEsgDriverSector,
-} from "@/lib/esg-drivers/coverage";
-import {
   canResumePartialDriverJob,
   driverPollRetryDelay,
   driverResumePath,
@@ -65,6 +60,10 @@ import {
   shouldPollDriverJob,
   trackedDriverJobForScreen,
 } from "./drivers-client";
+import {
+  DriverWorkbookManager,
+} from "./driver-workbooks/DriverWorkbookManager";
+import { useDriverWorkbookCatalog } from "./driver-workbooks/catalog-client";
 
 interface DriverStatus {
   country?: string;
@@ -140,6 +139,7 @@ const RELEVANCE_WEIGHTS: Record<
 export default function EsgDriversTool() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const workbookCatalog = useDriverWorkbookCatalog();
   const currentJobId = searchParams.get("jobId") || "";
   const requestedView = searchParams.get("view");
   const screen: DriverScreen = currentJobId
@@ -175,6 +175,8 @@ export default function EsgDriversTool() {
   const [historyError, setHistoryError] = useState("");
   const [historyLoadError, setHistoryLoadError] = useState("");
   const [error, setError] = useState("");
+  const [workbookManagerOpen, setWorkbookManagerOpen] = useState(false);
+  const manageWorkbookButtonRef = useRef<HTMLButtonElement>(null);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollAbortRef = useRef<AbortController | null>(null);
   const pollFailureCountRef = useRef(0);
@@ -206,10 +208,26 @@ export default function EsgDriversTool() {
   );
   const isRtl = isRtlLanguage(result?.language || language);
   const isRankedResult = result?.selection?.policyVersion === RANKED_SELECTION_POLICY;
+  const activeWorkbookOptions = workbookCatalog.catalog?.options || null;
+  const workbookOptionsReady = Boolean(
+    activeWorkbookOptions &&
+      activeWorkbookOptions.countries.length > 0 &&
+      activeWorkbookOptions.sectors.length > 0 &&
+      activeWorkbookOptions.version,
+  );
+  const selectedWorkbookCount = activeWorkbookOptions
+    ? activeWorkbookOptions.counts[sector]?.[country] || 0
+    : 0;
 
   useEffect(() => {
     runningJobRef.current = isRunning ? jobId : "";
   }, [isRunning, jobId]);
+
+  useEffect(() => {
+    if (screen !== "new" || !activeWorkbookOptions) return;
+    setCountry((value) => findCatalogOption(activeWorkbookOptions.countries, value) || activeWorkbookOptions.countries[0] || "");
+    setSector((value) => findCatalogOption(activeWorkbookOptions.sectors, value) || activeWorkbookOptions.sectors[0] || "");
+  }, [activeWorkbookOptions, screen]);
 
   const evidenceById = useMemo(() => {
     const map = new Map<string, EsgDriverSource>();
@@ -254,11 +272,11 @@ export default function EsgDriversTool() {
   }, [router]);
 
   const navigateNew = useCallback(() => {
-    setCountry((value) => canonicalizeEsgDriverCountry(value) || "UAE");
-    setSector((value) => canonicalizeEsgDriverSector(value) || "Banking");
+    setCountry((value) => findCatalogOption(activeWorkbookOptions?.countries, value) || activeWorkbookOptions?.countries[0] || value || "");
+    setSector((value) => findCatalogOption(activeWorkbookOptions?.sectors, value) || activeWorkbookOptions?.sectors[0] || value || "");
     setLanguage((value) => LANGUAGE_OPTIONS.includes(value) ? value : "English");
     router.push(makeDriversHref({ view: "new" }));
-  }, [router]);
+  }, [activeWorkbookOptions, router]);
 
   const navigateJob = useCallback(
     (id: string) => {
@@ -619,9 +637,16 @@ export default function EsgDriversTool() {
       !country.trim() ||
       !sector.trim() ||
       !language.trim() ||
+      !workbookOptionsReady ||
+      workbookCatalog.loading ||
+      Boolean(workbookCatalog.error) ||
+      selectedWorkbookCount <= 0 ||
       isRunning ||
       startingGeneration
     ) {
+      if (!workbookOptionsReady || workbookCatalog.loading || workbookCatalog.error || selectedWorkbookCount <= 0) {
+        setError("Load the active driver workbook options before starting a new job.");
+      }
       return;
     }
 
@@ -642,10 +667,17 @@ export default function EsgDriversTool() {
           country: country.trim(),
           sector: sector.trim(),
           language: language.trim(),
+          expectedWorkbookVersion: activeWorkbookOptions?.version || "",
         }),
       });
 
       const data = await response.json().catch(() => ({}));
+      if (response.status === 409) {
+        void workbookCatalog.refresh();
+        throw new Error(
+          "The active driver workbook changed while you were preparing this job. Refresh the workbook options and choose the new country and sector before trying again.",
+        );
+      }
       if (!response.ok) {
         throw new Error(data.error || "Failed to start generation.");
       }
@@ -933,6 +965,8 @@ export default function EsgDriversTool() {
         onBack={navigateHome}
         onExport={exportDriverPack}
         onNew={navigateNew}
+        onManageWorkbooks={() => setWorkbookManagerOpen(true)}
+        manageButtonRef={manageWorkbookButtonRef}
       />
 
       {screen === "home" && (
@@ -972,6 +1006,13 @@ export default function EsgDriversTool() {
           onLanguageChange={setLanguage}
           onSectorChange={setSector}
           onSubmit={startGeneration}
+          countryOptions={activeWorkbookOptions?.countries || []}
+          sectorOptions={activeWorkbookOptions?.sectors || []}
+          workbookCount={status?.candidateCount ?? selectedWorkbookCount}
+          workbookVersion={activeWorkbookOptions?.version || ""}
+          workbookLoading={workbookCatalog.loading}
+          workbookError={workbookCatalog.error}
+          onRetryWorkbook={() => void workbookCatalog.refresh()}
         />
       )}
 
@@ -986,6 +1027,7 @@ export default function EsgDriversTool() {
           country={country}
           sector={sector}
           language={language}
+          workbookCount={status?.candidateCount ?? selectedWorkbookCount}
           canceling={Boolean(deletingJobId && deletingJobId === jobId)}
           onCancel={() => void cancelActiveGeneration()}
           viewMode={viewMode}
@@ -1021,6 +1063,17 @@ export default function EsgDriversTool() {
           if (deleteCandidate) void deleteHistoryItem(deleteCandidate);
         }}
       />
+
+      <DriverWorkbookManager
+        open={workbookManagerOpen}
+        catalog={workbookCatalog.catalog}
+        loading={workbookCatalog.loading}
+        error={workbookCatalog.error}
+        onClose={() => setWorkbookManagerOpen(false)}
+        onRefresh={workbookCatalog.refresh}
+        onLoadMore={workbookCatalog.loadMore}
+        openerRef={manageWorkbookButtonRef}
+      />
     </div>
   );
 }
@@ -1032,6 +1085,8 @@ function DriversTopBar({
   onBack,
   onExport,
   onNew,
+  onManageWorkbooks,
+  manageButtonRef,
 }: {
   screen: DriverScreen;
   result: EsgDriverResult | null;
@@ -1039,6 +1094,8 @@ function DriversTopBar({
   onBack: () => void;
   onExport: () => void;
   onNew: () => void;
+  onManageWorkbooks: () => void;
+  manageButtonRef: RefObject<HTMLButtonElement>;
 }) {
   return (
     <header className="border-b border-[#27352d] bg-[#101812] text-white">
@@ -1085,6 +1142,15 @@ function DriversTopBar({
               Export Excel
             </button>
           )}
+          <button
+            type="button"
+            onClick={onManageWorkbooks}
+            ref={manageButtonRef}
+            className="inline-flex h-10 items-center gap-2 rounded-[5px] border border-white/15 px-3 text-sm font-bold text-white transition hover:bg-white/10"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            Manage driver workbook
+          </button>
           <button
             type="button"
             onClick={onNew}
@@ -1724,6 +1790,7 @@ function ProcessingView({
   country,
   sector,
   language,
+  workbookCount,
   status,
   error,
   starting,
@@ -1733,6 +1800,7 @@ function ProcessingView({
   country: string;
   sector: string;
   language: string;
+  workbookCount: number;
   status: DriverStatus | null;
   error: string;
   starting: boolean;
@@ -1746,7 +1814,7 @@ function ProcessingView({
   }, []);
 
   const activity = useMemo(() => status?.activity ?? [], [status?.activity]);
-  const model = useMemo(() => deriveProcessingModel(activity, status?.driverPlan || Array.from({ length: workbookDriverCount(country, sector) }, (_, i) => ({ id: String(i + 1), number: i + 1, title: "", section: "Workbook drivers" }))), [activity, status?.driverPlan, country, sector]);
+  const model = useMemo(() => deriveProcessingModel(activity, status?.driverPlan || Array.from({ length: workbookCount }, (_, i) => ({ id: String(i + 1), number: i + 1, title: "", section: "Workbook drivers" }))), [activity, status?.driverPlan, workbookCount]);
   const isRanked = status?.selectionPolicy === RANKED_SELECTION_POLICY;
   const candidateTotal = Math.max(
     0,
@@ -2136,6 +2204,13 @@ function NewDriverPage({
   country,
   sector,
   language,
+  countryOptions,
+  sectorOptions,
+  workbookCount,
+  workbookVersion,
+  workbookLoading,
+  workbookError,
+  onRetryWorkbook,
   status,
   error,
   isRunning,
@@ -2151,6 +2226,13 @@ function NewDriverPage({
   country: string;
   sector: string;
   language: string;
+  countryOptions: readonly string[];
+  sectorOptions: readonly string[];
+  workbookCount: number;
+  workbookVersion: string;
+  workbookLoading: boolean;
+  workbookError: string;
+  onRetryWorkbook: () => void;
   status: DriverStatus | null;
   error: string;
   isRunning: boolean;
@@ -2176,6 +2258,7 @@ function NewDriverPage({
         sector={sector}
         language={language}
         status={status}
+        workbookCount={workbookCount}
         error={error}
         starting={starting}
         canceling={canceling}
@@ -2203,11 +2286,11 @@ function NewDriverPage({
           <h2 className="mt-3 text-3xl font-semibold tracking-tight text-[#172019]">
             Enter scope details
           </h2>
-           <p className="mt-2 max-w-2xl text-sm leading-6 text-[#68756c]">
-             Assess the exact drivers in ESG_Drivers_September.xlsx using only links
-             in the selected sector worksheet, then publish the 15 most relevant
-             source-supported drivers.
-           </p>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-[#68756c]">
+            Assess the exact drivers in the active shared workbook using only links
+            in the selected sector worksheet, then publish the 15 most relevant
+            source-supported drivers.
+          </p>
 
           <form onSubmit={onSubmit} className="mt-8 grid gap-4">
             <SetupField
@@ -2216,8 +2299,8 @@ function NewDriverPage({
               value={country}
               onChange={onCountryChange}
               placeholder="UAE"
-              options={ESG_DRIVER_COUNTRY_OPTIONS}
-              disabled={isRunning}
+              options={countryOptions}
+              disabled={isRunning || workbookLoading || Boolean(workbookError)}
             />
             <SetupField
               icon={<BriefcaseBusiness className="h-4 w-4" />}
@@ -2225,8 +2308,8 @@ function NewDriverPage({
               value={sector}
               onChange={onSectorChange}
               placeholder="Banking"
-              options={ESG_DRIVER_SECTOR_OPTIONS}
-              disabled={isRunning}
+              options={sectorOptions}
+              disabled={isRunning || workbookLoading || Boolean(workbookError)}
             />
             <SetupField
               icon={<Languages className="h-4 w-4" />}
@@ -2235,19 +2318,26 @@ function NewDriverPage({
               onChange={onLanguageChange}
               placeholder="English"
               options={LANGUAGE_OPTIONS}
-              disabled={isRunning}
+              disabled={isRunning || workbookLoading || Boolean(workbookError)}
             />
 
-            <p className="text-xs leading-5 text-[#68756c]">
-              Up to 15 ranked drivers are published from {workbookDriverCount(country, sector)}{" "}
-              workbook candidates. Original names stay unchanged and updates are written in
-              your selected language. Missing evidence remains visible in the coverage audit.
-            </p>
+            {workbookLoading ? (
+              <p className="flex items-center gap-2 text-xs leading-5 text-[#68756c]"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading options from the active shared workbook…</p>
+            ) : workbookError ? (
+              <div className="flex items-start justify-between gap-3 rounded-[5px] border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-5 text-amber-900" role="alert">
+                <span>New generation is unavailable until the active workbook options load. Saved driver packs remain readable.</span>
+                <button type="button" onClick={onRetryWorkbook} className="flex-none font-bold underline underline-offset-2">Retry</button>
+              </div>
+            ) : (
+              <p className="text-xs leading-5 text-[#68756c]">
+                {workbookCount > 0 ? `Up to 15 ranked drivers are published from ${workbookCount} workbook candidates. Original names stay unchanged and updates are written in your selected language. Missing evidence remains visible in the coverage audit.` : "This country and sector combination is not available in the active workbook. Choose another active option."}
+              </p>
+            )}
 
             <button
               type="submit"
               disabled={
-                isRunning || !country.trim() || !sector.trim() || !language.trim()
+                isRunning || workbookLoading || Boolean(workbookError) || !workbookVersion || workbookCount <= 0 || !country.trim() || !sector.trim() || !language.trim()
               }
               className="mt-2 inline-flex h-12 w-fit items-center gap-2 rounded-[5px] bg-[#172019] px-5 text-sm font-bold text-white transition hover:bg-[#2a382e] disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -2282,6 +2372,7 @@ function DriverDetailPage({
   country,
   sector,
   language,
+  workbookCount,
   canceling,
   onCancel,
   viewMode,
@@ -2311,6 +2402,7 @@ function DriverDetailPage({
   country: string;
   sector: string;
   language: string;
+  workbookCount: number;
   canceling: boolean;
   onCancel: () => void;
   viewMode: DriverViewMode;
@@ -2384,6 +2476,7 @@ function DriverDetailPage({
           country={country}
           sector={sector}
           language={language}
+          workbookCount={workbookCount}
           status={status}
           error={error}
           starting={false}
@@ -3958,6 +4051,12 @@ function makeDriversHref(params?: { view?: "new"; jobId?: string }): string {
   if (params?.view) search.set("view", params.view);
   if (params?.jobId) search.set("jobId", params.jobId);
   return `/esg/tools?${search.toString()}`;
+}
+
+function findCatalogOption(options: readonly string[] | undefined, value: string): string | null {
+  if (!options || options.length === 0) return null;
+  const normalized = value.trim().toLowerCase().replace(/&/g, " and ").replace(/\s+/g, " ");
+  return options.find((option) => option.trim().toLowerCase().replace(/&/g, " and ").replace(/\s+/g, " ") === normalized) || null;
 }
 
 function formatDate(value: string | null): string {

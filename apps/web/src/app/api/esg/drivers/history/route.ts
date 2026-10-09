@@ -54,6 +54,13 @@ export async function GET(request: Request) {
       selectionPolicy: job.selectionPolicy,
       candidateCount: job.candidateCount,
       publishedDriverCount: job.publishedDriverCount,
+      catalogVersion: job.catalogVersion,
+      catalogVersionId: job.catalogVersionId,
+      workbook: job.workbook,
+      workbookSha256: job.workbookSha256,
+      workbookVersion: job.catalogVersion,
+      workbookId: job.catalogVersionId,
+      workbookFilename: job.workbook,
       needsAttention:
         job.status === "error" ||
         (job.status === "done" && Boolean(job.result?.completion === "partial" || job.result?.selection?.excluded.some((item) => item.reason === 'unavailable' || item.reason === 'unscored'))),

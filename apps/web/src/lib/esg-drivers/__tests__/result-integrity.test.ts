@@ -48,6 +48,13 @@ describe('workbook result quality gate', () => {
       expect(() => assertWorkbookResult(result, checkpoint, true)).not.toThrow();
     }
   });
+  it('rejects a result whose catalog row identity was tampered after checkpointing', () => {
+    const { checkpoint, result } = workbookResultFixture(1);
+    checkpoint.catalogVersionId = 'b9c8b7a6-1234-4abc-8def-1234567890ab';
+    result.catalogVersionId = 'f0e9d8c7-1234-4abc-8def-1234567890ab';
+    expect(workbookResultIssues(result, checkpoint)).toContain('The result does not match the pinned workbook catalog version.');
+    expect(() => assertWorkbookResult(result, checkpoint)).toThrow('pinned workbook catalog version');
+  });
   it('compares saved JSONB rows by values even when PostgreSQL changes key order', () => {
     const { checkpoint, result } = workbookResultFixture();
     checkpoint.slots[0].driver = Object.fromEntries(Object.entries(checkpoint.slots[0].driver).reverse()) as typeof checkpoint.slots[0]['driver'];

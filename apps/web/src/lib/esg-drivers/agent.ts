@@ -5,6 +5,7 @@ import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { env } from '@/lib/config/env';
 import { createWorkbookCheckpoint } from './workbook';
 import { assertWorkbookUrlAllowed } from './workbook-types';
+import { canonicalizeEsgDriverCountry, canonicalizeEsgDriverSector } from './coverage';
 import { generateDriversRequestSchema } from './schema';
 import { createExcelSourceSearch, type ExcelSearchResult } from './excel-source-search';
 import { assertWorkbookResult, ESG_EVIDENCE_CONTRACT, EsgDriverQualityGateError } from './result-integrity';
@@ -126,11 +127,17 @@ function rankedSelectionWarnings(selection: DriverSelection, publishedCount: num
 
 /** Deterministic workbook workflow; the model can write text but cannot change rows or access the network. */
 export async function generateEsgDriverResult(input: GenerateEsgDriversInput, options: GenerateEsgDriverOptions = {}): Promise<EsgDriverResult> {
-  const normalizedInput = generateDriversRequestSchema.parse(input);
+  const parsedInput = generateDriversRequestSchema.parse(input);
   assertDriverGenerationConfig();
   if (options.checkpoint && options.checkpoint.version !== 2) throw new Error('This legacy checkpoint predates the September workbook. Start a new workbook run.');
-  const checkpoint = structuredClone(options.checkpoint || createWorkbookCheckpoint(normalizedInput));
-  if (checkpoint.input.country !== normalizedInput.country || checkpoint.input.sector !== normalizedInput.sector || checkpoint.input.language !== normalizedInput.language || !checkpoint.definitions.length) throw new Error('Workbook checkpoint does not match the requested inputs.');
+  // A durable checkpoint is the complete source of truth for an in-flight or
+  // retry job. In particular, do not reselect rows through the worker's
+  // bundled workbook (or a newer catalog) when a checkpoint is present.
+  const checkpoint = structuredClone(options.checkpoint || createWorkbookCheckpoint(parsedInput));
+  const normalizedInput = checkpoint.input;
+  const checkpointCountry = canonicalizeEsgDriverCountry(parsedInput.country, [checkpoint.input.country]);
+  const checkpointSector = canonicalizeEsgDriverSector(parsedInput.sector, [checkpoint.input.sector]);
+  if (checkpointCountry !== checkpoint.input.country || checkpointSector !== checkpoint.input.sector || checkpoint.input.language !== parsedInput.language || !checkpoint.definitions.length) throw new Error('Workbook checkpoint does not match the requested inputs.');
   const report = async (stage: string, progress: number, detail?: import('./types').EsgDriverProgressDetail) => { await options.onProgress?.(stage, progress, detail); };
   const save = async () => { checkpoint.updatedAt = new Date().toISOString(); await options.onCheckpoint?.(structuredClone(checkpoint)); };
   const total = checkpoint.definitions.length;
@@ -387,6 +394,8 @@ export async function generateEsgDriverResult(input: GenerateEsgDriversInput, op
   ])));
   const result: EsgDriverResult = {
     ...normalizedInput, workflow: 'excel-sources', workbook: checkpoint.workbook, catalogVersion: checkpoint.catalogVersion,
+    ...(checkpoint.catalogVersionId ? { catalogVersionId: checkpoint.catalogVersionId } : {}),
+    ...(checkpoint.workbookSha256 ? { workbookSha256: checkpoint.workbookSha256 } : {}),
     generatedAt: new Date().toISOString(), drivers, ...(rankedRun ? { candidatePool, selection } : {}), evidence: Array.from(sources.values()), expectedDriverCount, verifiedDriverCount,
     completion,
     warnings,

@@ -329,6 +329,10 @@ export interface EsgDriverResult {
   sector: string;
   language: string;
   catalogVersion: string;
+  /** Immutable catalog row identity; absent on legacy reports. */
+  catalogVersionId?: string;
+  /** SHA-256 of the immutable workbook snapshot; absent on legacy reports. */
+  workbookSha256?: string;
   generatedAt: string;
   drivers: EsgDriver[];
   /** Ranked reports publish drivers above; the immutable full workbook assessment remains in original order here. */
@@ -400,10 +404,12 @@ export interface EsgWorkbookCheckpoint {
   /** Absent on existing full-workbook jobs; new jobs explicitly opt into the ranked report contract. */
   selectionPolicy?: 'relevance-top15-v1';
   workflow: 'excel-sources';
+  /** Catalog row identity for dynamic jobs; absent on legacy workbook checkpoints. */
+  catalogVersionId?: string;
   catalogVersion: string;
   workbook: string;
   workbookSha256: string;
-  input: GenerateEsgDriversInput;
+  input: Omit<GenerateEsgDriversInput, 'expectedWorkbookVersion'>;
   definitions: WorkbookDriver[];
   allowedSources: WorkbookSource[];
   slots: Array<{ driver: EsgDriver; sources: EsgDriverSource[] }>;
@@ -439,6 +445,9 @@ export interface EsgDriverJob {
   evidence: EsgDriverSource[];
   checkpoint: AnyEsgDriverCheckpoint | null;
   catalogVersion: string | null;
+  catalogVersionId?: string | null;
+  workbook?: string | null;
+  workbookSha256?: string | null;
   parentJobId: string | null;
   activity: EsgDriverJobActivity[];
   createdAt: string | null;
@@ -450,4 +459,5 @@ export interface GenerateEsgDriversInput {
   country: string;
   sector: string;
   language: string;
+  expectedWorkbookVersion?: string;
 }

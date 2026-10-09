@@ -3,6 +3,8 @@ import { ensureUserId } from "@/lib/session-user";
 import {
   assertDriverGenerationConfig,
   createEsgDriverJob,
+  EsgDriverCatalogVersionConflictError,
+  EsgDriverScopeValidationError,
   generateDriversRequestSchema,
 } from "@/lib/esg-drivers";
 import { enforceApiUsage } from "@/lib/api-usage";
@@ -54,6 +56,19 @@ export async function POST(request: Request) {
     console.error("[esg-drivers] failed to create generation job:", error);
     if (error instanceof JobConcurrencyLimitError) {
       return NextResponse.json({ error: error.message }, { status: 429 });
+    }
+    if (error instanceof EsgDriverCatalogVersionConflictError) {
+      return NextResponse.json(
+        {
+          error: error.message,
+          code: "workbook_version_conflict",
+          activeWorkbookVersion: error.activeVersion,
+        },
+        { status: 409 },
+      );
+    }
+    if (error instanceof EsgDriverScopeValidationError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
     }
     const message = error?.message || "Failed to start ESG driver generation.";
     const configurationError = String(message).startsWith(

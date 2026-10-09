@@ -108,6 +108,28 @@ describe("ESG driver checkpoint runner", () => {
       result: { catalogVersion: "2026-07-14" },
     });
   });
+
+  it("fails a v5 queue row when its immutable workbook checkpoint is missing", async () => {
+    mocks.getEsgDriverJob.mockResolvedValue({
+      status: "queued",
+      progress: 0,
+      result: null,
+      checkpoint: null,
+    });
+
+    const { runEsgDriverGenerationJob } = await import("../runner");
+    await expect(runEsgDriverGenerationJob({
+      id: "4c4ebf2b-a9e5-4f40-b633-740ee43ea7ec",
+      userId: 7,
+      jobType: "esg_driver_excel_v5",
+      payload: { country: "UAE", sector: "Banking", language: "English" },
+      leaseOwner: "lease-token-a",
+      attempts: 1,
+      maxAttempts: 2,
+      progress: 0,
+    } as any)).rejects.toThrow("v5 jobs require an immutable workbook checkpoint");
+    expect(mocks.generateEsgDriverResult).not.toHaveBeenCalled();
+  });
 });
 
 function checkpoint(updatedAt: string) {

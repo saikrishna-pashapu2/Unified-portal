@@ -128,6 +128,8 @@ function buildSummaryRows(result: EsgDriverResult): Array<Array<string | number>
     ["Sector", result.sector],
     ["Language", result.language],
     ["Catalog Version", result.catalogVersion || "legacy-unknown"],
+    ...(result.catalogVersionId ? [["Catalog Version ID", result.catalogVersionId] as Array<string | number>] : []),
+    ...(result.workbookSha256 ? [["Workbook SHA-256", result.workbookSha256] as Array<string | number>] : []),
     ["Generated At", result.generatedAt],
     ["Completion", result.completion === "partial" ? "Partial" : "Complete"],
     ["Driver Count", result.drivers.length],
