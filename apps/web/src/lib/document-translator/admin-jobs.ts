@@ -25,6 +25,15 @@ export type AdminTranslatorJob = {
   message: string | null;
   error: string | null;
   errorTruncated: boolean;
+  flaggedPageCount: number;
+  flaggedPages: AdminTranslatorFlaggedPage[];
+};
+
+export type AdminTranslatorFlaggedPage = {
+  pageNumber: number;
+  failedStage: "extraction" | "translation";
+  error: string | null;
+  errorTruncated?: boolean;
 };
 
 export type AdminTranslatorJobPeriod = "7" | "30" | "90" | "365" | "all";
@@ -144,6 +153,14 @@ function redactCredentials(value: string): string {
       `$1$2${marker}`,
     )
     .replace(
+      /\b([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*_(?:SECRET|TOKEN|PASSWORD|API_KEY|ACCESS_KEY(?:_ID)?))\b(["']?)(\s*[:=]\s*)(["'])(?:\\[\s\S]|(?!\4)[^\\])*\4/gi,
+      `$1$2$3$4${marker}$4`,
+    )
+    .replace(
+      /\b([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*_(?:SECRET|TOKEN|PASSWORD|API_KEY|ACCESS_KEY(?:_ID)?))\b(["']?)(\s*[:=]\s*)(["']?)[^\s"'&,;)]*/gi,
+      `$1$2$3$4${marker}`,
+    )
+    .replace(
       /\b((?:OPENAI|ANTHROPIC|GOOGLE|GEMINI|API)[_-]?(?:API[_-]?)?KEY|ACCESS[_-]?TOKEN|REFRESH[_-]?TOKEN|TOKEN|PASSWORD|PASSWD|SECRET)\b(\s*[:=]\s*)(["']?)[^\s"'&,;)]*/gi,
       `$1$2$3${marker}`,
     )
@@ -195,6 +212,13 @@ function nullableNumber(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function nonNegativeInteger(value: unknown, fallback: number): number {
+  const parsed = nullableNumber(value);
+  return parsed !== null && Number.isSafeInteger(parsed) && parsed >= 0
+    ? parsed
+    : fallback;
+}
+
 function nullableString(value: unknown): string | null {
   if (typeof value !== "string" || value.length === 0) return null;
   return value;
@@ -208,6 +232,42 @@ function isoString(value: unknown): string {
 function nullableIsoString(value: unknown): string | null {
   if (value instanceof Date) return value.toISOString();
   return nullableString(value);
+}
+
+function normalizeAdminTranslatorFlaggedPage(
+  value: unknown,
+): AdminTranslatorFlaggedPage | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+
+  const row = value as Record<string, unknown>;
+  const rawPageNumber = row.pageNumber;
+  const pageNumber =
+    typeof rawPageNumber === "number"
+      ? rawPageNumber
+      : typeof rawPageNumber === "string" && rawPageNumber.trim().length > 0
+        ? Number(rawPageNumber)
+        : Number.NaN;
+  if (!Number.isSafeInteger(pageNumber) || pageNumber < 1) return null;
+
+  const failedStage =
+    row.failedStage === "extraction"
+      ? "extraction"
+      : row.failedStage === "translation"
+        ? "translation"
+        : null;
+  if (!failedStage) return null;
+
+  const storedError = sanitizeAdminTranslatorError(row.error);
+  const errorTruncated =
+    storedError.errorTruncated || row.errorTruncated === true;
+  return {
+    pageNumber,
+    failedStage,
+    error: storedError.error,
+    ...(errorTruncated ? { errorTruncated: true } : {}),
+  };
 }
 
 /**
@@ -229,6 +289,18 @@ export function normalizeAdminTranslatorJob(
   }
 
   const storedError = sanitizeAdminTranslatorError(row.error);
+  const flaggedPages = kind === "pdf" && Array.isArray(row.flaggedPages)
+    ? row.flaggedPages
+        .map(normalizeAdminTranslatorFlaggedPage)
+        .filter((page): page is AdminTranslatorFlaggedPage => page !== null)
+    : [];
+  const flaggedPageCount =
+    kind === "pdf"
+      ? Math.max(
+          flaggedPages.length,
+          nonNegativeInteger(row.flaggedPageCount, flaggedPages.length),
+        )
+      : 0;
   const targetLanguage =
     typeof row.targetLanguage === "string" && row.targetLanguage.length > 0
       ? row.targetLanguage
@@ -258,5 +330,7 @@ export function normalizeAdminTranslatorJob(
     error: storedError.error,
     errorTruncated:
       storedError.errorTruncated || row.errorTruncated === true,
+    flaggedPageCount,
+    flaggedPages,
   };
 }

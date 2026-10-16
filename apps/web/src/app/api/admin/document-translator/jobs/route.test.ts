@@ -11,6 +11,7 @@ import { GET } from "./route";
 import {
   normalizeAdminTranslatorJob,
   parseAdminTranslatorJobsQuery,
+  sanitizeAdminTranslatorError,
 } from "@/lib/document-translator/admin-jobs";
 
 const url = "http://localhost/api/admin/document-translator/jobs";
@@ -209,6 +210,8 @@ describe("admin document translator jobs", () => {
       requests: 3,
       completedAt: "2026-09-17T06:10:00.000Z",
     });
+    expect(body.items[1].flaggedPages).toEqual([]);
+    expect(body.items[1].flaggedPageCount).toBe(0);
     expect(JSON.stringify(body)).not.toContain("password@example.test");
     expect(JSON.stringify(body)).not.toContain("dbuser:dbpass");
     expect(JSON.stringify(body)).not.toContain("db-token");
@@ -222,6 +225,204 @@ describe("admin document translator jobs", () => {
     expect(sql).toContain("contextInputTokens");
     expect(sql).toContain("page_usage.page_input_tokens");
     expect(sql).not.toMatch(/\bj\.error\b/);
+  });
+
+  it("returns SQL-authoritative flagged PDF pages for completed drafts and clears them after rerun", async () => {
+    const rawPageError =
+      "Page failure: AWS_SECRET_ACCESS_KEY=fake-aws-secret-value " +
+      '"NEXTAUTH_SECRET": "fake-nextauth-secret-value", ' +
+      "CRON_SECRET: fake-cron-secret-value " +
+      'AWS_ACCESS_KEY_ID: "fake-aws-access-id", ' +
+      "postgresql://dbuser:dbpass@db.example.test/esg?token=page-token " +
+      "x".repeat(12_001);
+    const basePdf = {
+      kind: "pdf",
+      id: "7219f0fa-69e1-4490-acf2-c5af8ee79dae",
+      filename: "partial-report.pdf",
+      targetLanguage: "Russian",
+      status: "completed",
+      stage: "completed",
+      progress: 100,
+      totalPages: 4,
+      changedCells: null,
+      createdAt: "2026-09-17T07:00:00.000Z",
+      completedAt: "2026-09-17T07:10:00.000Z",
+      userName: "A User",
+      userEmail: "a@example.test",
+      inputTokens: 900,
+      outputTokens: 250,
+      requests: 7,
+      message: "Translated 2 of 4 pages.",
+      error: null,
+      errorTruncated: false,
+      flaggedPageCount: 63,
+    };
+
+    mocks.query
+      .mockResolvedValueOnce([
+        {
+          total: 1,
+          items: [
+            {
+              ...basePdf,
+              flaggedPageCount: 63,
+              flaggedPages: [
+                {
+                  pageNumber: 2,
+                  failedStage: "translation",
+                  error: null,
+                },
+                {
+                  pageNumber: 4,
+                  failedStage: "extraction",
+                  error: rawPageError,
+                },
+                null,
+                { pageNumber: 0, failedStage: "translation", error: "bad" },
+                { pageNumber: "not-a-page", failedStage: "translation", error: "bad" },
+                { pageNumber: 3, failedStage: "unknown", error: "bad" },
+              ],
+            },
+          ],
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          total: 1,
+          items: [{ ...basePdf, flaggedPageCount: 0, flaggedPages: [] }],
+        },
+      ]);
+
+    const partialResponse = await GET(new Request(url));
+    const partialBody = await partialResponse.json();
+    const sql = mocks.query.mock.calls[0][0] as string;
+
+    expect(partialResponse.status).toBe(200);
+    expect(partialBody.items[0]).toMatchObject({
+      status: "completed",
+      error: null,
+      flaggedPageCount: 63,
+      flaggedPages: [
+        {
+          pageNumber: 2,
+          failedStage: "translation",
+          error: null,
+        },
+        {
+          pageNumber: 4,
+          failedStage: "extraction",
+          errorTruncated: true,
+        },
+      ],
+    });
+    expect(partialBody.items[0].flaggedPages[1].error).toHaveLength(12_000);
+    expect(partialBody.items[0].flaggedPages[1].error).toContain(
+      "postgresql://[REDACTED]@db.example.test/esg?token=[REDACTED]",
+    );
+    expect(partialBody.items[0].flaggedPages[1].error).toContain(
+      "AWS_SECRET_ACCESS_KEY=[REDACTED]",
+    );
+    expect(partialBody.items[0].flaggedPages[1].error).toContain(
+      '"NEXTAUTH_SECRET": "[REDACTED]",',
+    );
+    expect(partialBody.items[0].flaggedPages[1].error).toContain(
+      "CRON_SECRET: [REDACTED]",
+    );
+    expect(partialBody.items[0].flaggedPages[1].error).toContain(
+      'AWS_ACCESS_KEY_ID: "[REDACTED]",',
+    );
+    expect(JSON.stringify(partialBody)).not.toContain("dbuser:dbpass");
+    expect(JSON.stringify(partialBody)).not.toContain("page-token");
+    expect(JSON.stringify(partialBody)).not.toContain("fake-aws-secret-value");
+    expect(JSON.stringify(partialBody)).not.toContain("fake-nextauth-secret-value");
+    expect(JSON.stringify(partialBody)).not.toContain("fake-cron-secret-value");
+    expect(JSON.stringify(partialBody)).not.toContain("fake-aws-access-id");
+
+    expect(sql).toContain("jsonb_agg(");
+    expect(sql).toContain("'pageNumber', flagged_page.page_number");
+    expect(sql).toContain("'failedStage'");
+    expect(sql).toContain("left(flagged_page.error_message, 12001)");
+    expect(sql).toContain("'errorTruncated'");
+    expect(sql).toContain("char_length(flagged_page.error_message) > 12000");
+    expect(sql).toContain("'flaggedPageCount'");
+    expect(sql).toContain("COUNT(*)::integer AS flagged_page_count");
+    expect(sql).toContain("LIMIT 50");
+    expect(sql).toContain("ORDER BY flagged_page.page_number");
+    expect(sql).toContain(
+      "attention_page.status IN ('extraction_error', 'translation_error')",
+    );
+    expect(sql).toContain(
+      "WHEN 'attention' THEN status IN ('error', 'cancelled') OR has_flagged_pages",
+    );
+    const pageLimitIndex = sql.indexOf("LIMIT $5::integer OFFSET $6::integer");
+    const detailedFlaggedPageIndex = sql.indexOf("LIMIT 50");
+    expect(pageLimitIndex).toBeGreaterThanOrEqual(0);
+    expect(detailedFlaggedPageIndex).toBeGreaterThan(pageLimitIndex);
+    expect(sql.slice(0, pageLimitIndex)).not.toContain("flagged_page.page_number");
+    expect(sql.slice(0, pageLimitIndex)).not.toContain("flagged_page.error_message");
+    expect(sql).not.toContain("pdf_metrics->>'flaggedPages'");
+    expect(sql).not.toContain("pdf_metrics #> '{flaggedPages}'");
+
+    const clearedResponse = await GET(new Request(url));
+    const clearedBody = await clearedResponse.json();
+    expect(clearedResponse.status).toBe(200);
+    expect(clearedBody.items[0]).toMatchObject({
+      status: "completed",
+      error: null,
+      flaggedPageCount: 0,
+      flaggedPages: [],
+    });
+  });
+
+  it("normalizes bounded flagged-page details with a safe total-count fallback", () => {
+    const pages = Array.from({ length: 51 }, (_, index) => ({
+      pageNumber: index + 1,
+      failedStage: "translation",
+      error: null,
+    }));
+    const basePdf = {
+      kind: "pdf",
+      id: "7219f0fa-69e1-4490-acf2-c5af8ee79dae",
+      filename: "many-errors.pdf",
+      targetLanguage: "Russian",
+      status: "completed",
+      stage: "completed",
+      progress: 100,
+      totalPages: 100,
+      changedCells: null,
+      createdAt: "2026-09-17T07:00:00.000Z",
+      completedAt: "2026-09-17T07:10:00.000Z",
+      userName: "A User",
+      userEmail: "a@example.test",
+      inputTokens: 0,
+      outputTokens: 0,
+      requests: 0,
+      message: null,
+      error: null,
+      errorTruncated: false,
+      flaggedPages: pages,
+    };
+
+    expect(
+      normalizeAdminTranslatorJob({
+        ...basePdf,
+        flaggedPageCount: "75",
+      })?.flaggedPageCount,
+    ).toBe(75);
+    expect(
+      normalizeAdminTranslatorJob({
+        ...basePdf,
+        flaggedPages: pages.slice(0, 3),
+        flaggedPageCount: "not-a-count",
+      })?.flaggedPageCount,
+    ).toBe(3);
+    expect(
+      normalizeAdminTranslatorJob({
+        ...basePdf,
+        kind: "xlsx",
+        flaggedPageCount: 99,
+      }),
+    ).toMatchObject({ flaggedPageCount: 0, flaggedPages: [] });
   });
 
   it("bounds exposed errors and marks old JSON metrics nullable", () => {
@@ -262,6 +463,75 @@ describe("admin document translator jobs", () => {
     expect(JSON.stringify(normalized)).not.toContain("MUST_NOT_LEAK");
   });
 
+  it("redacts complete quoted credential values while retaining unquoted fallback", () => {
+    const raw = String.raw`Error {"AWS_SECRET_ACCESS_KEY": "alpha beta gamma", "NEXTAUTH_SECRET": "delta&epsilon", "CRON_SECRET": "semi;value,with \"quotes\"", 'API_SECRET': 'comma,value; with \'quotes\'', UNQUOTED_SECRET=plain-value, trailing}`;
+    const sanitized = sanitizeAdminTranslatorError(raw);
+
+    expect(sanitized).toEqual({
+      error: `Error {"AWS_SECRET_ACCESS_KEY": "[REDACTED]", "NEXTAUTH_SECRET": "[REDACTED]", "CRON_SECRET": "[REDACTED]", 'API_SECRET': '[REDACTED]', UNQUOTED_SECRET=[REDACTED], trailing}`,
+      errorTruncated: false,
+    });
+    expect(sanitized.error).not.toContain("alpha beta gamma");
+    expect(sanitized.error).not.toContain("delta&epsilon");
+    expect(sanitized.error).not.toContain("semi;value,with");
+    expect(sanitized.error).not.toContain("comma,value;");
+    expect(sanitized.error).not.toContain("plain-value");
+  });
+
+  it("retains a SQL truncation flag when redaction collapses a long secret value", async () => {
+    const fakeSecretValue = "fake-collapsed-secret-value";
+    const longSecretAssignment = `AWS_SECRET_ACCESS_KEY=${fakeSecretValue.repeat(700)}`;
+    mocks.query.mockResolvedValueOnce([
+      {
+        total: 1,
+        items: [
+          {
+            kind: "pdf",
+            id: "7219f0fa-69e1-4490-acf2-c5af8ee79dae",
+            filename: "collapsed-error.pdf",
+            targetLanguage: "Russian",
+            status: "completed",
+            stage: "completed",
+            progress: 100,
+            totalPages: 1,
+            changedCells: null,
+            createdAt: "2026-09-17T07:00:00.000Z",
+            completedAt: "2026-09-17T07:10:00.000Z",
+            userName: "A User",
+            userEmail: "a@example.test",
+            inputTokens: 0,
+            outputTokens: 0,
+            requests: 0,
+            message: null,
+            error: null,
+            errorTruncated: false,
+            flaggedPages: [
+              {
+                pageNumber: 1,
+                failedStage: "extraction",
+                error: longSecretAssignment.slice(0, 12_001),
+                errorTruncated: true,
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+
+    const response = await GET(new Request(url));
+    const body = await response.json();
+
+    expect(body.items[0].flaggedPages).toEqual([
+      {
+        pageNumber: 1,
+        failedStage: "extraction",
+        error: "AWS_SECRET_ACCESS_KEY=[REDACTED]",
+        errorTruncated: true,
+      },
+    ]);
+    expect(JSON.stringify(body)).not.toContain(fakeSecretValue);
+  });
+
   it("uses a single parameterized count/page statement and returns totals for empty later pages", async () => {
     mocks.query.mockResolvedValueOnce([{ total: BigInt(37), items: [] }]);
 
@@ -281,6 +551,7 @@ describe("admin document translator jobs", () => {
     expect(mocks.query).toHaveBeenCalledTimes(1);
     expect(sql).toContain("totals AS (");
     expect(sql).toContain("page_jobs AS (");
+    expect(sql).toContain("OR has_flagged_pages");
     expect([kind, status, q, size, skip]).toEqual([
       "pdf",
       "attention",

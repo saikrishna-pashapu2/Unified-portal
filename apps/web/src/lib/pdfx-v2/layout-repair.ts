@@ -4,7 +4,8 @@ import { isTextualElement } from './serialize';
 import { normalizeTableIndexes } from './table-indexes';
 import { enforceEnglishProtection } from './language-protection';
 import { detectCellLanguage, isIdentifierText } from '@/lib/xlsx-translator/language';
-import { containsBox, matchNativeBox, nativeTableRegions, rebuildNativeTable, unionBoxes, type Box, type NativeGeometry } from './native-geometry';
+import { repairNativeClosedTable } from './native-closed-table-repair';
+import { containsBox, matchNativeBox, nativeTableRegions, rebuildNativeTable, repairNativeHeaderRowSpans, repairNativeHeaderGrid, unionBoxes, type Box, type NativeGeometry } from './native-geometry';
 
 export const EXTRACTION_RECOVERY_VERSION = 'v5-local-repair-1';
 export type ExtractionRecovery = {
@@ -327,9 +328,24 @@ export function repairExtractedLayout(
       if(!native) return normalizeSafeTableEnvelope(repairGrid(element));
       const matches=regions.filter(b=>intersection(b,element.bbox)/Math.max(1,area(b)+area(element.bbox)-intersection(b,element.bbox))>0.55);
       const rebuilt=rebuildNativeTable({...element,bbox:matches.length===1?matches[0]:element.bbox},native);
-      return normalizeSafeTableEnvelope(repairGrid(rebuilt ?? element));
+      // Preserve the production grid repair, but let the closed native-table
+      // repair run before it can be masked by OCR topology salvage.
+      const repaired = rebuilt
+        ?? repairNativeClosedTable(element, native, indexed.elements)
+        ?? repairNativeHeaderRowSpans(element, native)
+        ?? repairNativeHeaderGrid(element, native);
+      return normalizeSafeTableEnvelope(repairGrid(repaired ?? element));
     }
     if(!native) return element;
+    // OCR sometimes labels a printed document ID as `other`. Do not erase its
+    // text to satisfy the visual-only contract: promote only a uniquely and
+    // exactly corroborated native text region, never artwork or a scan.
+    if(element.kind==='other' && element.text.trim() && !element.rows.length &&
+       element.rowCount===0 && element.columnCount===0) {
+      const bbox=matchNativeBox(element.text,element.bbox,native);
+      if(bbox) return {...element,kind:'paragraph' as const,bbox,
+        translate:element.translate && !isIdentifierText(element.text)};
+    }
     if(!isTextualElement(element) || !element.text.trim()) return element;
     const bbox=matchNativeBox(element.text,element.bbox,native);
     return bbox ? {...element,bbox} : element;
