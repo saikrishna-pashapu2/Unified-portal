@@ -91,28 +91,52 @@ function getErrorMessage(value: unknown, fallback: string) {
   return fallback;
 }
 
+function flaggedPageCount(job: AdminTranslatorJob): number {
+  return job.kind === 'pdf' ? Math.max(job.flaggedPageCount ?? 0, job.flaggedPages?.length ?? 0) : 0;
+}
+
 function JobErrorDetails({ job }: { job: AdminTranslatorJob }) {
-  if (job.status !== 'error' && job.status !== 'failed') return null;
+  const jobFailed = job.status === 'error' || job.status === 'failed';
+  const flaggedPages = job.kind === 'pdf' ? job.flaggedPages ?? [] : [];
+  const flaggedCount = flaggedPageCount(job);
+  if (!jobFailed && !flaggedCount) return null;
 
   return (
     <details className="mt-2 max-w-lg rounded-lg border border-rose-200 bg-rose-50/70 text-xs text-rose-950">
       <summary className="cursor-pointer px-3 py-2 font-semibold text-rose-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-rose-600">
-        View stored error detail
+        {flaggedCount ? 'View flagged page errors' : 'View stored error detail'}
       </summary>
       <div className="space-y-2 border-t border-rose-200 px-3 py-2.5">
-        {job.error ? (
+        {jobFailed && (job.error ? (
           <p className="whitespace-pre-wrap leading-5" style={{ overflowWrap: 'anywhere' }}>{job.error}</p>
         ) : (
           <p className="font-medium">No stored error detail is available for this job.</p>
-        )}
-        {job.errorTruncated && (
+        ))}
+        {jobFailed && job.errorTruncated && (
           <p className="font-medium text-rose-700">The stored error was truncated.</p>
         )}
-        {!job.error && job.message && (
+        {jobFailed && !job.error && job.message && (
           <p className="border-t border-rose-200 pt-2 leading-5">
             <span className="font-semibold">Latest status message (not the stored error): </span>
             <span style={{ overflowWrap: 'anywhere' }}>{job.message}</span>
           </p>
+        )}
+        {flaggedCount > 0 && (
+          <div className="space-y-3">
+            <p className="font-medium">These pages remain untranslated in the draft download.</p>
+            {flaggedCount > flaggedPages.length && (
+              <p className="font-medium">Showing the first {flaggedPages.length} of {flaggedCount} flagged pages in this list.</p>
+            )}
+            {flaggedPages.map((page) => (
+              <div key={page.pageNumber} className="border-t border-rose-200 pt-2">
+                <p className="font-semibold">Page {page.pageNumber} · {page.failedStage === 'extraction' ? 'OCR failed' : 'Translation failed'}</p>
+                <p className="mt-1 whitespace-pre-wrap leading-5" style={{ overflowWrap: 'anywhere' }}>
+                  {page.error || 'No stored error detail is available for this page.'}
+                </p>
+                {page.errorTruncated && <p className="mt-1 font-medium text-rose-700">The stored page error was truncated.</p>}
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </details>
@@ -357,6 +381,8 @@ export default function AdminTranslatorJobs({
                 <tbody>
                   {currentResult.items.map((job) => {
                     const progress = Math.max(0, Math.min(100, Math.round(job.progress || 0)));
+                    const flaggedCount = flaggedPageCount(job);
+                    const isPartialDraft = job.status === 'completed' && flaggedCount > 0;
                     const JobIcon = job.kind === 'pdf' ? FileText : FileSpreadsheet;
                     const workUnits = job.kind === 'pdf'
                       ? job.totalPages === null ? '—' : `${formatNumber(job.totalPages)} pages`
@@ -382,15 +408,15 @@ export default function AdminTranslatorJobs({
                           <p className="mt-1 text-xs text-slate-500" style={{ overflowWrap: 'anywhere' }}>{job.userEmail || 'No email'}</p>
                         </td>
                         <td className="px-4 py-4">
-                          <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset ${STATUS_STYLES[job.status] ?? STATUS_STYLES.cancelled}`}>
-                            {statusLabel(job.status)}
+                          <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset ${isPartialDraft ? 'bg-amber-50 text-amber-800 ring-amber-600/20' : STATUS_STYLES[job.status] ?? STATUS_STYLES.cancelled}`}>
+                            {isPartialDraft ? `Draft · ${flaggedCount} flagged` : statusLabel(job.status)}
                           </span>
-                          <p className="mt-1.5 max-w-36 text-xs capitalize text-slate-500" style={{ overflowWrap: 'anywhere' }}>{job.stage ? humanize(job.stage) : '—'}</p>
+                          <p className="mt-1.5 max-w-36 text-xs text-slate-500" style={{ overflowWrap: 'anywhere' }}>{isPartialDraft ? 'Assembled with page errors' : job.stage ? humanize(job.stage) : '—'}</p>
                         </td>
                         <td className="min-w-32 px-4 py-4">
                           <div className="flex items-center justify-between gap-2 text-xs font-semibold text-slate-700">
-                            <span>{formatNumber(progress)}%</span>
-                            <span className="max-w-24 truncate font-normal text-slate-500" title={job.stage ? humanize(job.stage) : ''}>{job.stage ? humanize(job.stage) : '—'}</span>
+                            <span>{formatNumber(progress)}%{isPartialDraft ? ' processed' : ''}</span>
+                            <span className="max-w-24 truncate font-normal text-slate-500" title={isPartialDraft ? 'Draft ready' : job.stage ? humanize(job.stage) : ''}>{isPartialDraft ? 'Draft ready' : job.stage ? humanize(job.stage) : '—'}</span>
                           </div>
                           <div
                             role="progressbar"
@@ -398,10 +424,10 @@ export default function AdminTranslatorJobs({
                             aria-valuemin={0}
                             aria-valuemax={100}
                             aria-valuenow={progress}
-                            aria-valuetext={`${formatNumber(progress)} percent${job.stage ? `, ${humanize(job.stage)}` : ''}`}
+                            aria-valuetext={`${formatNumber(progress)} percent${isPartialDraft ? ` processed, ${flaggedCount} pages untranslated` : job.stage ? `, ${humanize(job.stage)}` : ''}`}
                             className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"
                           >
-                            <div className={`h-full rounded-full ${job.status === 'error' || job.status === 'failed' ? 'bg-rose-500' : job.kind === 'pdf' ? 'bg-cyan-600' : 'bg-emerald-600'}`} style={{ width: `${progress}%` }} />
+                            <div className={`h-full rounded-full ${job.status === 'error' || job.status === 'failed' ? 'bg-rose-500' : isPartialDraft ? 'bg-amber-500' : job.kind === 'pdf' ? 'bg-cyan-600' : 'bg-emerald-600'}`} style={{ width: `${progress}%` }} />
                           </div>
                         </td>
                         <td className="whitespace-nowrap px-4 py-4 text-right font-medium text-slate-800">{workUnits}</td>

@@ -39,6 +39,12 @@ export function buildAdminTranslatorJobsQuery(
           u.email AS user_email,
           j.metrics AS pdf_metrics,
           NULL::jsonb AS xlsx_result,
+          EXISTS (
+            SELECT 1
+            FROM pdf_translation_v2_pages AS attention_page
+            WHERE attention_page.job_id = j.id
+              AND attention_page.status IN ('extraction_error', 'translation_error')
+          ) AS has_flagged_pages,
           CASE
             WHEN j.status = 'error'
               AND lower(COALESCE(NULLIF(BTRIM(pdf_queue.last_error), ''), NULLIF(BTRIM(j.message), ''), ''))
@@ -95,6 +101,7 @@ export function buildAdminTranslatorJobsQuery(
           u.email AS user_email,
           NULL::jsonb AS pdf_metrics,
           x.result_json AS xlsx_result,
+          FALSE AS has_flagged_pages,
           CASE WHEN x.status = 'error' THEN NULLIF(BTRIM(x.last_error), '') ELSE NULL END AS error,
           NULLIF(x.progress_json->>'message', '') AS message
         FROM background_jobs AS x
@@ -109,7 +116,7 @@ export function buildAdminTranslatorJobsQuery(
           AND CASE $3::text
             WHEN 'active' THEN status IN ('queued', 'processing', 'cancelling')
             WHEN 'completed' THEN status = 'completed'
-            WHEN 'attention' THEN status IN ('error', 'cancelled')
+            WHEN 'attention' THEN status IN ('error', 'cancelled') OR has_flagged_pages
             WHEN 'draft' THEN status = 'draft'
             ELSE TRUE
           END
@@ -200,7 +207,15 @@ export function buildAdminTranslatorJobsQuery(
               END,
               'message', page_jobs.message,
               'error', page_jobs.error,
-              'errorTruncated', COALESCE(char_length(page_jobs.error) > 12000, FALSE)
+              'errorTruncated', COALESCE(char_length(page_jobs.error) > 12000, FALSE),
+              'flaggedPageCount', CASE
+                WHEN page_jobs.kind = 'pdf' THEN COALESCE(page_flags.flagged_page_count, 0)
+                ELSE 0
+              END,
+              'flaggedPages', CASE
+                WHEN page_jobs.kind = 'pdf' THEN COALESCE(page_flags.flagged_pages, '[]'::jsonb)
+                ELSE '[]'::jsonb
+              END
             )
             ORDER BY page_jobs.created_at DESC, page_jobs.kind DESC, page_jobs.id DESC
           ) FILTER (WHERE page_jobs.id IS NOT NULL),
@@ -208,6 +223,45 @@ export function buildAdminTranslatorJobsQuery(
         ) AS items
       FROM totals
       LEFT JOIN page_jobs ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT
+          COUNT(*)::integer AS flagged_page_count,
+          COALESCE(
+            (
+              SELECT jsonb_agg(
+                jsonb_build_object(
+                  'pageNumber', flagged_page.page_number,
+                  'failedStage', CASE
+                    WHEN flagged_page.status = 'extraction_error' THEN 'extraction'
+                    ELSE 'translation'
+                  END,
+                  'error', left(flagged_page.error_message, 12001),
+                  'errorTruncated', COALESCE(
+                    char_length(flagged_page.error_message) > 12000,
+                    FALSE
+                  )
+                )
+                ORDER BY flagged_page.page_number
+              )
+              FROM (
+                SELECT
+                  detail_page.page_number,
+                  detail_page.status,
+                  detail_page.error_message
+                FROM pdf_translation_v2_pages AS detail_page
+                WHERE detail_page.job_id = page_jobs.id
+                  AND detail_page.status IN ('extraction_error', 'translation_error')
+                ORDER BY detail_page.page_number
+                LIMIT 50
+              ) AS flagged_page
+            ),
+            '[]'::jsonb
+          ) AS flagged_pages
+        FROM pdf_translation_v2_pages AS count_page
+        WHERE page_jobs.kind = 'pdf'
+          AND count_page.job_id = page_jobs.id
+          AND count_page.status IN ('extraction_error', 'translation_error')
+      ) AS page_flags ON TRUE
       LEFT JOIN LATERAL (
         SELECT
           COALESCE(SUM(p.input_tokens), 0)::bigint AS page_input_tokens,

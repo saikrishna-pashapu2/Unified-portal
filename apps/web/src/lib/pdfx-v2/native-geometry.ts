@@ -3,7 +3,21 @@ import type { PdfElement } from './schemas';
 
 export type Box = [number, number, number, number];
 export type NativeText = { text: string; bbox: Box };
-export type NativeRule = { axis: 'x' | 'y'; at: number; from: number; to: number };
+/**
+ * A native rule is represented by its center line (`at`, `from`, `to`).
+ * Filled rectangles do not have a real stroke center line, so they also carry
+ * the visible ink interval on the fixed axis.  For an `x` rule this is the
+ * rectangle's x interval; for a `y` rule it is its y interval.  Stroke rules
+ * intentionally omit these fields and retain their historical semantics.
+ */
+export type NativeRule = {
+  axis: 'x' | 'y';
+  at: number;
+  from: number;
+  to: number;
+  inkFrom?: number;
+  inkTo?: number;
+};
 export type NativeGeometry = { texts: NativeText[]; rules: NativeRule[]; images: Box[]; canReconstruct?:boolean };
 const cache = new WeakMap<Buffer, Map<number, Promise<NativeGeometry>>>();
 export const canonicalText = (text: string) => text.normalize('NFKC').replace(/\s+/g, '');
@@ -15,6 +29,225 @@ export const unionBoxes = (boxes: readonly (readonly number[])[]): Box => [
 ];
 const intersects = (a: readonly number[], b: readonly number[]) =>
   Math.min(a[2], b[2]) > Math.max(a[0], b[0]) && Math.min(a[3], b[3]) > Math.max(a[1], b[1]);
+
+// Spreadsheet exporters commonly encode a one-pixel rule as a filled
+// rectangle.  The rectangle is measured in PDF user units here, rather than
+// by a fixed normalized-coordinate cutoff: a 0.5 point rule should remain a
+// rule on both a letter page and a large landscape page.  The aspect-ratio
+// guard is just as important as the thickness guard; it prevents cell fills,
+// banners, and other artwork from becoming table topology.
+const FILLED_RULE_MAX_THICKNESS_POINTS = 2.5;
+const FILLED_RULE_MIN_ASPECT = 24;
+const FILLED_RULE_MIN_LENGTH_POINTS = 6;
+const FILLED_INK_LUMINANCE_MAX = 0.82;
+const FILLED_INK_ALPHA_MIN = 0.15;
+const MAX_NATIVE_RULES = 8000;
+
+type FilledRuleCandidate = {
+  axis: 'x' | 'y';
+  at: number;
+  from: number;
+  to: number;
+  thickness: number;
+  inkFrom: number;
+  inkTo: number;
+};
+
+function componentToUnit(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  // PDF.js exposes RGB values as 0..255, while gray/CMYK operators use the
+  // PDF 0..1 range.  Accept both forms so custom exporters remain safe.
+  return Math.max(0, Math.min(1, value > 1 ? value / 255 : value));
+}
+function rgbLuminance(values: readonly unknown[]): number | null {
+  if (values.length < 3) return null;
+  const rgb = values.slice(0, 3).map(componentToUnit);
+  if (rgb.some(value => value === null)) return null;
+  return 0.2126 * rgb[0]! + 0.7152 * rgb[1]! + 0.0722 * rgb[2]!;
+}
+
+function cmykLuminance(values: readonly unknown[]): number | null {
+  if (values.length < 4) return null;
+  const cmyk = values.slice(0, 4).map(componentToUnit);
+  if (cmyk.some(value => value === null)) return null;
+  const [c, m, y, k] = cmyk as [number, number, number, number];
+  return 0.2126 * (1 - c) * (1 - k) +
+    0.7152 * (1 - m) * (1 - k) +
+    0.0722 * (1 - y) * (1 - k);
+}
+
+function clipRule(rule: NativeRule): NativeRule | null {
+  // A path can legitimately continue past a page edge.  Retain only the
+  // visible interval; a rule whose supporting line is outside the page is not
+  // visible topology and must not be fabricated back into the page.
+  if (rule.at < -0.5 || rule.at > 1000.5) return null;
+  const at = Math.max(0, Math.min(1000, rule.at));
+  const from = Math.max(0, Math.min(1000, rule.from));
+  const to = Math.max(0, Math.min(1000, rule.to));
+  if (to - from <= 0.02) return null;
+  if (rule.inkFrom === undefined && rule.inkTo === undefined) {
+    return { ...rule, at, from: Math.min(from, to), to: Math.max(from, to) };
+  }
+  const rawInkFrom = rule.inkFrom ?? rule.inkTo ?? rule.at;
+  const rawInkTo = rule.inkTo ?? rule.inkFrom ?? rule.at;
+  if (!Number.isFinite(rawInkFrom) || !Number.isFinite(rawInkTo)) return null;
+  const inkFrom = Math.max(0, Math.min(1000, Math.min(rawInkFrom, rawInkTo)));
+  const inkTo = Math.max(0, Math.min(1000, Math.max(rawInkFrom, rawInkTo)));
+  if (inkTo - inkFrom <= 0.02) return null;
+  return { ...rule, at, from: Math.min(from, to), to: Math.max(from, to), inkFrom, inkTo };
+}
+
+function dedupeRules(rules: readonly NativeRule[]): NativeRule[] {
+  const result: NativeRule[] = [];
+  for (const rule of rules) {
+    if (result.some(existing => existing.axis === rule.axis &&
+      Math.abs(existing.at - rule.at) <= 0.18 &&
+      Math.abs(existing.from - rule.from) <= 0.2 &&
+      Math.abs(existing.to - rule.to) <= 0.2)) continue;
+    result.push(rule);
+  }
+  return result;
+}
+
+function ruleFixedExtent(rule: NativeRule): [number, number] {
+  const from = rule.inkFrom ?? rule.at;
+  const to = rule.inkTo ?? rule.at;
+  return from <= to ? [from, to] : [to, from];
+}
+
+function intervalsTouch(aFrom: number, aTo: number, bFrom: number, bTo: number, pad = 0.2): boolean {
+  return Math.min(aTo, bTo) >= Math.max(aFrom, bFrom) - pad;
+}
+
+/**
+ * Filled rectangles meet at their visible ink, not necessarily at their
+ * center lines.  Keep the old 0.2 normalized tolerance for stroke rules, but
+ * use the optional fixed-axis ink extent whenever a filled rule provides it.
+ */
+function rulesTouch(a: NativeRule, b: NativeRule): boolean {
+  const [aFixedFrom, aFixedTo] = ruleFixedExtent(a);
+  const [bFixedFrom, bFixedTo] = ruleFixedExtent(b);
+  if (a.axis === b.axis) {
+    return intervalsTouch(aFixedFrom, aFixedTo, bFixedFrom, bFixedTo) &&
+      intervalsTouch(a.from, a.to, b.from, b.to);
+  }
+  return intervalsTouch(aFixedFrom, aFixedTo, b.from, b.to) &&
+    intervalsTouch(bFixedFrom, bFixedTo, a.from, a.to);
+}
+
+function candidateRule(candidate: FilledRuleCandidate): NativeRule {
+  return {
+    axis: candidate.axis,
+    at: candidate.at,
+    from: candidate.from,
+    to: candidate.to,
+    inkFrom: candidate.inkFrom,
+    inkTo: candidate.inkTo,
+  };
+}
+
+function sameFilledCandidate(a: FilledRuleCandidate, b: FilledRuleCandidate): boolean {
+  return a.axis === b.axis && Math.abs(a.at - b.at) <= 0.18 &&
+    Math.abs(a.from - b.from) <= 0.2 && Math.abs(a.to - b.to) <= 0.2 &&
+    Math.abs(a.inkFrom - b.inkFrom) <= 0.2 && Math.abs(a.inkTo - b.inkTo) <= 0.2;
+}
+
+type ShortRuleResult = { rules: NativeRule[]; excessive: boolean };
+
+/**
+ * Recover filled rectangles that are shorter than the global aspect guard
+ * only when they belong to a connected, repeated grid.  A single short
+ * rectangle (or a short decorative mark) remains rejected.  Pairwise work is
+ * bounded by the same MAX_NATIVE_RULES cap used by the final topology pass.
+ */
+function acceptShortFilledRules(
+  candidates: readonly FilledRuleCandidate[],
+  existingRules: readonly NativeRule[],
+  viewportWidth: number,
+  viewportHeight: number,
+): ShortRuleResult {
+  if (candidates.length > MAX_NATIVE_RULES) return { rules: [], excessive: true };
+  const shortCandidates: FilledRuleCandidate[] = [];
+  for (const candidate of candidates) {
+    const thicknessPageLength = candidate.axis === 'x' ? viewportWidth : viewportHeight;
+    const spanPageLength = candidate.axis === 'x' ? viewportHeight : viewportWidth;
+    const thicknessPoints = candidate.thickness * thicknessPageLength / 1000;
+    const lengthPoints = (candidate.to - candidate.from) * spanPageLength / 1000;
+    const aspect = lengthPoints / Math.max(thicknessPoints, 0.0001);
+    if (!Number.isFinite(thicknessPoints) || !Number.isFinite(lengthPoints) ||
+        thicknessPoints > FILLED_RULE_MAX_THICKNESS_POINTS ||
+        lengthPoints < FILLED_RULE_MIN_LENGTH_POINTS || aspect >= FILLED_RULE_MIN_ASPECT) continue;
+    if (!shortCandidates.some(previous => sameFilledCandidate(previous, candidate))) shortCandidates.push(candidate);
+  }
+  if (!shortCandidates.length) return { rules: [], excessive: false };
+  if (existingRules.length + shortCandidates.length > MAX_NATIVE_RULES) return { rules: [], excessive: true };
+
+  const shortRules = shortCandidates.map(candidateRule);
+  const parents = shortRules.map((_, index) => index);
+  const root = (index: number): number => {
+    let current = index;
+    while (parents[current] !== current) {
+      parents[current] = parents[parents[current]!]!;
+      current = parents[current]!;
+    }
+    return current;
+  };
+  const merge = (a: number, b: number) => {
+    const left = root(a), right = root(b);
+    if (left !== right) parents[left] = right;
+  };
+
+  // Short candidates are normally a small fraction of all rules.  Compare
+  // them to one another and to existing source rules; never compare an
+  // unbounded operator list.
+  const supports = shortRules.map(() => [] as number[]);
+  for (let i = 0; i < shortRules.length; i++) {
+    for (let j = i + 1; j < shortRules.length; j++) {
+      if (rulesTouch(shortRules[i]!, shortRules[j]!)) merge(i, j);
+    }
+    for (let j = 0; j < existingRules.length; j++) {
+      if (rulesTouch(shortRules[i]!, existingRules[j]!)) supports[i]!.push(j);
+    }
+  }
+  // Two candidate components that touch the same long/stroke rule are part of
+  // the same source grid.  This avoids a quadratic pass over every existing
+  // rule while still following a connected repeated grid.
+  const supportOwner = new Map<number, number>();
+  for (let i = 0; i < shortRules.length; i++) {
+    for (const support of supports[i]!) {
+      const owner = supportOwner.get(support);
+      if (owner === undefined) supportOwner.set(support, i);
+      else merge(i, owner);
+    }
+  }
+
+  const componentCandidates = new Map<number, number[]>();
+  for (let i = 0; i < shortRules.length; i++) {
+    const key = root(i);
+    componentCandidates.set(key, [...(componentCandidates.get(key) ?? []), i]);
+  }
+  const accepted = new Set<number>();
+  for (const memberIndexes of Array.from(componentCandidates.values())) {
+    const componentRules: NativeRule[] = memberIndexes.map((index: number) => shortRules[index]!);
+    const seenSupports = new Set<number>();
+    for (const index of memberIndexes) {
+      for (const support of supports[index]!) {
+        if (seenSupports.has(support)) continue;
+        seenSupports.add(support);
+        componentRules.push(existingRules[support]!);
+      }
+    }
+    const xTracks = clusters(componentRules.filter(rule => rule.axis === 'x').map(rule => rule.at));
+    const yTracks = clusters(componentRules.filter(rule => rule.axis === 'y').map(rule => rule.at));
+    // nativeTableRegions requires three tracks in each direction.  Applying
+    // the same lower bound here prevents a lone short mark from becoming
+    // accepted topology while retaining small but genuine digitally ruled
+    // tables.
+    if (xTracks.length < 3 || yTracks.length < 3) continue;
+    for (const index of memberIndexes) accepted.add(index);
+  }
+  return { rules: shortRules.filter((_, index) => accepted.has(index)), excessive: false };
+}
 
 /** Native positions corroborate OCR; they never make a scanned body disappear. */
 export function readNativeGeometry(pdf: Buffer, clockwiseRotation = 0): Promise<NativeGeometry> {
@@ -83,14 +316,16 @@ async function read(pdf: Buffer, clockwiseRotation: number): Promise<NativeGeome
     const ops = await page.getOperatorList();
     const textRuns:NativeText[]=[];
     let hiddenText=false;
-    let textState={font:'',size:0,scale:1,charSpacing:0,wordSpacing:0,rise:0,leading:0,x:0,y:0,lineX:0,lineY:0,mode:0,fillWhite:false,alpha:1,tm:[1,0,0,1,0,0]};
+    let textState={font:'',size:0,scale:1,charSpacing:0,wordSpacing:0,rise:0,leading:0,x:0,y:0,lineX:0,lineY:0,mode:0,
+      fillKnown:true,fillWhite:false,fillLuminance:0,alpha:1,tm:[1,0,0,1,0,0]};
     const textStack:typeof textState[]=[];
     const rules: NativeRule[] = [];
     const images: Box[] = [];
     let matrix = [1, 0, 0, 1, 0, 0];
     const stack: number[][] = [];
     let pending: NativeRule[] = [];
-    let thinRects: NativeRule[] = [];
+    let filledRects: FilledRuleCandidate[] = [];
+    const shortFilledCandidates: FilledRuleCandidate[] = [];
     const point = (x: number, y: number) => {
       const p = pdfjs.Util.applyTransform(pdfjs.Util.applyTransform([x, y], matrix), viewport.transform);
       return [p[0] / viewport.width * 1000, p[1] / viewport.height * 1000];
@@ -100,16 +335,94 @@ async function read(pdf: Buffer, clockwiseRotation: number): Promise<NativeGeome
       if (Math.abs(a[1] - b[1]) < 0.01 && Math.abs(a[0] - b[0]) > 0.02) return [{axis:'y',at:(a[1]+b[1])/2,from:Math.min(a[0],b[0]),to:Math.max(a[0],b[0])}];
       return [];
     };
+    const filledCandidate = (
+      axis:'x'|'y', at:number, from:number, to:number, thickness:number,
+      inkFrom = at - thickness / 2, inkTo = at + thickness / 2,
+    ):FilledRuleCandidate|null => {
+      const length=Math.abs(to-from);
+      if(![at,from,to,thickness,length,inkFrom,inkTo].every(Number.isFinite) || thickness<=0 || length<=0) return null;
+      return {axis,at,from:Math.min(from,to),to:Math.max(from,to),thickness,
+        inkFrom:Math.min(inkFrom,inkTo),inkTo:Math.max(inkFrom,inkTo)};
+    };
+    const acceptedFilledRule = (candidate:FilledRuleCandidate):NativeRule|null => {
+      const thicknessPageLength=candidate.axis==='x' ? viewport.width : viewport.height;
+      const spanPageLength=candidate.axis==='x' ? viewport.height : viewport.width;
+      const thicknessPoints=candidate.thickness*thicknessPageLength/1000;
+      const length=candidate.to-candidate.from;
+      const lengthPoints=length*spanPageLength/1000;
+      if(thicknessPoints>FILLED_RULE_MAX_THICKNESS_POINTS ||
+         lengthPoints<Math.max(FILLED_RULE_MIN_LENGTH_POINTS,thicknessPoints*FILLED_RULE_MIN_ASPECT)) return null;
+      return candidateRule(candidate);
+    };
+    const filledCandidateFromCorners = (corners:number[][]):FilledRuleCandidate|null => {
+      if(corners.length!==4 || corners.some(corner=>corner.length<2 || !corner.slice(0,2).every(Number.isFinite))) return null;
+      const edges=corners.map((corner,index)=> {
+        const next=corners[(index+1)%corners.length]!;
+        return [next[0]!-corner[0]!,next[1]!-corner[1]!];
+      });
+      // A rotated page produces a still-axis-aligned rectangle after the
+      // viewport transform.  Skewed/diagonal artwork must not be promoted to
+      // table topology merely because its bounding box is elongated.
+      if(edges.some(([dx,dy])=>Math.abs(dx)>0.01 && Math.abs(dy)>0.01)) return null;
+      const xPositions=clusters(corners.map(corner=>corner[0]!));
+      const yPositions=clusters(corners.map(corner=>corner[1]!));
+      if(xPositions.length!==2 || yPositions.length!==2) return null;
+      const width=xPositions[1]-xPositions[0],height=yPositions[1]-yPositions[0];
+      if(width<=0 || height<=0 || width===height) return null;
+      if(width>height) return filledCandidate('y',(yPositions[0]+yPositions[1])/2,xPositions[0],xPositions[1],height,
+        yPositions[0],yPositions[1]);
+      return filledCandidate('x',(xPositions[0]+xPositions[1])/2,yPositions[0],yPositions[1],width,
+        xPositions[0],xPositions[1]);
+    };
+    const filledRuleFromEdges = (edges:NativeRule[]):FilledRuleCandidate|null => {
+      const xEdges=edges.filter(rule=>rule.axis==='x');
+      const yEdges=edges.filter(rule=>rule.axis==='y');
+      const xPositions=clusters(xEdges.map(rule=>rule.at));
+      const yPositions=clusters(yEdges.map(rule=>rule.at));
+      if(xPositions.length!==2 || yPositions.length!==2) return null;
+      const xThickness=Math.abs(xPositions[1]-xPositions[0]);
+      const yThickness=Math.abs(yPositions[1]-yPositions[0]);
+      if(xThickness<=0 || yThickness<=0 || xThickness===yThickness) return null;
+      // All four sides must cover the same rectangle.  This rejects open or
+      // diagonal artwork that happens to leave two x and two y coordinates.
+      if(xEdges.some(rule=>rule.from>yPositions[0]+0.2 || rule.to<yPositions[1]-0.2) ||
+         yEdges.some(rule=>rule.from>xPositions[0]+0.2 || rule.to<xPositions[1]-0.2)) return null;
+      if(xThickness>yThickness) return filledCandidate('y',(yPositions[0]+yPositions[1])/2,xPositions[0],xPositions[1],yThickness,
+        yPositions[0],yPositions[1]);
+      return filledCandidate('x',(xPositions[0]+xPositions[1])/2,yPositions[0],yPositions[1],xThickness,
+        xPositions[0],xPositions[1]);
+    };
+    const fillIsInk = () => textState.fillKnown && textState.fillLuminance < FILLED_INK_LUMINANCE_MAX && textState.alpha > FILLED_INK_ALPHA_MIN;
     const O = pdfjs.OPS;
     for (let i=0;i<ops.fnArray.length;i++) {
       const op = ops.fnArray[i], args = ops.argsArray[i];
       if (op === O.save || op===O.paintFormXObjectBegin) {stack.push([...matrix]);textStack.push({...textState,tm:[...textState.tm]});if(op===O.paintFormXObjectBegin&&args?.[0]) matrix=pdfjs.Util.transform(matrix,args[0]);}
       else if (op === O.restore || op===O.paintFormXObjectEnd) {matrix = stack.pop() ?? [1,0,0,1,0,0];textState=textStack.pop()??textState;}
       else if (op === O.transform) matrix = pdfjs.Util.transform(matrix, args);
-      else if(op===O.setFillRGBColor) textState.fillWhite=Array.from(args as number[]).every(n=>n>=245);
+      else if(op===O.setFillRGBColor) {
+        const luminance=rgbLuminance(Array.from(args as number[]));
+        textState.fillKnown=luminance!==null;textState.fillLuminance=luminance??1;textState.fillWhite=(luminance??1)>=0.96;
+      }
+      else if(op===O.setFillGray) {
+        const luminance=componentToUnit((args as number[])[0]);
+        textState.fillKnown=luminance!==null;textState.fillLuminance=luminance??1;textState.fillWhite=(luminance??1)>=0.96;
+      }
+      else if(op===O.setFillCMYKColor) {
+        const luminance=cmykLuminance(Array.from(args as number[]));
+        textState.fillKnown=luminance!==null;textState.fillLuminance=luminance??1;textState.fillWhite=(luminance??1)>=0.96;
+      }
+      else if(op===O.setFillColor || op===O.setFillColorN || op===O.setFillColorSpace) {
+        // Pattern/device-independent colors cannot be proven to be ink from
+        // the operator list alone.  A later explicit RGB/gray/CMYK operator
+        // re-establishes a safe color; until then filled paths are ignored.
+        textState.fillKnown=false;textState.fillLuminance=1;textState.fillWhite=true;
+      }
+      else if(op===O.setFillTransparent) {
+        textState.fillKnown=true;textState.fillLuminance=1;textState.fillWhite=true;textState.alpha=0;
+      }
       else if(op===O.setGState) for(const [key,value] of args[0]) {
         if(key==='Font') {textState.font=value[0];textState.size=value[1];}
-        if(key==='ca') textState.alpha=value;
+        if(key==='ca' && typeof value==='number') textState.alpha=value;
       }
       else if(op===O.beginText) textState={...textState,x:0,y:0,lineX:0,lineY:0,tm:[1,0,0,1,0,0]};
       else if(op===O.setFont) {textState.font=args[0];textState.size=args[1];}
@@ -161,24 +474,32 @@ async function read(pdf: Buffer, clockwiseRotation: number): Promise<NativeGeome
             const x=v[at++],y=v[at++],w=v[at++],h=v[at++];
             const a=point(x,y),b=point(x+w,y),c=point(x+w,y+h),d=point(x,y+h);
             pending.push(...line(a,b),...line(b,c),...line(c,d),...line(d,a));
-            if (Math.abs(a[1]-d[1]) < 0.25) thinRects.push(...line([(a[0]+d[0])/2,(a[1]+d[1])/2],[(b[0]+c[0])/2,(b[1]+c[1])/2]));
-            else if (Math.abs(a[0]-b[0]) < 0.25) thinRects.push(...line([(a[0]+b[0])/2,(a[1]+b[1])/2],[(c[0]+d[0])/2,(c[1]+d[1])/2]));
+            const candidate=filledCandidateFromCorners([a,b,c,d]);
+            if(candidate) filledRects.push(candidate);
           } else if (kind===O.closePath) { pending.push(...line(current,start)); current=start; }
           else if (kind===O.curveTo) { at+=4; current=point(v[at++],v[at++]); }
           else if (kind===O.curveTo2 || kind===O.curveTo3) { at+=2; current=point(v[at++],v[at++]); }
         }
       } else if ([O.stroke,O.closeStroke,O.fillStroke,O.eoFillStroke,O.closeFillStroke,O.closeEOFillStroke].includes(op)) {
-        rules.push(...pending); pending=[]; thinRects=[];
+        rules.push(...pending); pending=[]; filledRects=[];
       } else if ([O.fill,O.eoFill].includes(op)) {
         // Excel exports often draw thin filled four-sided paths, not `re`.
-        const xx=pending.filter(r=>r.axis==='x').map(r=>r.at), yy=pending.filter(r=>r.axis==='y').map(r=>r.at);
-        if(xx.length===2 && yy.length===2) {
-          if(Math.abs(yy[1]-yy[0])<0.25) thinRects.push({axis:'y',at:(yy[0]+yy[1])/2,from:Math.min(...xx),to:Math.max(...xx)});
-          else if(Math.abs(xx[1]-xx[0])<0.25) thinRects.push({axis:'x',at:(xx[0]+xx[1])/2,from:Math.min(...yy),to:Math.max(...yy)});
+        // Keep both explicit rectangle candidates and a strict four-edge
+        // candidate for move/line/closePath encodings.  The latter is only
+        // accepted when the path is a strongly elongated, ink-colored shape.
+        const candidates=[...filledRects];
+        const edgeCandidate=filledRuleFromEdges(pending);
+        if(edgeCandidate) candidates.push(edgeCandidate);
+        if(fillIsInk()) {
+          for(const candidate of candidates) {
+            const rule=acceptedFilledRule(candidate);
+            if(rule) rules.push(rule);
+            else shortFilledCandidates.push(candidate);
+          }
         }
-        if(!textState.fillWhite && textState.alpha>0) rules.push(...thinRects); pending=[]; thinRects=[];
+        pending=[]; filledRects=[];
       }
-      else if (op === O.endPath) { pending=[]; thinRects=[]; }
+      else if (op === O.endPath) { pending=[]; filledRects=[]; }
       else if ([O.paintImageXObject,O.paintInlineImageXObject,O.paintImageMaskXObject].includes(op)) {
         const corners=[point(0,0),point(1,0),point(1,1),point(0,1)];
         images.push([Math.min(...corners.map(p=>p[0])),Math.min(...corners.map(p=>p[1])),Math.max(...corners.map(p=>p[0])),Math.max(...corners.map(p=>p[1]))]);
@@ -189,7 +510,15 @@ async function read(pdf: Buffer, clockwiseRotation: number): Promise<NativeGeome
     // coordinates only when they preserve the complete native transcription.
     const completeText=content.items.flatMap(item=>'str' in item?[item.str]:[]).join('');
     const exactRuns=canonicalText(textRuns.map(t=>t.text).join(''))===canonicalText(completeText);
-    return { texts:exactRuns?textRuns:texts, rules: rules.filter(r=>[r.at,r.from,r.to].every(n=>Number.isFinite(n)&&n>=0&&n<=1000)), images, canReconstruct:exactRuns&&!hiddenText };
+    // Bound pairwise deduplication/topology work BEFORE it starts, not only
+    // after collecting regions. Complex artwork falls back to OCR safely.
+    const shortResult = rules.length > MAX_NATIVE_RULES
+      ? { rules: [] as NativeRule[], excessive: true }
+      : acceptShortFilledRules(shortFilledCandidates, rules, viewport.width, viewport.height);
+    const excessiveRules = rules.length > MAX_NATIVE_RULES || shortResult.excessive;
+    const allRules = excessiveRules ? [] : [...rules, ...shortResult.rules];
+    const visibleRules=excessiveRules ? [] : dedupeRules(allRules.map(clipRule).filter((rule):rule is NativeRule=>rule!==null));
+    return { texts:exactRuns?textRuns:texts, rules: visibleRules, images, canReconstruct:exactRuns&&!hiddenText&&!excessiveRules };
   } finally { await document.destroy(); }
 }
 
@@ -201,7 +530,30 @@ export function joinNativeText(items: NativeText[]): string {
     if (previous && Math.abs(previous[0].bbox[1]-item.bbox[1]) <= tolerance) previous.push(item);
     else lines.push([item]);
   }
-  return lines.map(row=>row.sort((a,b)=>a.bbox[0]-b.bbox[0]).map(t=>t.text).join(' ')).join('\n');
+  return lines.map(row => {
+    const ordered = row.sort((a,b)=>a.bbox[0]-b.bbox[0]);
+    let text = '';
+    let previous: NativeText | undefined;
+    for (const item of ordered) {
+      if (previous) {
+        const gap = item.bbox[0] - previous.bbox[2];
+        const fontHeight = Math.min(
+          item.bbox[3] - item.bbox[1],
+          previous.bbox[3] - previous.bbox[1],
+        );
+        // PDF text extraction frequently splits one word at glyph clusters
+        // with tiny positive gaps.  A measured, font-relative gap is a
+        // word-space; touching/overlap runs remain concatenated.  Existing
+        // whitespace in a run always wins so this never duplicates a source
+        // space.
+        const wordGap = Math.max(0.5, fontHeight * 0.13);
+        if (gap > wordGap && !/\s$/.test(text) && !/^\s/.test(item.text)) text += ' ';
+      }
+      text += item.text;
+      previous = item;
+    }
+    return text;
+  }).join('\n');
 }
 
 /** Only an exact local text match can replace a model's text bounding box. */
@@ -229,32 +581,60 @@ function clusters(values: number[]): number[] {
   return result.map(group=>group.reduce((a,b)=>a+b,0)/group.length);
 }
 
+function fixedContains(rule: NativeRule, value: number, pad = 0.2): boolean {
+  const [from, to] = ruleFixedExtent(rule);
+  return value >= from - pad && value <= to + pad;
+}
+
+function endpointInkExtent(
+  rules: readonly NativeRule[],
+  axis: 'x'|'y',
+  at: number,
+  coordinate: number,
+): [number, number] | undefined {
+  const candidates = rules.filter(rule => rule.axis !== axis &&
+    intervalsTouch(rule.from, rule.to, at, at) && fixedContains(rule, coordinate))
+    .sort((a, b) => {
+      const aFixed = ruleFixedExtent(a), bFixed = ruleFixedExtent(b);
+      return Math.abs((aFixed[0] + aFixed[1]) / 2 - coordinate) -
+        Math.abs((bFixed[0] + bFixed[1]) / 2 - coordinate);
+    });
+  return candidates.length ? ruleFixedExtent(candidates[0]!) : undefined;
+}
+
 function covered(rules: NativeRule[], axis: 'x'|'y', at: number, from: number, to: number): boolean {
-  const spans=rules.filter(r=>r.axis===axis && Math.abs(r.at-at)<=0.2 && r.to>=from && r.from<=to).sort((a,b)=>a.from-b.from);
-  let end=from;
+  // Filled rectangles meet at the inside edge of their ink.  Trim the
+  // requested interval to those inside edges when both endpoint rules carry
+  // actual ink extents; stroke-only rules continue to use the old interval.
+  const startInk = endpointInkExtent(rules, axis, at, from);
+  const endInk = endpointInkExtent(rules, axis, at, to);
+  const coveredFrom = startInk ? Math.max(from, startInk[1]) : from;
+  const coveredTo = endInk ? Math.min(to, endInk[0]) : to;
+  if (coveredFrom > coveredTo + 0.2) return false;
+  const spans=rules.filter(r=>r.axis===axis && fixedContains(r,at) && r.to>=coveredFrom && r.from<=coveredTo)
+    .sort((a,b)=>a.from-b.from);
+  let end=coveredFrom;
   for(const span of spans) { if(span.from>end+0.2) break; end=Math.max(end,span.to); }
-  return end>=to-0.2;
+  return end>=coveredTo-0.2;
 }
 
 function horizontalOuterBoundary(rules:NativeRule[], xs:number[], at:number, inner:number):boolean {
   if(covered(rules,'y',at,xs[0],xs.at(-1)!)) return true;
-  // Some Excel exports omit part of the top/bottom stroke. The boundary is
-  // still determined by native horizontal segments and EVERY column's vertical
-  // rule spanning the edge row. This does not guess a row from text alignment.
-  return rules.some(r=>r.axis==='y' && Math.abs(r.at-at)<=0.2 && r.to-r.from>0.5) &&
+  // Keep the established strict whole-table rule. Open page continuations
+  // must not be "closed" using paths outside an untracked PDF body clip.
+  const hasPartialHorizontal=rules.some(r=>r.axis==='y' && Math.abs(r.at-at)<=0.2 && r.to-r.from>0.5);
+  return hasPartialHorizontal &&
     xs.every(x=>covered(rules,'x',x,Math.min(at,inner),Math.max(at,inner)));
 }
 
 export function nativeTableRegions(native: NativeGeometry): Box[] {
   const rules=native.rules.filter(r=>r.to-r.from>0.5);
-  if(rules.length>8000) return [];
+  if(rules.length>MAX_NATIVE_RULES) return [];
   const parents=rules.map((_,i)=>i);
   const root=(i:number):number=>{while(parents[i]!==i){parents[i]=parents[parents[i]];i=parents[i];}return i;};
   for(let i=0;i<rules.length;i++) for(let j=i+1;j<rules.length;j++) {
     const a=rules[i],b=rules[j];
-    const touches=a.axis===b.axis
-      ? Math.abs(a.at-b.at)<=0.2 && a.from<=b.to+0.2 && b.from<=a.to+0.2
-      : a.at>=b.from-0.2 && a.at<=b.to+0.2 && b.at>=a.from-0.2 && b.at<=a.to+0.2;
+    const touches=rulesTouch(a, b);
     if(touches) parents[root(i)]=root(j);
   }
   const groups=new Map<number,NativeRule[]>();
@@ -328,4 +708,153 @@ export function rebuildNativeTable(table: PdfElement, native: NativeGeometry, di
   const recovered=cells.map(cell=>canonicalText(cell.text));
   if(table.rows.flatMap(row=>row.cells).some(cell=>cell.text.trim() && !recovered.some(text=>text.includes(canonicalText(cell.text))))) return reject('OCR text is not present in native table');
   return {...table,bbox:box,columnCount:columns,rowCount:rows,translate:cells.some(c=>c.translate&&c.text.trim()),rows:Array.from({length:rows},(_,rowIndex)=>({rowIndex,cells:cells.filter(c=>c.rowIndex===rowIndex)}))};
+}
+
+/** Repair only an existing, closed merged header whose understated row span
+ * leaves holes immediately below it. Unlike a full native reconstruction this
+ * never imports native text, invents cells, or touches an open/clipped table body.
+ * Every changed header needs exact text corroboration, all four ruled sides,
+ * and native row boundaries corroborated by the OTHER existing cells.
+ */
+export function repairNativeHeaderRowSpans(table: PdfElement, native: NativeGeometry): PdfElement | null {
+  if (table.kind !== 'table' || native.canReconstruct === false || native.rules.length > MAX_NATIVE_RULES ||
+      native.images.some(box => intersects(box, table.bbox))) return null;
+  const { rowCount, columnCount } = table;
+  if (rowCount < 2 || columnCount < 1 || rowCount * columnCount > 15000) return null;
+  const cells = table.rows.flatMap(row => row.cells);
+  const occupied = new Set<number>();
+  for (const cell of cells) {
+    if (cell.rowIndex < 0 || cell.columnIndex < 0 || cell.rowSpan < 1 || cell.columnSpan < 1 ||
+        cell.rowIndex + cell.rowSpan > rowCount || cell.columnIndex + cell.columnSpan > columnCount) return null;
+    for (let row = cell.rowIndex; row < cell.rowIndex + cell.rowSpan; row++) {
+      for (let col = cell.columnIndex; col < cell.columnIndex + cell.columnSpan; col++) {
+        const slot = row * columnCount + col;
+        if (occupied.has(slot)) return null;
+        occupied.add(slot);
+      }
+    }
+  }
+  if (occupied.size === rowCount * columnCount) return null;
+  const rules = native.rules;
+  const xs = clusters(rules.filter(rule => rule.axis === 'x').map(rule => rule.at));
+  const ys = clusters(rules.filter(rule => rule.axis === 'y').map(rule => rule.at));
+  const snap = (values: number[], approximate: number): number | undefined => {
+    const nearby = values.filter(value => Math.abs(value - approximate) <= 12)
+      .sort((a, b) => Math.abs(a - approximate) - Math.abs(b - approximate));
+    if (!nearby.length || (nearby.length > 1 && Math.abs(nearby[0] - approximate) + 1 >= Math.abs(nearby[1] - approximate))) return undefined;
+    return nearby[0];
+  };
+  const fixes = new Map<string, { rowSpan: number; bbox: Box }>();
+  for (const cell of cells) {
+    if (!cell.isHeader || !cell.text.trim()) continue;
+    let end = cell.rowIndex + cell.rowSpan;
+    const originalEnd = end;
+    while (end < rowCount && Array.from({ length: cell.columnSpan }, (_, offset) => cell.columnIndex + offset)
+      .every(col => !occupied.has(end * columnCount + col))) end++;
+    if (end === originalEnd || end === rowCount) continue; // require a following source row, never the open bottom
+    const boundary = (row: number): number | undefined => {
+      const evidence = cells.filter(other => other !== cell &&
+        (other.rowIndex === row || other.rowIndex + other.rowSpan === row));
+      if (evidence.reduce((sum, other) => sum + other.columnSpan, 0) < 2) return undefined;
+      const positions = evidence.map(other => other.rowIndex === row ? other.bbox[1] : other.bbox[3]).sort((a, b) => a - b);
+      return snap(ys, positions[Math.floor(positions.length / 2)]);
+    };
+    const top = boundary(cell.rowIndex), bottom = boundary(end);
+    const left = snap(xs, cell.bbox[0]), right = snap(xs, cell.bbox[2]);
+    if (top === undefined || bottom === undefined || left === undefined || right === undefined || left >= right || top >= bottom) continue;
+    const box: Box = [left, top, right, bottom];
+    const textBox = matchNativeBox(cell.text, cell.bbox, native);
+    if (!textBox || !containsBox(box, textBox, 0.5) ||
+        !covered(rules, 'x', left, top, bottom) || !covered(rules, 'x', right, top, bottom) ||
+        !covered(rules, 'y', top, left, right) || !covered(rules, 'y', bottom, left, right)) continue;
+    const interior = Array.from({ length: end - cell.rowIndex - 1 }, (_, offset) => boundary(cell.rowIndex + offset + 1));
+    if (interior.some(y => y === undefined || y <= top || y >= bottom)) continue;
+    // Any horizontal ink inside the proposed cell contradicts the merge.
+    if (rules.some(rule => rule.axis === 'y' && rule.at > top + 0.2 && rule.at < bottom - 0.2 &&
+      Math.min(rule.to, right) - Math.max(rule.from, left) > 0.5)) continue;
+    fixes.set(cell.id, { rowSpan: end - cell.rowIndex, bbox: box });
+    for (let row = originalEnd; row < end; row++) {
+      for (let col = cell.columnIndex; col < cell.columnIndex + cell.columnSpan; col++) occupied.add(row * columnCount + col);
+    }
+  }
+  if (!fixes.size || occupied.size !== rowCount * columnCount) return null;
+  return { ...table, rows: table.rows.map(row => ({ ...row, cells: row.cells.map(cell => {
+    const fix = fixes.get(cell.id);
+    return fix ? { ...cell, ...fix } : cell;
+  }) })) };
+}
+
+/** Recover a multi-row header only inside a genuinely closed
+ * source rectangle. The body may continue off-page and is NEVER reconstructed
+ * here. Keep a one-to-one mapping of existing cells; native text may populate
+ * an empty header, but must exactly corroborate every non-empty OCR header.
+ */
+export function repairNativeHeaderGrid(table: PdfElement, native: NativeGeometry): PdfElement | null {
+  if (table.kind !== 'table' || native.canReconstruct === false || native.rules.length > MAX_NATIVE_RULES ||
+      table.rowCount * table.columnCount > 15000 || native.images.some(box => intersects(box, table.bbox))) return null;
+  const rows = [...table.rows].sort((a, b) => a.rowIndex - b.rowIndex);
+  const bodyStart = rows.findIndex(row => row.cells.some(cell => !cell.isHeader));
+  if (bodyStart < 2 || rows[bodyStart].rowIndex !== bodyStart ||
+      rows.some((row, index) => row.rowIndex !== index)) return null;
+  const headerRows = rows.slice(0, bodyStart);
+  const headers = headerRows.flatMap(row => row.cells);
+  if (!headers.length || headers.some(cell => !cell.isHeader || cell.rowIndex + cell.rowSpan > bodyStart)) return null;
+  for (const cell of headers) {
+    if (cell.rowIndex < 0 || cell.columnIndex < 0 || cell.rowSpan < 1 || cell.columnSpan < 1 ||
+        cell.columnIndex + cell.columnSpan > table.columnCount) return null;
+  }
+  // Even an overlap-free grid may omit header labels or assign a header box
+  // across body rows. A full source-backed bijection is the safety gate, not
+  // the presence of a particular model validation error.
+  const xs = clusters(native.rules.filter(rule => rule.axis === 'x').map(rule => rule.at));
+  const ys = clusters(native.rules.filter(rule => rule.axis === 'y').map(rule => rule.at));
+  const snap = (values: number[], approximate: number): number | undefined => {
+    const nearby = values.filter(value => Math.abs(value - approximate) <= 12)
+      .sort((a, b) => Math.abs(a - approximate) - Math.abs(b - approximate));
+    if (!nearby.length || (nearby.length > 1 && Math.abs(nearby[0] - approximate) + 1 >= Math.abs(nearby[1] - approximate))) return undefined;
+    return nearby[0];
+  };
+  const starts = rows[bodyStart].cells.map(cell => cell.bbox[1]);
+  if (starts.length < 2) return null;
+  const bottomEvidence = starts.map(y => snap(ys, y));
+  const left = snap(xs, table.bbox[0]), right = snap(xs, table.bbox[2]);
+  const top = snap(ys, table.bbox[1]), bottom = bottomEvidence[0];
+  if (left === undefined || right === undefined || top === undefined || bottom === undefined ||
+      bottomEvidence.some(y => y === undefined || Math.abs(y - bottom) > 0.2) || left >= right || top >= bottom) return null;
+  if (!covered(native.rules, 'x', left, top, bottom) || !covered(native.rules, 'x', right, top, bottom) ||
+      !covered(native.rules, 'y', top, left, right) || !covered(native.rules, 'y', bottom, left, right)) return null;
+  const bbox: Box = [left, top, right, bottom];
+  // Only after proving all four sides may long body strokes be restricted to
+  // this header. Whole-table reconstruction keeps its strict containment rule.
+  const headerNative: NativeGeometry = { ...native, rules: native.rules.flatMap(rule => {
+    const atMin = bbox[rule.axis === 'x' ? 0 : 1], atMax = bbox[rule.axis === 'x' ? 2 : 3];
+    const from = Math.max(rule.from, bbox[rule.axis === 'x' ? 1 : 0]);
+    const to = Math.min(rule.to, bbox[rule.axis === 'x' ? 3 : 2]);
+    return rule.at >= atMin - 0.2 && rule.at <= atMax + 0.2 && to > from ? [{ ...rule, from, to }] : [];
+  }) };
+  const rebuilt = rebuildNativeTable({ ...table, bbox, rowCount: bodyStart, rows: headerRows }, headerNative);
+  if (!rebuilt || rebuilt.rowCount !== bodyStart || rebuilt.columnCount !== table.columnCount) return null;
+  const recovered = rebuilt.rows.flatMap(row => row.cells);
+  if (recovered.length !== headers.length) return null;
+  const used = new Set<string>();
+  const replacements = new Map<string, typeof recovered[number]>();
+  for (const cell of recovered) {
+    const matches = headers.filter(old => !used.has(old.id) && old.rowIndex === cell.rowIndex &&
+      (old.text.trim()
+        ? canonicalText(old.text) === canonicalText(cell.text)
+        : old.columnIndex === cell.columnIndex && old.columnSpan === cell.columnSpan &&
+          Math.abs((snap(xs, old.bbox[0]) ?? Infinity) - cell.bbox[0]) <= 0.2 &&
+          Math.abs((snap(xs, old.bbox[2]) ?? Infinity) - cell.bbox[2]) <= 0.2));
+    if (matches.length !== 1) return null;
+    const old = matches[0];
+    used.add(old.id);
+    replacements.set(old.id, { ...old, rowIndex: cell.rowIndex, columnIndex: cell.columnIndex,
+      rowSpan: cell.rowSpan, columnSpan: cell.columnSpan, bbox: cell.bbox,
+      text: old.text.trim() ? old.text : cell.text,
+      translate: old.text.trim() ? old.translate : !!cell.text.trim(),
+    });
+  }
+  if (used.size !== headers.length) return null;
+  const repairedRows = table.rows.map(row => ({ ...row, cells: row.cells.map(cell => replacements.get(cell.id) ?? cell) }));
+  return { ...table, rows: repairedRows, translate: repairedRows.some(row => row.cells.some(cell => cell.translate && cell.text.trim())) };
 }

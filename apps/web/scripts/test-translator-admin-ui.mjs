@@ -53,7 +53,10 @@ const css = (
     autoprefixer(),
   ]).process(globalCss, { from: globalCssPath })
 ).css;
-const output = await fs.mkdtemp(path.join(os.tmpdir(), "translator-admin-ui-"));
+const output = process.argv[2]
+  ? path.resolve(process.argv[2])
+  : await fs.mkdtemp(path.join(os.tmpdir(), "translator-admin-ui-"));
+await fs.mkdir(output, { recursive: true });
 
 const records = Array.from({ length: 56 }, (_, index) => {
   const kind = index % 2 === 0 ? "pdf" : "xlsx";
@@ -109,6 +112,10 @@ const records = Array.from({ length: 56 }, (_, index) => {
         ? "Provider returned HTTP 429 while translating this document."
         : null,
     errorTruncated: index === 0,
+    flaggedPages: index === 4 ? [
+      { pageNumber: 1, failedStage: 'extraction', error: 'Table e033 row 0 has inconsistent visual boundaries.' },
+      { pageNumber: 2, failedStage: 'translation', error: null },
+    ] : [],
   };
 });
 
@@ -121,7 +128,7 @@ const matchesStatus = (item, status) =>
   (status === "active"
     ? activeStatuses.has(item.status)
     : status === "attention"
-      ? ["error", "cancelled"].includes(item.status)
+      ? ["error", "cancelled"].includes(item.status) || (item.flaggedPageCount ?? item.flaggedPages.length) > 0
       : item.status === status);
 
 const server = http.createServer(async (request, response) => {
@@ -235,7 +242,32 @@ try {
   await expect(page.getByText("Page 1 of 3")).toBeVisible();
 
   await page.getByRole("combobox", { name: "Job status" }).selectOption("attention");
+  await expect(rows).toHaveCount(4);
+  const partialRow = rows.filter({ hasText: 'Report project 5.pdf' });
+  await expect(partialRow).toContainText('Draft · 2 flagged');
+  await partialRow.getByText('View flagged page errors', { exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await expect(partialRow.getByText('Page 1 · OCR failed', { exact: true })).toBeVisible();
+  await expect(partialRow.getByText('Table e033 row 0 has inconsistent visual boundaries.', { exact: true })).toBeVisible();
+  await expect(partialRow.getByText('Page 2 · Translation failed', { exact: true })).toBeVisible();
+  await expect(partialRow.getByText('No stored error detail is available for this page.', { exact: true })).toBeVisible();
+  await page.screenshot({ path: path.join(output, 'flagged-page-errors.png'), fullPage: true });
+
+  records[4].flaggedPageCount = 52;
+  records[4].flaggedPages = Array.from({ length: 50 }, (_, index) => ({
+    pageNumber: index + 1, failedStage: 'extraction', error: 'Saved OCR failure.',
+  }));
+  await page.getByRole('button', { name: 'Refresh jobs', exact: true }).click();
+  await expect(partialRow).toContainText('Draft · 52 flagged');
+  await expect(partialRow).toContainText('Showing the first 50 of 52 flagged pages in this list.');
+  await expect(partialRow).toContainText('Page 50 · OCR failed');
+  // Once a rerun clears the persisted page errors, the warning and attention
+  // result must disappear; there is no sticky metrics-based error cache.
+  records[4].flaggedPages = [];
+  records[4].flaggedPageCount = 0;
+  await page.getByRole('button', { name: 'Refresh jobs' }).click();
   await expect(rows).toHaveCount(3);
+  await expect(partialRow).toHaveCount(0);
   const failedRow = rows.filter({ hasText: "Failed report.pdf" });
   await failedRow.locator("summary").click();
   await expect(failedRow).toContainText(
@@ -252,6 +284,8 @@ try {
   );
 
   await page.getByRole("combobox", { name: "Job status" }).selectOption("all");
+  await expect(rows.filter({ hasText: 'Report project 5.pdf' })).toContainText('Completed');
+  await expect(rows.filter({ hasText: 'Report project 5.pdf' }).locator('summary')).toHaveCount(0);
   await page.getByRole("combobox", { name: "Document type" }).selectOption("xlsx");
   await expect(rows).toHaveCount(25);
   await expect(rows.first()).toContainText("Excel");
@@ -369,6 +403,7 @@ try {
         "status filter",
         "literal percent search",
         "stored and fallback errors",
+        "draft page errors and cleared rerun",
         "refresh failure and retry",
         "stale-response protection",
         "period page reset",
@@ -379,6 +414,7 @@ try {
       apiCalls: historyRequests.length,
       realApiCalls: 0,
       screenshots: [
+        path.join(output, "flagged-page-errors.png"),
         path.join(output, "desktop.png"),
         path.join(output, "mobile.png"),
       ],
