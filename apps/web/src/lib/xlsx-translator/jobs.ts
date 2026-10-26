@@ -305,9 +305,11 @@ export function excelJobView(
     c = row.result_json as unknown as ExcelCheckpoint | null;
   const status = row.status === "done" ? "completed" : row.status;
   const flaggedCells = (c?.flaggedCells ?? 0) > 0 ? c!.flaggedCells! : 0;
+  const flaggedEntries = (c?.flaggedEntries ?? 0) > 0 ? c!.flaggedEntries! : 0;
+  const hasFlaggedResults = flaggedCells > 0 || flaggedEntries > 0;
   const canReviewRecovery =
       ((status === "error" && !!c && !c.recoveryApproved) ||
-        (status === "completed" && flaggedCells > 0)) &&
+        (status === "completed" && hasFlaggedResults)) &&
       !!c &&
       c.requests > 0 &&
       validSelection(p),
@@ -352,8 +354,8 @@ export function excelJobView(
           : status === "cancelled"
             ? "Translation cancelled."
             : status === "completed"
-              ? flaggedCells > 0
-                ? `Partial draft: ${flaggedCells} selected ${flaggedCells === 1 ? "cell keeps" : "cells keep"} the original source text after exhausting their translation attempts. Review recovery to rerun only those cells; everything else is translated and saved.`
+              ? hasFlaggedResults
+                ? `Partial draft: ${flaggedCells || flaggedEntries} selected ${flaggedCells > 0 ? (flaggedCells === 1 ? "cell keeps" : "cells keep") : (flaggedEntries === 1 ? "text entry keeps" : "text entries keep")} the original source text after exhausting their translation attempts. Review recovery to rerun only the flagged text; accepted translations are saved.`
                 : c &&
                   c.requests > 0 &&
                   Object.keys(c.translations || {}).length > 0 &&
@@ -371,6 +373,8 @@ export function excelJobView(
           completedBatches: c.completedBatches,
           totalBatches: c.totalBatches,
           translatedCells: c.translatedCells,
+          flaggedCells: c.flaggedCells ?? 0,
+          flaggedEntries: c.flaggedEntries ?? 0,
         }
       : null,
   };

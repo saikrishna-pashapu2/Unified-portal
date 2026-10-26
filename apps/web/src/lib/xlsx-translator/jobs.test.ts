@@ -99,6 +99,33 @@ beforeEach(() => {
   mocks.lock.mockResolvedValue(1);
 });
 describe("Excel durable request budget", () => {
+  it.each([
+    { flaggedCells: 3, flaggedEntries: 2 },
+    { flaggedEntries: 2 },
+    {},
+  ])("exposes draft flags before the preview loads without exposing saved text: %j", (flags) => {
+    const view = excelJobView({
+      id: "11111111-1111-4111-8111-111111111111",
+      status: "done",
+      progress: 100,
+      created_at: new Date("2026-10-26T07:44:00Z"),
+      payload_json: { filename: "test.xlsx", targetLang: "Russian", selections, planHash: planHash(selections, "Russian") },
+      result_json: { requests: 12, translations: { private: "Saved translation" }, ...flags },
+    } as any);
+    expect(view).toMatchObject({
+      status: "completed",
+      canDownload: true,
+      usage: { flaggedCells: flags.flaggedCells ?? 0, flaggedEntries: flags.flaggedEntries ?? 0 },
+    });
+    expect(view.usage).not.toHaveProperty("translations");
+    expect(view.canReviewRecovery).toBe((flags.flaggedCells ?? 0) > 0 || (flags.flaggedEntries ?? 0) > 0);
+    if ((flags.flaggedEntries ?? 0) > 0 && !flags.flaggedCells) {
+      expect(view.message).toContain("2 selected text entries");
+      expect(view.message).toContain("Review recovery");
+    }
+    expect(mocks.request).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
   it("reuses a saved v2 Russian-preservation result with its old ID and no new requests", async () => {
     const parts = unzipSync(input);
     const text =
