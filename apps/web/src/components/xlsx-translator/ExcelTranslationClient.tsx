@@ -7,6 +7,7 @@ import {
   type SetStateAction,
 } from "react";
 import { cellTranslationReason } from "./cell-feedback";
+import { getExcelDownloadState } from "./download-state";
 import WorkbookInspection from "./WorkbookInspection";
 import Link from "next/link";
 import {
@@ -151,6 +152,20 @@ export default function ExcelTranslationClient({ jobId }: { jobId: string }) {
   const chooserSelections = draft ? selections : nextSelections;
   const canChoose = !busy && !active && (draft || !!job?.canExtend);
   const hasTranslation = job?.hasTranslation ?? job?.status === "completed";
+  const downloadState = job
+    ? getExcelDownloadState(job, preview?.unavailableCells)
+    : null;
+  const partialDraftCount = downloadState?.partialDraftCount ?? 0;
+  const partialDraftUnit =
+    downloadState?.partialDraftCountKind === "entries"
+      ? partialDraftCount === 1
+        ? "untranslated text entry"
+        : "untranslated text entries"
+      : partialDraftCount === 1
+        ? "untranslated cell"
+        : "untranslated cells";
+  const partialDraftVerb = partialDraftCount === 1 ? "keeps" : "keep";
+  const partialDraftText = `${partialDraftCount.toLocaleString()} ${partialDraftUnit} ${partialDraftVerb} the original source text. Accepted translations are retained; review recovery to rerun flagged text.`;
   const sheetInfo = inspection?.sheets.find((s) => s.name === sheet);
   const max = position(sheetInfo?.range.split(":").at(-1) || "A1");
   const range = `${column(col)}${row}:${column(Math.min(col + 15, max.col))}${Math.min(row + 39, max.row)}`;
@@ -554,12 +569,15 @@ export default function ExcelTranslationClient({ jobId }: { jobId: string }) {
                 {inspection.mergeCount.toLocaleString()} merged ranges
               </p>
             </div>
-            {job.canDownload && !preview?.unavailableCells && (
+            {downloadState?.showDownload && (
               <a
                 href={`${base}?view=download`}
                 className="inline-flex items-center gap-2 rounded-lg bg-[#e0b65f] px-4 py-3 font-bold text-[#132a33]"
               >
-                <Download size={18} /> Download translated Excel
+                <Download size={18} />{" "}
+                {downloadState.isPartialDraft
+                  ? "Download draft Excel"
+                  : "Download translated Excel"}
               </a>
             )}
           </div>
@@ -590,9 +608,11 @@ export default function ExcelTranslationClient({ jobId }: { jobId: string }) {
             )}
             <div className="flex flex-wrap justify-between gap-3">
               <p role="status" className="text-sm">
-                {job.status === "completed" && preview?.unavailableCells
-                  ? "Some selected cells need review. The original text is shown where saved translations are missing; a complete download is not available."
-                  : job.message}
+                {downloadState?.isPartialDraft
+                  ? `Partial draft ready: ${partialDraftText}`
+                  : downloadState?.hasUnexplainedPreviewGaps
+                    ? "Saved results are incomplete. The complete download is unavailable until the missing cells are resolved."
+                    : job.message}
               </p>
               {active && (
                 <button
@@ -1201,14 +1221,21 @@ export default function ExcelTranslationClient({ jobId }: { jobId: string }) {
               </button>
             </div>
           )}
-          {preview?.translationWarning && (
+          {downloadState?.isPartialDraft ? (
+            <p
+              role="alert"
+              className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+            >
+              Draft download available. {partialDraftText}
+            </p>
+          ) : preview?.translationWarning ? (
             <p
               role="alert"
               className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
             >
               {preview.translationWarning}
             </p>
-          )}
+          ) : null}
           {!hasTranslation ? (
             <p
               role="status"

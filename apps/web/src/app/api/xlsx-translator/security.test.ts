@@ -168,6 +168,33 @@ describe("Excel API access controls", () => {
     expect(mocks.start).not.toHaveBeenCalled();
     expect(mocks.add).not.toHaveBeenCalled();
   });
+  it.each([{ flaggedCells: 1, flaggedEntries: 1 }, { flaggedEntries: 1 }])(
+    "keeps deliberate draft downloads available with accurate preview advice: %j",
+    async (flags) => {
+      const input_data = incrementalInput();
+      const result_json = { translations: {}, requests: 2, ...flags };
+      const before = JSON.stringify(result_json);
+      mocks.owned.mockResolvedValue({
+        status: "done", input_data, output_data: input_data,
+        payload_json: { filename: "partial.xlsx", targetLang: "Russian", selections: [{ sheet: "Data", range: "A1" }] },
+        result_json,
+      });
+      const preview = await GET(new Request(`http://localhost/api/xlsx-translator/${id}?view=preview&sheet=Data&range=A1`), context);
+      const data = await preview.json();
+      expect(data.unavailableCells).toBe(1);
+      expect(data.translationWarning).toContain("Draft download available");
+      expect(data.translationWarning).not.toContain("download is unavailable");
+      expect(data.cells[0]).toMatchObject({ translated: "Quyosh panellari", translationUnavailable: true });
+      const download = await GET(new Request(`http://localhost/api/xlsx-translator/${id}?view=download`), context);
+      expect(download.status).toBe(200);
+      expect(download.headers.get("Content-Disposition")).toContain("draft_partial.xlsx");
+      expect(download.headers.get("Cache-Control")).toBe("private, no-store");
+      const book = inspectWorkbook(Buffer.from(await download.arrayBuffer()));
+      expect(book.sheets[0].cells.get("A1")?.text).toBe("Quyosh panellari");
+      expect(JSON.stringify(result_json)).toBe(before);
+      for (const fn of [mocks.start, mocks.resume, mocks.recheck, mocks.add, mocks.remove]) expect(fn).not.toHaveBeenCalled();
+    },
+  );
   it("previews only the latest exact cell replacement and keeps original text intact", async () => {
     const input_data = incrementalInput();
     const payload_json = {

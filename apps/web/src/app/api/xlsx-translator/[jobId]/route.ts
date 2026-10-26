@@ -225,7 +225,9 @@ export async function GET(request: Request, context: Context) {
           ? {
               translationWarning:
                 row.status === "done"
-                  ? `This job was marked complete, but its saved results are incomplete. ${missingResultsAdvice}`
+                  ? (c?.flaggedCells ?? 0) > 0 || (c?.flaggedEntries ?? 0) > 0
+                    ? `Draft download available: ${unavailable.size} selected ${unavailable.size === 1 ? "cell keeps" : "cells keep"} the original source text. Accepted translations are retained; review recovery to translate the flagged cells.`
+                    : `This job was marked complete, but its saved results are incomplete. ${missingResultsAdvice}`
                   : missingResultsAdvice,
             }
           : {}),

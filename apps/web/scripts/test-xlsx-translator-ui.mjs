@@ -54,6 +54,7 @@ const output = path.resolve(app, "../../tmp/excel-translator-ui");
 await fs.mkdir(output, { recursive: true });
 let failed = true;
 let partial = false;
+let partialDraft = false;
 let paidRecovery = false,
   resumeCalls = 0;
 let freeReady = false,
@@ -66,18 +67,27 @@ let incremental = false,
   additionCalls = 0,
   additionReviews = 0,
   additionScope = [];
+let additionProcessing = false;
 let draftCellSelection = false;
 let terminalUnavailable = false;
 const unavailableWarning =
   "Some selected cells have no saved translation; their original text is preserved. Review cells that still need translation.";
+const missingResultsWarning =
+  "This job was marked complete, but its saved results are incomplete. The complete download is unavailable until the missing cells are resolved.";
 let zeroChanged = false;
 let previewFailuresRemaining = 0,
   previewFailureResponses = 0,
   previewRequests = 0;
+let previewGate = null,
+  previewGateEntered = null,
+  markPreviewGateEntered = null,
+  releasePreviewGate = null;
 let loseStartResponse = false,
   loseAdditionResponse = false,
   inspectFailuresRemaining = 0,
   inspectFailureResponses = 0;
+let downloadRequests = 0,
+  downloadPostRequests = 0;
 let inspectionGate;
 let inspectionRequests = 0;
 let confirmedScopes = [];
@@ -159,7 +169,7 @@ const job = () => ({
   targetLang: "Russian",
   status: paidRecovery
     ? "error"
-    : partial
+    : partial || additionProcessing
       ? "processing"
       : started
         ? "completed"
@@ -167,13 +177,16 @@ const job = () => ({
           ? "error"
           : "draft",
   progress: paidRecovery ? 13 : started ? 100 : 0,
-  canDownload: started && !partial && !paidRecovery && !terminalUnavailable,
-  canExtend: (started || incremental || paidRecovery) && !partial,
+  canDownload: started && !partial && !paidRecovery && !additionProcessing,
+  canExtend:
+    (started || incremental || paidRecovery) && !partial && !additionProcessing,
   hasTranslation: started,
   canRestoreDraft: failed,
   canReviewRecovery: paidRecovery,
   canRecheckSaved: freeReady,
-  message: paidRecovery
+  message: partialDraft
+    ? "Partial draft ready. Accepted translations are saved; flagged source text remains available for recovery."
+    : paidRecovery
     ? "Translation stopped. Validated cells are retained; the preview is partial and no incomplete download is offered."
     : failed
       ? "Translation did not start because of a saved-selection compatibility error. No translation API requests were made. Return to review to try again."
@@ -181,7 +194,20 @@ const job = () => ({
         ? "1 of 2 text batches completed"
         : "Selected cells processed.",
   createdAt: new Date().toISOString(),
-  usage: freeScenario
+  usage: partialDraft
+    ? {
+        version: 1,
+        requests: 2,
+        inputTokens: 396,
+        outputTokens: 70,
+        cachedInputTokens: 0,
+        translatedCells: 1,
+        completedBatches: 1,
+        totalBatches: 2,
+        flaggedCells: 1,
+        flaggedEntries: 1,
+      }
+    : freeScenario
     ? {
         version: 1,
         requests: 103,
@@ -245,6 +271,10 @@ const server = http.createServer(async (req, res) => {
         assert.equal(data.confirmationKey, "addition-snapshot");
         assert.deepEqual(data.selections, additionScope);
         additionCalls++;
+        // Hold the first committed addition in an active state long enough to
+        // assert that its download link is withdrawn. Later additions retain
+        // the original fast mock behavior for the rest of this smoke test.
+        additionProcessing = additionCalls === 1;
         confirmedScopes.push(...data.selections);
         result = { jobId: job().id };
         if (loseAdditionResponse) {
@@ -316,6 +346,12 @@ const server = http.createServer(async (req, res) => {
         paidRecovery = false;
         result = { jobId: job().id, additionalRequests: 0 };
       }
+    } else if (url.searchParams.get("view") === "download") {
+      if (req.method === "GET") downloadRequests++;
+      else downloadPostRequests++;
+      res.setHeader("Content-Type", "application/octet-stream");
+      res.setHeader("Content-Disposition", 'attachment; filename="mock.xlsx"');
+      return res.end(Buffer.from("mock-xlsx"));
     } else if (url.searchParams.get("view") === "inspect") {
       inspectionRequests++;
       if (inspectionGate) await inspectionGate;
@@ -391,6 +427,10 @@ const server = http.createServer(async (req, res) => {
       };
     } else if (url.searchParams.get("view") === "preview") {
       previewRequests++;
+      if (previewGate) {
+        markPreviewGateEntered?.();
+        await previewGate;
+      }
       if (previewFailuresRemaining > 0) {
         previewFailuresRemaining--;
         previewFailureResponses++;
@@ -404,10 +444,12 @@ const server = http.createServer(async (req, res) => {
       result = {
         range: url.searchParams.get("range"),
         merges: ["C5:D5"],
-        unavailableCells: terminalUnavailable ? 1 : 0,
-        ...(terminalUnavailable
+        unavailableCells: terminalUnavailable || partialDraft ? 1 : 0,
+        ...(terminalUnavailable || partialDraft
           ? {
-              translationWarning: unavailableWarning,
+              translationWarning: partialDraft
+                ? unavailableWarning
+                : missingResultsWarning,
             }
           : {}),
         cells: (incremental && url.searchParams.get("sheet") === "Internal"
@@ -426,7 +468,8 @@ const server = http.createServer(async (req, res) => {
           ...c,
           formula: false,
           translated:
-            (terminalUnavailable || zeroChanged) && c.address === "B2"
+              (terminalUnavailable || partialDraft || zeroChanged) &&
+              c.address === "B2"
               ? c.text
               : additionScope.some(
                     (selection) =>
@@ -445,7 +488,8 @@ const server = http.createServer(async (req, res) => {
                       ? "Солнечные панели"
                       : c.text,
           translationPending: partial && c.address === "B2",
-          translationUnavailable: terminalUnavailable && c.address === "B2",
+          translationUnavailable:
+            (terminalUnavailable || partialDraft) && c.address === "B2",
         })),
       };
     }
@@ -643,6 +687,24 @@ try {
     .getByRole("button", { name: "Confirm and translate selected cells" })
     .click();
   await page.getByRole("link", { name: "Download translated Excel" }).waitFor();
+  const paidCallsBeforeDownload = {
+    startCalls,
+    additionCalls,
+    resumeCalls,
+  };
+  const downloadEvent = page.waitForEvent("download");
+  await page
+    .getByRole("link", { name: "Download translated Excel" })
+    .click();
+  const downloaded = await downloadEvent;
+  assert.equal(downloaded.suggestedFilename(), "mock.xlsx");
+  assert.equal(downloadRequests, 1, "The download control should issue one GET");
+  assert.equal(downloadPostRequests, 0, "The download control must not issue a POST");
+  assert.deepEqual(
+    { startCalls, additionCalls, resumeCalls },
+    paidCallsBeforeDownload,
+    "Downloading must not mutate the translation job",
+  );
   await page.getByRole("button", { name: "compare", exact: true }).click();
   await page.getByText("Солнечные панели", { exact: true }).waitFor();
   assert.equal(
@@ -666,6 +728,49 @@ try {
     fullPage: true,
   });
   assert.deepEqual(errors, []);
+  partialDraft = true;
+  previewGateEntered = new Promise((resolve) => {
+    markPreviewGateEntered = resolve;
+  });
+  previewGate = new Promise((resolve) => {
+    releasePreviewGate = resolve;
+  });
+  await page.reload();
+  await page
+    .getByRole("link", { name: "Download draft Excel", exact: true })
+    .waitFor();
+  await page.getByText(/1 untranslated cell/).first().waitFor();
+  await previewGateEntered;
+  assert.equal(
+    await page
+      .getByRole("link", { name: "Download draft Excel", exact: true })
+      .count(),
+    1,
+    "A valid partial draft stays downloadable before preview resolves",
+  );
+  releasePreviewGate();
+  previewGate = null;
+  previewGateEntered = null;
+  markPreviewGateEntered = null;
+  await cell("B2")
+    .getByText("Needs review · original shown", { exact: true })
+    .waitFor();
+  await page.getByRole("alert").filter({ hasText: /Draft download available/ }).waitFor();
+  await page.screenshot({
+    path: path.join(output, "partial-draft-after-preview.png"),
+    fullPage: true,
+  });
+  assert.equal(
+    await page
+      .getByRole("link", { name: "Download draft Excel", exact: true })
+      .count(),
+    1,
+    "A valid partial draft stays downloadable after preview resolves",
+  );
+  partialDraft = false;
+  console.log(
+    "PASS: partial draft download remains visible before and after a delayed preview, with source-preserved count and warning.",
+  );
   freeReady = true;
   freeScenario = true;
   paidRecovery = true;
@@ -742,8 +847,13 @@ try {
     0,
     "A terminal job must not leave a cell permanently pending",
   );
-  await page.getByText(unavailableWarning, { exact: true }).waitFor();
+  await page.getByText(missingResultsWarning, { exact: true }).waitFor();
   await cell("B2").getByText("Quyosh panellari", { exact: true }).waitFor();
+  assert.equal(
+    await page.getByRole("link", { name: "Download translated Excel" }).count(),
+    0,
+    "An unexplained preview gap must hide the normal complete download",
+  );
   terminalUnavailable = false;
   const callsBeforeRefresh = { startCalls, additionCalls, resumeCalls };
   const requestsBeforeRefresh = previewRequests;
@@ -866,6 +976,15 @@ try {
       exact: true,
     })
     .click();
+  await page.getByRole("button", { name: "Cancel translation", exact: true }).waitFor();
+  assert.equal(
+    await page.getByRole("link", { name: /Download .* Excel/ }).count(),
+    0,
+    "An active addition must not leave a stale download link enabled",
+  );
+  additionProcessing = false;
+  await page.reload();
+  await page.getByRole("button", { name: "Internal", exact: true }).click();
   await page.getByRole("button", { name: "compare", exact: true }).click();
   await page.getByText("Солнечная станция", { exact: true }).waitFor();
   assert.equal(additionCalls, 1);
