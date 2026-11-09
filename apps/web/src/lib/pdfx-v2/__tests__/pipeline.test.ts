@@ -399,6 +399,162 @@ describe('PDF Translator pipeline', () => {
     expect(mocks.complete).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { attempts: 3, maxAttempts: 3 },
+    // Historical rows can retain a larger queue max; the PDF pipeline still
+    // treats its own bounded allowance as the terminal attempt.
+    { attempts: 3, maxAttempts: 1_000 },
+  ])('flags a transient page on the final queue attempt so it remains rerunnable (%o)', async ({ attempts, maxAttempts }) => {
+    const source = layout(1, 'Биринчи саҳифа 100');
+    const documentContext = {
+      sourceLanguage: 'Uzbek', targetLanguage: 'Russian', documentType: 'Resolution',
+      summary: 'Legal', preserveTerms: [], terminology: [],
+    };
+    mocks.findJob.mockResolvedValue({
+      status: 'queued', output_pdf: null, total_pages: 1,
+      document_context: documentContext,
+      metrics: {
+        requiredPipelineVersion: 'luna-layout-v5-native-2026-09-14',
+        requiredModel: 'gpt-5.6-luna',
+        pipelineVersion: 'luna-layout-v5-native-2026-09-14',
+        model: 'gpt-5.6-luna',
+      },
+      pages: [{ page_number: 1, status: 'extracted', source_layout: source, translated_layout: null }],
+    });
+    mocks.findPage.mockResolvedValueOnce({ status: 'extracted', translated_layout: null, validation: {} });
+    mocks.translate.mockRejectedValue(new Error('fetch failed: ETIMEDOUT'));
+    mocks.render.mockImplementationOnce(async (_pages: unknown, outputPath: string) => {
+      const fs = await import('node:fs/promises');
+      await fs.writeFile(outputPath, await onePagePdf());
+    });
+
+    const { processPdfTranslationV2Job } = await import('../pipeline');
+    await processPdfTranslationV2Job({
+      id: '11111111-1111-4111-8111-111111111111',
+      jobType: 'pdf_translation_v5_native', userId: 7,
+      payload: { filename: 'legal.pdf', targetLang: 'Russian', pageCount: 1 },
+      inputData: await onePagePdf(), outputData: null, result: null,
+      status: 'processing' as const, progress: 10, attempts, maxAttempts,
+      progressData: null, lastError: null,
+      leaseOwner: 'worker-1', cancelRequested: false,
+      availableAt: new Date(), leaseExpiresAt: new Date(Date.now() + 60_000),
+      createdAt: new Date(), updatedAt: new Date(), completedAt: null,
+    });
+
+    expect(mocks.updatePage).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: 'translation_error', error_message: expect.stringContaining('ETIMEDOUT') }),
+    }));
+    expect(mocks.complete).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not replay a persisted terminal page during an ordinary queue retry', async () => {
+    const source1 = layout(1, 'Биринчи саҳифа 100');
+    const source2 = layout(2, 'Иккинчи саҳифа 200');
+    const documentContext = {
+      sourceLanguage: 'Uzbek', targetLanguage: 'Russian', documentType: 'Resolution',
+      summary: 'Legal', preserveTerms: [], terminology: [],
+    };
+    mocks.findJob.mockResolvedValue({
+      status: 'queued', output_pdf: null, total_pages: 2,
+      document_context: documentContext,
+      metrics: {
+        requiredPipelineVersion: 'luna-layout-v5-native-2026-09-14',
+        requiredModel: 'gpt-5.6-luna',
+        pipelineVersion: 'luna-layout-v5-native-2026-09-14',
+        model: 'gpt-5.6-luna',
+      },
+      pages: [
+        { page_number: 1, status: 'extraction_error', source_layout: null, translated_layout: null, error_message: 'OCR failed' },
+        { page_number: 2, status: 'extracted', source_layout: source2, translated_layout: null },
+      ],
+    });
+    mocks.findPage.mockResolvedValueOnce({ status: 'extracted', translated_layout: null, validation: {} });
+    mocks.translate.mockResolvedValue({
+      translation: { pageNumber: 2, warnings: [], elements: [{ id: 'e001', text: 'Вторая страница 200', cells: [] }] },
+      layout: source2, attempts: 1, validation: { valid: true, failures: [], warnings: [] },
+      model: 'gpt-5.6-luna', responseId: 'translation-2', inputTokens: 30, outputTokens: 15,
+    });
+    mocks.render.mockImplementationOnce(async (_pages: unknown, outputPath: string) => {
+      const fs = await import('node:fs/promises');
+      await fs.writeFile(outputPath, await twoPagePdf());
+    });
+
+    const { processPdfTranslationV2Job } = await import('../pipeline');
+    await processPdfTranslationV2Job({
+      id: '11111111-1111-4111-8111-111111111111',
+      jobType: 'pdf_translation_v5_native', userId: 7,
+      payload: { filename: 'legal.pdf', targetLang: 'Russian', pageCount: 2 },
+      inputData: await twoPagePdf(), outputData: null, result: null,
+      status: 'processing' as const, progress: 10, attempts: 1, maxAttempts: 3,
+      progressData: null, lastError: null,
+      leaseOwner: 'worker-1', cancelRequested: false,
+      availableAt: new Date(), leaseExpiresAt: new Date(Date.now() + 60_000),
+      createdAt: new Date(), updatedAt: new Date(), completedAt: null,
+    });
+
+    expect(mocks.extract).not.toHaveBeenCalled();
+    expect(mocks.translate).toHaveBeenCalledTimes(1);
+    expect((mocks.translate.mock.calls[0][0] as PdfPageLayout).pageNumber).toBe(2);
+    expect((mocks.complete.mock.calls[0] as unknown[])[3]).toMatchObject({ result: { flaggedPages: 1 } });
+  });
+
+  it('reopens only the selected rerun page and keeps other terminal pages flagged', async () => {
+    const source1 = layout(1, 'Биринчи саҳифа 100');
+    const source2 = layout(2, 'Иккинчи саҳифа 200');
+    const documentContext = {
+      sourceLanguage: 'Uzbek', targetLanguage: 'Russian', documentType: 'Resolution',
+      summary: 'Legal', preserveTerms: [], terminology: [],
+    };
+    mocks.findJob.mockResolvedValue({
+      status: 'queued', output_pdf: null, total_pages: 2,
+      document_context: documentContext,
+      metrics: {
+        requiredPipelineVersion: 'luna-layout-v5-native-2026-09-14',
+        requiredModel: 'gpt-5.6-luna',
+        pipelineVersion: 'luna-layout-v5-native-2026-09-14',
+        model: 'gpt-5.6-luna',
+        pageRerun: { pageNumber: 1, stage: 'translation' },
+      },
+      pages: [
+        { page_number: 1, status: 'extracted', source_layout: source1, translated_layout: null },
+        { page_number: 2, status: 'translation_error', source_layout: source2, translated_layout: null, error_message: 'Page 2 needs review' },
+      ],
+    });
+    mocks.findPage
+      .mockResolvedValueOnce({ status: 'extracted', translated_layout: null, validation: {} })
+      .mockResolvedValueOnce({ status: 'translation_error', translated_layout: null, validation: {} });
+    mocks.translate.mockResolvedValue({
+      translation: { pageNumber: 1, warnings: [], elements: [{ id: 'e001', text: 'Первая страница 100', cells: [] }] },
+      layout: source1, attempts: 1, validation: { valid: true, failures: [], warnings: [] },
+      model: 'gpt-5.6-luna', responseId: 'translation-1', inputTokens: 30, outputTokens: 15,
+    });
+    mocks.render.mockImplementationOnce(async (_pages: unknown, outputPath: string) => {
+      const fs = await import('node:fs/promises');
+      await fs.writeFile(outputPath, await twoPagePdf());
+    });
+
+    const { processPdfTranslationV2Job } = await import('../pipeline');
+    await processPdfTranslationV2Job({
+      id: '11111111-1111-4111-8111-111111111111',
+      jobType: 'pdf_translation_v5_native', userId: 7,
+      payload: { filename: 'legal.pdf', targetLang: 'Russian', pageCount: 2 },
+      inputData: await twoPagePdf(), outputData: null, result: null,
+      status: 'processing' as const, progress: 10, attempts: 1, maxAttempts: 3,
+      progressData: null, lastError: null,
+      leaseOwner: 'worker-1', cancelRequested: false,
+      availableAt: new Date(), leaseExpiresAt: new Date(Date.now() + 60_000),
+      createdAt: new Date(), updatedAt: new Date(), completedAt: null,
+    });
+
+    expect(mocks.translate).toHaveBeenCalledTimes(1);
+    expect((mocks.translate.mock.calls[0][0] as PdfPageLayout).pageNumber).toBe(1);
+    const completion = (mocks.complete.mock.calls[0] as unknown[])[3] as {
+      result: { flaggedPages: number }; metrics: Record<string, unknown>;
+    };
+    expect(completion.result.flaggedPages).toBe(1);
+    expect(completion.metrics).not.toHaveProperty('pageRerun');
+  });
+
   describe('document translation memory for repeated headers', () => {
     const HEADER = '221-сон 04.05.2026. Барқарор ривожланиш ва корпоратив бошқарув тамойиллари';
     const HEADER_RU = '№ 221 от 04.05.2026. Принципы устойчивого развития и корпоративного управления';

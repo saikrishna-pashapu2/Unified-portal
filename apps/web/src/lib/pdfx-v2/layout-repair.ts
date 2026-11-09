@@ -6,6 +6,12 @@ import { enforceEnglishProtection } from './language-protection';
 import { detectCellLanguage, isIdentifierText } from '@/lib/xlsx-translator/language';
 import { repairNativeClosedTable } from './native-closed-table-repair';
 import { containsBox, matchNativeBox, nativeTableRegions, rebuildNativeTable, repairNativeHeaderRowSpans, repairNativeHeaderGrid, unionBoxes, type Box, type NativeGeometry } from './native-geometry';
+import {
+  dropNativeDuplicateTextElements,
+  matchNativeBoxWithBoundedDrift,
+  normalizeUniqueReadingOrders,
+  splitOversizedNativeTextElement,
+} from './layout-native-repair';
 
 export const EXTRACTION_RECOVERY_VERSION = 'v5-local-repair-1';
 export type ExtractionRecovery = {
@@ -112,13 +118,14 @@ function normalizeSafeTableEnvelope(table: PdfElement): PdfElement {
  * the axis with the smaller intrusion. Heavy overlap (over 60% of the smaller
  * box) still fails validation so a genuinely duplicated extraction is
  * re-requested rather than hidden. Thresholds mirror validateExtractedPage. */
-function separateOverlappingProse(elements: PdfElement[]): PdfElement[] {
+function separateOverlappingProse(elements: PdfElement[], eligibleIds?: ReadonlySet<string>): PdfElement[] {
   const out = elements.map(element => ({ ...element, bbox: [...element.bbox] as PdfElement['bbox'] }));
   for (let pass = 0; pass < 3; pass += 1) {
     let changed = false;
     for (let i = 0; i < out.length; i += 1) for (let j = i + 1; j < out.length; j += 1) {
       const a = out[i], b = out[j];
       if (!isTextualElement(a) || !isTextualElement(b) || a.kind === 'table' || b.kind === 'table') continue;
+      if (eligibleIds && (!eligibleIds.has(a.id) || !eligibleIds.has(b.id))) continue;
       const overlap = intersection(a.bbox, b.bbox);
       const smaller = Math.min(area(a.bbox), area(b.bbox));
       if (smaller <= 0 || overlap <= 300 || overlap / smaller <= 0.15 || overlap / smaller > 0.6) continue;
@@ -167,6 +174,48 @@ function clearTableEdges(elements: PdfElement[]): PdfElement[] {
     }
     return bbox.every((value, index) => value === element.bbox[index]) ? element : { ...element, bbox };
   });
+}
+
+/** Native text is allowed to guide repairs only for blocks that were already
+ * involved in an extraction overlap. This prevents a successful but distant
+ * native match from moving an otherwise valid paragraph into a neighbour. */
+function originalOverlapIds(elements: readonly PdfElement[]): Set<string> {
+  const ids = new Set<string>();
+  const textual = elements.filter((element) =>
+    isTextualElement(element) && element.kind !== 'table' && element.text.trim(),
+  );
+  for (let leftIndex = 0; leftIndex < textual.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < textual.length; rightIndex += 1) {
+      const left = textual[leftIndex]!;
+      const right = textual[rightIndex]!;
+      const overlap = intersection(left.bbox, right.bbox);
+      const smaller = Math.min(area(left.bbox), area(right.bbox));
+      if (smaller > 0 && overlap > 300 && overlap / smaller > 0.15) {
+        ids.add(left.id);
+        ids.add(right.id);
+      }
+    }
+  }
+  return ids;
+}
+
+function hasValidationOverlap(left: PdfElement, right: PdfElement): boolean {
+  const overlap = intersection(left.bbox, right.bbox);
+  const smaller = Math.min(area(left.bbox), area(right.bbox));
+  return smaller > 0 && overlap > 300 && overlap / smaller > 0.15;
+}
+
+/** Reject a native box when it would create a new validation overlap. */
+function doesNotIntroduceOverlap(
+  element: PdfElement,
+  bbox: Box,
+  originalElements: readonly PdfElement[],
+): boolean {
+  const candidate = { ...element, bbox };
+  return originalElements.every((other) =>
+    other.id === element.id || !isTextualElement(other) ||
+    !hasValidationOverlap(candidate, other) || hasValidationOverlap(element, other),
+  );
 }
 
 // Filling a few blank holes is geometry; filling many could hide cells the
@@ -323,33 +372,54 @@ export function repairExtractedLayout(
     filled+=repaired.filled;
     return repaired.table;
   };
-  const elements=clearTableEdges(separateOverlappingProse(indexed.elements.filter(element=>!isEmptySemanticArtifact(element)).map(element=> {
-    if(element.kind==='table') {
-      if(!native) return normalizeSafeTableEnvelope(repairGrid(element));
-      const matches=regions.filter(b=>intersection(b,element.bbox)/Math.max(1,area(b)+area(element.bbox)-intersection(b,element.bbox))>0.55);
-      const rebuilt=rebuildNativeTable({...element,bbox:matches.length===1?matches[0]:element.bbox},native);
+  const overlapIds = originalOverlapIds(indexed.elements);
+  const repaired: PdfElement[] = [];
+  for (const sourceElement of indexed.elements.filter(element=>!isEmptySemanticArtifact(element))) {
+    if (sourceElement.kind === 'table') {
+      if (!native) {
+        repaired.push(normalizeSafeTableEnvelope(repairGrid(sourceElement)));
+        continue;
+      }
+      const matches=regions.filter(b=>intersection(b,sourceElement.bbox)/Math.max(1,area(b)+area(sourceElement.bbox)-intersection(b,sourceElement.bbox))>0.55);
+      const rebuilt=rebuildNativeTable({...sourceElement,bbox:matches.length===1?matches[0]:sourceElement.bbox},native);
       // Preserve the production grid repair, but let the closed native-table
       // repair run before it can be masked by OCR topology salvage.
-      const repaired = rebuilt
-        ?? repairNativeClosedTable(element, native, indexed.elements)
-        ?? repairNativeHeaderRowSpans(element, native)
-        ?? repairNativeHeaderGrid(element, native);
-      return normalizeSafeTableEnvelope(repairGrid(repaired ?? element));
+      const table = rebuilt
+        ?? repairNativeClosedTable(sourceElement, native, indexed.elements)
+        ?? repairNativeHeaderRowSpans(sourceElement, native)
+        ?? repairNativeHeaderGrid(sourceElement, native)
+        ?? sourceElement;
+      repaired.push(normalizeSafeTableEnvelope(repairGrid(table)));
+      continue;
     }
-    if(!native) return element;
-    // OCR sometimes labels a printed document ID as `other`. Do not erase its
-    // text to satisfy the visual-only contract: promote only a uniquely and
-    // exactly corroborated native text region, never artwork or a scan.
+    if (!native) {
+      repaired.push(sourceElement);
+      continue;
+    }
+    // A page-sized text box can be invalid even when it has no neighbour.
+    const split = splitOversizedNativeTextElement(sourceElement, native);
+    if (split) {
+      repaired.push(...split);
+      continue;
+    }
+    let element = sourceElement;
+    // OCR sometimes labels a printed document ID as `other`. Promote only a
+    // uniquely corroborated native region, never artwork or a scan.
     if(element.kind==='other' && element.text.trim() && !element.rows.length &&
        element.rowCount===0 && element.columnCount===0) {
-      const bbox=matchNativeBox(element.text,element.bbox,native);
-      if(bbox) return {...element,kind:'paragraph' as const,bbox,
+      const bbox=(overlapIds.has(element.id) ? matchNativeBoxWithBoundedDrift : matchNativeBox)(element.text,element.bbox,native);
+      if(bbox && doesNotIntroduceOverlap(element,bbox,indexed.elements)) element={...element,kind:'paragraph' as const,bbox,
         translate:element.translate && !isIdentifierText(element.text)};
+    } else if(isTextualElement(element) && element.text.trim()) {
+      const bbox=(overlapIds.has(element.id) ? matchNativeBoxWithBoundedDrift : matchNativeBox)(element.text,element.bbox,native);
+      if(bbox && doesNotIntroduceOverlap(element,bbox,indexed.elements)) element={...element,bbox};
     }
-    if(!isTextualElement(element) || !element.text.trim()) return element;
-    const bbox=matchNativeBox(element.text,element.bbox,native);
-    return bbox ? {...element,bbox} : element;
-  })));
+    repaired.push(element);
+  }
+  const deduplicated = native ? dropNativeDuplicateTextElements(repaired,native) : repaired;
+  const elements=clearTableEdges(separateOverlappingProse(
+    normalizeUniqueReadingOrders(deduplicated), overlapIds,
+  ));
   return {
     ...indexed,
     elements,

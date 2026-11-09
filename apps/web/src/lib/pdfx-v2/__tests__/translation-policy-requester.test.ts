@@ -10,7 +10,10 @@ describe('default requester unit policy consistency (no API)', () => {
   it('uses identical higher-priority fidelity instructions for context, translation and review', async () => {
     const { defaultPdfxV2Requester } = await import('../openai');
     const source: PdfPageLayout = { pageNumber: 7, width: 1000, height: 1000, orientation: 'portrait', sourceLanguage: 'Uzbek', sourceScript: 'Cyrillic', warnings: [], elements: [] };
-    const context = { sourceLanguage: 'Uzbek', targetLanguage: 'Russian', documentType: 'Report', summary: 'Energy', preserveTerms: ['млрд. сўм', 'Company'], terminology: [] };
+    const context = { sourceLanguage: 'Uzbek', targetLanguage: 'Russian', documentType: 'Report', summary: 'Energy', preserveTerms: ['млрд. сўм', 'Company'], terminology: [
+      { source: '«Qorasuvenergo» AJ', target: 'АО «Qorasuvэнерго»', note: 'Company name' },
+      { source: 'IPO', target: 'IPO', note: 'Acronym' },
+    ] };
     const translation = { pageNumber: 7, elements: [], warnings: [] };
     const review = { pageNumber: 7, complete: true, meaningPreserved: true, targetLanguageSatisfied: true, tableStructurePreserved: true, failures: [], warnings: [] };
     for (const value of [context, translation, review]) create.mockResolvedValueOnce({
@@ -29,8 +32,11 @@ describe('default requester unit policy consistency (no API)', () => {
     for (const [args] of create.mock.calls.slice(1)) {
       expect(args.input).toContain('"preserveTerms":["Company"]');
       expect(args.input).not.toContain('"млрд. сўм"');
+      expect(args.input).not.toContain('Qorasuvэнерго');
+      expect(args.input).toContain('"target":"IPO"');
     }
     expect(create.mock.calls[2][0].input).toContain('all material defects');
     expect(context.preserveTerms).toEqual(['млрд. сўм', 'Company']);
+    expect(context.terminology[0].target).toBe('АО «Qorasuvэнерго»');
   });
 });

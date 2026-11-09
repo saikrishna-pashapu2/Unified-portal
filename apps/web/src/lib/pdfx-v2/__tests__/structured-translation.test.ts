@@ -6,6 +6,7 @@ import {
   mergePageTranslation,
   pageLayoutForTranslation,
   pageLayoutToPlainText,
+  preserveSourceCellsInProposal,
 } from '../serialize';
 import { validateExtractedPage, validateTranslatedPage } from '../validation';
 
@@ -244,6 +245,20 @@ describe('PDF Translator structured page contract', () => {
 
     expect(result.valid).toBe(false);
     expect(result.failures.join(' ')).toMatch(/protected English.*cell/i);
+  });
+
+  it('restores protected source cells at the fresh translation boundary', () => {
+    const source = wideTable();
+    const protectedCell = source.elements[0].rows[0].cells[0];
+    protectedCell.translate = false;
+    protectedCell.text = 'Purpose';
+    const proposal = translatedTable(source);
+    proposal.elements[0].cells[0].text = 'Цель';
+
+    const preserved = preserveSourceCellsInProposal(source, proposal);
+
+    expect(preserved.elements[0].cells[0].text).toBe('Purpose');
+    expect(preserved.elements[0].cells[1].text).toBe('Колонка 2');
   });
 
   it('rejects visual styling descriptions instead of translating them literally', () => {

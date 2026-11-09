@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { PdfPageLayout } from '../schemas';
-import { enforceEnglishProtection, looksDefinitelyEnglish } from '../language-protection';
+import {
+  enforceEnglishProtection,
+  looksDefinitelyEnglish,
+  looksDefinitelyRussian,
+} from '../language-protection';
 
 describe('PDF Translator English protection', () => {
   it('recognizes clear English without misclassifying Uzbek Latin', () => {
@@ -58,5 +62,28 @@ describe('PDF Translator English protection', () => {
     expect(routed.elements[1].translate).toBe(true);
     expect(routed.elements[2].rows[0].cells.map((cell) => cell.translate))
       .toEqual([false, true]);
+  });
+
+  it('recognizes Russian legal text without protecting Uzbek Cyrillic stubs', () => {
+    expect(looksDefinitelyRussian(
+      'Минимальная структура плана мероприятий и ответственность участника',
+    )).toBe(true);
+    expect(looksDefinitelyRussian(
+      'КОНФИДЕНЦИАЛЬНОСТЬ НЕЗАВИСИМОСТЬ КОНФЛИКТ ИНТЕРЕСОВ',
+    )).toBe(true);
+    expect(looksDefinitelyRussian('Общая информация')).toBe(true);
+    expect(looksDefinitelyRussian('Стратегия системы управления ресурсами')).toBe(true);
+    expect(looksDefinitelyRussian('Штатное расписание')).toBe(true);
+    expect(looksDefinitelyRussian('План работ: topshirish.')).toBe(false);
+    expect(looksDefinitelyRussian('Должности сотрудников')).toBe(true);
+    expect(looksDefinitelyRussian(
+      'План работ. Soliq hisobotini tayyorlash va topshirish.',
+    )).toBe(false);
+    expect(looksDefinitelyRussian(
+      'Ушбу ҳужжат давлат органлари томонидан амалга оширилади',
+    )).toBe(false);
+    expect(looksDefinitelyRussian(
+      'Бош ишлар учун ва уларнинг натижалари',
+    )).toBe(false);
   });
 });

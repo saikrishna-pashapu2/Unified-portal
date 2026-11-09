@@ -380,7 +380,10 @@ function translatablePageText(layout: PdfPageLayout): string {
         const cells = [...row.cells]
           .sort((left, right) => left.columnIndex - right.columnIndex)
           .filter((cell) => cell.translate);
-        if (cells.length) blocks.push(cells.map((cell) => cell.text).join('\t'));
+        if (cells.length) {
+          // Cell-internal wrapping is not a structural row or column separator.
+          blocks.push(cells.map((cell) => cell.text.replace(/[\r\n\t]+/g, ' ')).join('\t'));
+        }
       }
     } else if (element.text.trim()) {
       blocks.push(element.text.trim());

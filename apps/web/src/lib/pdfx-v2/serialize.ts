@@ -145,3 +145,39 @@ export function mergePageTranslation(
 export function allCells(element: PdfElement): PdfCell[] {
   return element.rows.flatMap((row) => row.cells);
 }
+
+/** Copy immutable source text back into a structurally exact fresh provider
+ * proposal. Missing IDs or changed order are left untouched so validation can
+ * report the actual structural failure. Persisted checkpoints are never
+ * normalized through this helper. */
+export function preserveSourceCellsInProposal(
+  source: PdfPageLayout,
+  proposal: PdfPageTranslation,
+): PdfPageTranslation {
+  const sourceElements = source.elements.filter(isTranslatableElement);
+  if (source.pageNumber !== proposal.pageNumber || sourceElements.length !== proposal.elements.length) {
+    return proposal;
+  }
+  const sourceById = new Map(sourceElements.map((element) => [element.id, element]));
+  if (sourceById.size !== sourceElements.length || proposal.elements.some((element) => !sourceById.has(element.id))) {
+    return proposal;
+  }
+  const sourceCellsById = new Map(sourceElements.map((element) => [element.id, allCells(element)]));
+  if (!proposal.elements.every((element) => {
+    const sourceCells = sourceCellsById.get(element.id);
+    return sourceCells !== undefined &&
+      element.cells.length === sourceCells.length &&
+      sourceCells.every((cell, cellIndex) => cell.id === element.cells[cellIndex]?.id);
+  })) return proposal;
+  return {
+    ...proposal,
+    elements: proposal.elements.map((element) => ({
+      ...element,
+      cells: element.cells.map((cell, cellIndex) =>
+        sourceCellsById.get(element.id)![cellIndex]!.translate
+          ? cell
+          : { ...cell, text: sourceCellsById.get(element.id)![cellIndex]!.text },
+      ),
+    })),
+  };
+}

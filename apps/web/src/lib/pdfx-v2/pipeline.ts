@@ -28,6 +28,7 @@ import {
 import {
   budgetedRequester,
   emptyRequestLedger,
+  PdfxTranslationStopError,
   PdfxWorkerVersionError,
   isPdfxWorkerControlFlowError,
   isPdfxTerminalError,
@@ -37,11 +38,12 @@ import { assembleDraftPdf, type FlaggedPage } from './draft-assembly';
 import { parseExtractionRecovery } from './layout-repair';
 import { withPdfTranslationLease } from './lease-checkpoint';
 import { renderPdfxV2Document } from './render';
-import { hasTranslatableText, mergePageTranslation, pageLayoutToPlainText } from './serialize';
+import { hasTranslatableText, isTranslatableElement, mergePageTranslation, pageLayoutToPlainText } from './serialize';
 import { validateTranslatedPage } from './validation';
 import {
   combineTranslation,
   harvestTranslationMemory,
+  memoryKey,
   memoryEntries,
   parsePinnedTranslations,
   parseTranslationMemory,
@@ -72,9 +74,15 @@ type StoredMetrics = {
   contextModel?: string;
   contextResponseId?: string;
   translationMemory?: TranslationMemory;
+  pageRerun?: PageRerunMarker;
   sharedBlocksRecovery?: unknown;
   sharedBlocksInputTokens?: number;
   sharedBlocksOutputTokens?: number;
+};
+
+type PageRerunMarker = {
+  pageNumber: number;
+  stage: 'extraction' | 'translation';
 };
 
 // Worker replays cannot extend the durable per-page API allowance.
@@ -91,6 +99,80 @@ function errorMessage(error: unknown): string {
 function parseContext(value: unknown): DocumentContext | null {
   const parsed = DocumentContextSchema.safeParse(value);
   return parsed.success ? parsed.data : null;
+}
+
+function parsePageRerunMarker(value: unknown): PageRerunMarker | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const marker = value as { pageNumber?: unknown; stage?: unknown };
+  if (
+    !Number.isInteger(marker.pageNumber) ||
+    (marker.pageNumber as number) < 1 ||
+    (marker.pageNumber as number) > 10_000 ||
+    (marker.stage !== 'extraction' && marker.stage !== 'translation')
+  ) return undefined;
+  return { pageNumber: marker.pageNumber as number, stage: marker.stage };
+}
+
+/**
+ * A translation checkpoint may have been generated from a reduced source
+ * layout after repeated document blocks were pinned. Rebuild that reduced
+ * layout only when the saved pins are still corroborated by the same-job
+ * translation memory; otherwise the normal full-source fingerprint check
+ * fails closed.
+ */
+function layoutWithoutPinnedTranslations(
+  source: StoredPdfPageLayout,
+  pins: Record<string, string>,
+): StoredPdfPageLayout {
+  return {
+    ...source,
+    elements: source.elements.filter((element) => pins[element.id] === undefined),
+  };
+}
+
+function pinsForSource(
+  source: StoredPdfPageLayout,
+  value: unknown,
+  memoryValue: unknown,
+): Record<string, string> | undefined {
+  const pins = parsePinnedTranslations(value);
+  if (!pins) return undefined;
+  const memory = parseTranslationMemory(memoryValue);
+  const translatableIds = new Set(
+    source.elements
+      .filter((element) => isTranslatableElement(element) && element.kind !== 'table')
+      .map((element) => element.id),
+  );
+  if (!Object.keys(pins).every((id) => translatableIds.has(id))) return undefined;
+  const sourceElements = new Map(source.elements.map((element) => [element.id, element]));
+  // Older production checkpoints predate durable document-level memory. The
+  // page checkpoint still contains the exact pins used to create its saved
+  // fingerprint, so retain those pins when the memory snapshot is absent.
+  // When a snapshot is present, corroborate every source key and target.
+  if (!memory || memory.keys.length === 0) return pins;
+  return Object.entries(pins).every(([id, target]) => {
+    const sourceText = sourceElements.get(id)?.text;
+    if (typeof sourceText !== 'string') return false;
+    const key = memoryKey(sourceText);
+    return memory.keys.includes(key) && memory.entries[key] === target;
+  }) ? pins : undefined;
+}
+
+function combinePinnedTranslations(
+  source: StoredPdfPageLayout,
+  pins: Record<string, string>,
+  partial: TranslatedPageResult['translation'],
+): TranslatedPageResult['translation'] {
+  const translated = new Map(partial.elements.map((element) => [element.id, element]));
+  return {
+    ...partial,
+    pageNumber: source.pageNumber,
+    elements: source.elements.filter(isTranslatableElement).map((element) =>
+      pins[element.id] !== undefined
+        ? { id: element.id, text: pins[element.id], cells: [] }
+        : translated.get(element.id) ?? { id: element.id, text: '', cells: [] },
+    ),
+  };
 }
 
 type SplitPdfPage = {
@@ -240,6 +322,11 @@ export async function processPdfTranslationV2Job(
   const checkpointCompatible =
     priorMetrics.pipelineVersion === PDFX_V2_PIPELINE_VERSION &&
     priorMetrics.model === PDFX_V2_MODEL;
+  if (parsePageRerunMarker(priorMetrics.pageRerun) && !checkpointCompatible) {
+    throw new PdfxWorkerVersionError(
+      'Page-only rerun requires compatible saved checkpoints; no pages were removed or model requests sent.',
+    );
+  }
   let storedMetrics: StoredMetrics = {
     ...(checkpointCompatible ? priorMetrics : {}),
     requestLedger: priorMetrics.requestLedger ?? emptyRequestLedger(),
@@ -343,6 +430,9 @@ export async function processPdfTranslationV2Job(
     const persistedPages = new Map(
       (checkpointCompatible ? existing.pages : []).map((page) => [page.page_number, page]),
     );
+    const pageRerun = parsePageRerunMarker(priorMetrics.pageRerun);
+    const skipPersistedTerminalPage = (pageNumber: number) =>
+      pageRerun === undefined || pageRerun.pageNumber !== pageNumber;
     // Terminal content failures no longer fail the whole job: the page is
     // flagged (null slot), skipped, and delivered as an original-page draft
     // placeholder the user can rerun individually. Transient provider errors
@@ -352,14 +442,49 @@ export async function processPdfTranslationV2Job(
       !isPdfxWorkerControlFlowError(error) &&
       !(error instanceof PdfxWorkerVersionError) &&
       isPdfxTerminalError(error);
+    // PDF Translator jobs are intentionally capped at the pipeline's own
+    // bounded retry allowance even if an older queue row has a larger
+    // max_attempts value.
+    const finalQueueAttempt = job.attempts >= Math.min(job.maxAttempts, PDF_TRANSLATION_MAX_ATTEMPTS);
+    const persistedFlag = (page: { status: string; error_message: string | null }): FlaggedPage | undefined => {
+      if (page.status === 'extraction_error') {
+        return {
+          stage: 'extraction',
+          error: page.error_message ?? 'The persisted page extraction failed.',
+        };
+      }
+      if (page.status === 'translation_error') {
+        return {
+          stage: 'translation',
+          error: page.error_message ?? 'The persisted page translation failed.',
+        };
+      }
+      return undefined;
+    };
     const sourceLayouts: (StoredPdfPageLayout | null)[] = [];
 
     for (let index = 0; index < pagePdfs.length; index += 1) {
       const pageNumber = index + 1;
       const prior = persistedPages.get(pageNumber);
+      // Ordinary queue retries must not reopen a terminal page and spend its
+      // exhausted checkpoint again. The explicit rerun marker scopes the
+      // reopened page to the user's action.
+      if (prior?.status === 'extraction_error' && skipPersistedTerminalPage(pageNumber)) {
+        flaggedPages.set(pageNumber, persistedFlag(prior)!);
+        sourceLayouts.push(null);
+        continue;
+      }
       const storedLayout = parseStoredPdfPageLayout(prior?.source_layout);
       if (storedLayout) {
         sourceLayouts.push(withPhysicalPageSize(storedLayout, pagePdfs[index]));
+        if (prior?.status === 'translation_error' && skipPersistedTerminalPage(pageNumber)) {
+          flaggedPages.set(pageNumber, persistedFlag(prior)!);
+        }
+        continue;
+      }
+      if (prior?.status === 'translation_error' && skipPersistedTerminalPage(pageNumber)) {
+        flaggedPages.set(pageNumber, persistedFlag(prior)!);
+        sourceLayouts.push(null);
         continue;
       }
 
@@ -389,21 +514,32 @@ export async function processPdfTranslationV2Job(
           },
         );
       } catch (error) {
+        // Keep transient provider failures retryable while queue attempts
+        // remain. On the final queue attempt, persist a user-rerunnable page
+        // flag instead of leaving the page in `extracting` forever after the
+        // queue transitions the job to error.
+        const terminal = pageFlaggable(error) || (
+          finalQueueAttempt &&
+          !isPdfxWorkerControlFlowError(error) &&
+          !(error instanceof PdfxWorkerVersionError)
+        );
         await esgPrisma.pdf_translation_v2_pages.upsert({
           where: { job_id_page_number: { job_id: job.id, page_number: pageNumber } },
           create: {
             job_id: job.id,
             page_number: pageNumber,
-            status: 'extraction_error',
+            status: terminal ? 'extraction_error' : 'extracting',
             error_message: errorMessage(error),
             warnings: [],
           },
           update: {
-            status: 'extraction_error',
+            // Retryable provider/transport failures stay non-terminal so a
+            // later queue attempt can retry them automatically.
+            status: terminal ? 'extraction_error' : 'extracting',
             error_message: errorMessage(error),
           },
         });
-        if (!pageFlaggable(error)) throw error;
+        if (!terminal) throw error;
         flaggedPages.set(pageNumber, { stage: 'extraction', error: errorMessage(error) });
         sourceLayouts.push(null);
         continue;
@@ -518,6 +654,13 @@ export async function processPdfTranslationV2Job(
       const current = await esgPrisma.pdf_translation_v2_pages.findUnique({
         where: { job_id_page_number: { job_id: job.id, page_number: pageNumber } },
       });
+      if (
+        (current?.status === 'extraction_error' || current?.status === 'translation_error') &&
+        skipPersistedTerminalPage(pageNumber)
+      ) {
+        flaggedPages.set(pageNumber, persistedFlag(current)!);
+        continue;
+      }
       const storedTranslation = parseStoredPdfPageLayout(current?.translated_layout);
       if (current?.status === 'translated' && storedTranslation) {
         translatedLayouts.push(withPhysicalPageSize(storedTranslation, pagePdfs[index]));
@@ -530,16 +673,26 @@ export async function processPdfTranslationV2Job(
         `Translating and validating page ${pageNumber}/${sourceLayouts.length}…`,
         pageNumber,
       );
-      const prior = (current?.validation && typeof current.validation === 'object'
-        ? current.validation
-        : {}) as { translationRecovery?: unknown; denseTranslation?: unknown; pinnedFromMemory?: unknown };
-      const priorRecovery = prior.translationRecovery ?? prior.denseTranslation;
-      // Pins are saved with the page checkpoint: a resumed page must rebuild
-      // exactly the source layout its recovery fingerprint was computed from.
-      const pins = source.nativeTable
-        ? {}
-        : parsePinnedTranslations(prior.pinnedFromMemory) ?? (priorRecovery ? {} : pinnedTranslations(source, memory));
+      const currentValidation = current?.validation && typeof current.validation === 'object'
+        ? current.validation as { translationRecovery?: unknown; denseTranslation?: unknown; pinnedFromMemory?: unknown }
+        : {};
+      const priorRecovery = currentValidation.translationRecovery ?? currentValidation.denseTranslation;
+      const hasSavedTranslationRecovery =
+        currentValidation.translationRecovery !== undefined || currentValidation.denseTranslation !== undefined;
+      // Translation-memory pages checkpoint the reduced source. Reconstruct
+      // that exact source only when the saved pins are still corroborated by
+      // the same-job memory; malformed or stale pins fail closed to the full
+      // source instead of silently changing the recovery fingerprint.
+      const pinnedFromCheckpoint = source.nativeTable || !hasSavedTranslationRecovery
+        ? undefined
+        : pinsForSource(source, currentValidation.pinnedFromMemory, storedMetrics.translationMemory);
+      const pins = pinnedFromCheckpoint ?? (
+        source.nativeTable || hasSavedTranslationRecovery ? {} : pinnedTranslations(source, memory)
+      );
       const pinnedCount = Object.keys(pins).length;
+      const translationSource = pinnedFromCheckpoint
+        ? layoutWithoutPinnedTranslations(source, pinnedFromCheckpoint)
+        : (pinnedCount ? withoutPinned(source, pins) : source);
       const saveRecovery = (withPins: boolean) => async (state: { version?: string }) => {
         await withPdfTranslationLease(job.id, job.leaseOwner, transaction =>
           transaction.pdf_translation_v2_pages.update({
@@ -559,10 +712,35 @@ export async function processPdfTranslationV2Job(
             resume: priorRecovery,
             save: saveRecovery(false),
           });
+        } else if (pinnedFromCheckpoint) {
+          // A resumed reduced-source request must put the durable pins back
+          // before validation. A combined page that fails validation is a
+          // terminal checkpoint failure, not a reason to spend an unbounded
+          // full-page fallback request.
+          translated = await translatePageWithOpenAi(translationSource, context, job.payload.targetLang, requester, {
+            resume: priorRecovery,
+            save: saveRecovery(true),
+          });
+          const combined = combinePinnedTranslations(source, pinnedFromCheckpoint, translated.translation);
+          const combinedValidation = validateTranslatedPage(source, combined, job.payload.targetLang);
+          if (!combinedValidation.valid) {
+            throw new PdfxTranslationStopError(
+              `Saved pinned translation for page ${pageNumber} failed full-page validation: ${combinedValidation.failures.join('; ')}`,
+            );
+          }
+          translated = {
+            ...translated,
+            layout: source,
+            translation: combined,
+            validation: {
+              ...translated.validation,
+              ...combinedValidation,
+              warnings: [...translated.validation.warnings, ...combinedValidation.warnings],
+            },
+          };
         } else {
-          const remaining = withoutPinned(source, pins);
-          const partial = hasTranslatableText(remaining)
-            ? await translatePageWithOpenAi(remaining, context, job.payload.targetLang, requester, {
+          const partial = hasTranslatableText(translationSource)
+            ? await translatePageWithOpenAi(translationSource, context, job.payload.targetLang, requester, {
                 resume: priorRecovery,
                 save: saveRecovery(true),
               })
@@ -595,14 +773,24 @@ export async function processPdfTranslationV2Job(
         }
       } catch (error) {
         if (isPdfxWorkerControlFlowError(error)) throw error;
+        // Keep transient provider failures retryable while queue attempts
+        // remain. On the final queue attempt, persist a user-rerunnable page
+        // flag instead of leaving the page in `translating` forever after the
+        // queue transitions the job to error.
+        const terminal = pageFlaggable(error) || (
+          finalQueueAttempt &&
+          !(error instanceof PdfxWorkerVersionError)
+        );
         await withPdfTranslationLease(job.id, job.leaseOwner, transaction => transaction.pdf_translation_v2_pages.update({
           where: { job_id_page_number: { job_id: job.id, page_number: pageNumber } },
           data: {
-            status: 'translation_error',
+            // Retryable provider/transport failures stay non-terminal so a
+            // later queue attempt can retry them automatically.
+            status: terminal ? 'translation_error' : 'translating',
             error_message: errorMessage(error),
           },
         }));
-        if (!pageFlaggable(error)) throw error;
+        if (!terminal) throw error;
         flaggedPages.set(pageNumber, { stage: 'translation', error: errorMessage(error) });
         continue;
       }
@@ -647,13 +835,18 @@ export async function processPdfTranslationV2Job(
       where: { job_id: job.id },
       _sum: { input_tokens: true, output_tokens: true },
     });
+    // The marker scopes only this explicit rerun. Once the job reaches a
+    // durable completion (including a partial draft), future queue attempts
+    // must not inherit the old page's skip scope.
+    const completionMetrics = { ...storedMetrics };
+    delete completionMetrics.pageRerun;
     const flaggedSummary = Array.from(flaggedPages.entries()).map(([page, flag]) => ({
       page,
       stage: flag.stage,
       error: flag.error.slice(0, 600),
     }));
     const metrics = {
-      ...storedMetrics,
+      ...completionMetrics,
       pageInputTokens: usage._sum.input_tokens ?? 0,
       pageOutputTokens: usage._sum.output_tokens ?? 0,
       sourcePages: sourceLayouts.length,

@@ -310,7 +310,7 @@ describe('bounded, durable targeted recovery',()=> {
 describe('dense table translation without whole-page replays',()=> {
   it('keeps distinct columns and header roles separate even for identical wording',()=> {
     const t=table();t.columnCount=2;
-    t.rows.flatMap(row=>row.cells).forEach(cell=>{cell.text='Ушбу ҳужжат';});
+    t.rows.flatMap(row=>row.cells).forEach(cell=>{cell.text='Ушбу ҳужжат бўйича муҳим маълумот';});
     expect(planNativeTableBatches(page([t])).entries.size).toBe(4);
     t.rows.flatMap(row=>row.cells).forEach(cell=>{cell.isHeader=false;});
     expect(planNativeTableBatches(page([t])).entries.size).toBe(2);
@@ -341,6 +341,46 @@ describe('dense table translation without whole-page replays',()=> {
     const second=await translatePageWithOpenAi(source,context,'Russian',r,{resume:state});
     expect(second.translation).toEqual(result.translation);
     expect(translate).toHaveBeenCalledTimes(1);expect(validate).toHaveBeenCalledTimes(1);
+  });
+  it('reuses a valid native checkpoint when an explicit rerun marker is present',async()=> {
+    const t=table();t.columnCount=2;
+    t.rows.flatMap(row=>row.cells).forEach(cell=>{cell.text='Ушбу ҳужжат бўйича муҳим маълумот';});
+    const source={...page([t]),nativeTable:true};
+    const translate=vi.fn(async(args:any)=>({ ...response(page()),value:{pageNumber:1,warnings:[],elements:args.source.elements.map((e:any)=>({id:e.id,text:'Перевод',cells:[]}))} }));
+    const validate=vi.fn(async()=>({...response(page()),value:{pageNumber:1,complete:true,meaningPreserved:true,targetLanguageSatisfied:true,tableStructurePreserved:true,failures:[],warnings:[]}}));
+    const r=provider({translate,validate});
+    const context={sourceLanguage:'Uzbek',targetLanguage:'Russian',documentType:'Table',summary:'Test',preserveTerms:[],terminology:[]};
+    let state:any;
+    await translatePageWithOpenAi(source,context,'Russian',r,{save:async s=>{state=structuredClone(s);}});
+    state.retryRequested=true;
+    const rerun=await translatePageWithOpenAi(source,context,'Russian',r,{resume:state});
+    expect(rerun.translation.elements).toHaveLength(1);
+    expect(rerun.inputTokens).toBe(0);
+    expect(translate).toHaveBeenCalledTimes(1);
+    expect(validate).toHaveBeenCalledTimes(1);
+  });
+  it('reopens only the independently invalid native value on an explicit rerun',async()=> {
+    const t=table();t.columnCount=2;
+    t.rows.flatMap(row=>row.cells).forEach(cell=>{cell.text='Ушбу ҳужжат 100';});
+    const source={...page([t]),nativeTable:true};
+    const translate=vi.fn(async(args:any)=>({ ...response(page()),value:{pageNumber:1,warnings:[],elements:args.source.elements.map((e:any)=>({id:e.id,text:'Перевод 100',cells:[]}))} }));
+    const validate=vi.fn(async()=>({...response(page()),value:{pageNumber:1,complete:true,meaningPreserved:true,targetLanguageSatisfied:true,tableStructurePreserved:true,failures:[],warnings:[]}}));
+    const r=provider({translate,validate});
+    const context={sourceLanguage:'Uzbek',targetLanguage:'Russian',documentType:'Table',summary:'Test',preserveTerms:[],terminology:[]};
+    let state:any;
+    await translatePageWithOpenAi(source,context,'Russian',r,{save:async s=>{state=structuredClone(s);}});
+    const entries=planNativeTableBatches(source).entries;
+    const badKey=Array.from(entries.keys())[0]!;
+    state.values[badKey]='Ушбу ҳужжат 999';
+    state.retryRequested=true;
+    const snapshots:any[]=[];
+    const result=await translatePageWithOpenAi(source,context,'Russian',r,{resume:state,save:async s=>{snapshots.push(structuredClone(s));}});
+    expect(result.validation.valid).toBe(true);
+    expect(translate).toHaveBeenCalledTimes(2);
+    expect(translate.mock.calls[1][0].source.elements).toHaveLength(1);
+    expect(snapshots.some(snapshot =>
+      Object.keys(snapshot.values).length === entries.size - 1 && snapshot.retryRequested === undefined,
+    )).toBe(true);
   });
   it('does not trust model warnings as native provenance',async()=> {
     const source=page([{...table(),columnCount:2}]);
