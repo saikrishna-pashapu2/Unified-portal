@@ -107,12 +107,26 @@ export function memoryEntries(
 }
 
 export function parseTranslationMemory(value: unknown): TranslationMemory | null {
-  if (!value || typeof value !== 'object') return null;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const memory = value as Partial<TranslationMemory>;
   if (memory.version !== 'shared-blocks-v1' || !Array.isArray(memory.keys) ||
-      !memory.entries || typeof memory.entries !== 'object') return null;
-  const entries: Record<string, string> = {};
-  for (const [key, text] of Object.entries(memory.entries)) if (typeof text === 'string' && text.trim()) entries[key] = text;
+      memory.keys.length > MAX_SHARED_BLOCKS ||
+      !memory.keys.every((key) => typeof key === 'string' && key.length <= 20_000) ||
+      !memory.entries || typeof memory.entries !== 'object' || Array.isArray(memory.entries)) return null;
+  const entries: Record<string, string> = Object.create(null) as Record<string, string>;
+  for (const [key, text] of Object.entries(memory.entries)) {
+    if (
+      Object.keys(entries).length >= MAX_SHARED_BLOCKS ||
+      key.length > 20_000 ||
+      key === '__proto__' ||
+      key === 'constructor' ||
+      key === 'prototype' ||
+      typeof text !== 'string' ||
+      text.length > 20_000 ||
+      !text.trim()
+    ) return null;
+    entries[key] = text;
+  }
   return {
     version: 'shared-blocks-v1',
     keys: memory.keys.filter((key): key is string => typeof key === 'string'),
@@ -123,9 +137,17 @@ export function parseTranslationMemory(value: unknown): TranslationMemory | null
 
 export function parsePinnedTranslations(value: unknown): PinnedTranslations | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const pins: PinnedTranslations = {};
+  if (Object.keys(value).length > 128) return null;
+  const pins: PinnedTranslations = Object.create(null) as PinnedTranslations;
   for (const [id, text] of Object.entries(value)) {
-    if (typeof text !== 'string' || !text.trim()) return null;
+    if (
+      !/^[A-Za-z0-9:_-]{1,128}$/.test(id) ||
+      id === 'constructor' ||
+      id === 'prototype' ||
+      typeof text !== 'string' ||
+      text.length > 20_000 ||
+      !text.trim()
+    ) return null;
     pins[id] = text;
   }
   return Object.keys(pins).length ? pins : null;

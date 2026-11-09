@@ -1,5 +1,6 @@
 import type { DocumentContext } from './schemas';
 import type { PdfxV2TargetLanguage } from './types';
+import { sanitizeDocumentContext } from './context-sanitizer';
 
 /** Shared by generation and review: preserve the meaning of a quantity, not an
  * untranslated label accidentally added to the model-generated glossary. */
@@ -22,5 +23,5 @@ export function contextForTranslation(context: DocumentContext, targetLanguage: 
   // Only whole glossary entries consisting of common currency/unit labels are
   // removed from the "preserve" list. Names containing such words stay intact.
   const ordinaryLabel = /^(?:(?:млн|млрд|минг|mln|mlrd)\.?\s*)?(?:сўм|so['‘’ʻʼ]m|квт\s*\/\s*соат|kvt\s*\/\s*soat)$/i;
-  return { ...context, preserveTerms: context.preserveTerms.filter(term => !ordinaryLabel.test(term.trim())) };
+  return sanitizeDocumentContext({ ...context, preserveTerms: context.preserveTerms.filter(term => !ordinaryLabel.test(term.trim())) });
 }

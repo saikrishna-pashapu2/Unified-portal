@@ -22,6 +22,7 @@ import {
   isTranslatableElement,
   pageLayoutForTranslation,
   pageLayoutToPlainText,
+  preserveSourceCellsInProposal,
 } from './serialize';
 import { rasterizeSinglePagePdf, rasterDetailStrips, cropPageRaster, textLineDirection } from './page-raster';
 import { detectScanRules, alignDiagramLabels } from './scan-rules';
@@ -401,7 +402,8 @@ export const defaultPdfxV2Requester: PdfxV2OpenAiRequester = {
       }),
       text: { format: zodTextFormat(PdfPageTranslationSchema, 'pdfx_v2_page_translation') },
     });
-    return parsePdfStructuredResponse(response, PdfPageTranslationSchema, 'page translation');
+    const parsed = parsePdfStructuredResponse(response, PdfPageTranslationSchema, 'page translation');
+    return { ...parsed, value: preserveSourceCellsInProposal(source, parsed.value) };
   },
 
   async validate({
@@ -462,6 +464,7 @@ export async function extractPageWithOpenAi(
     `OpenAI could not extract source page ${pageNumber} safely: ${state.failures.join('; ') || state.firstFailure || 'extraction could not be completed'}`+
     (state.firstFailure && !state.failures.includes(state.firstFailure) ? ` First failure: ${state.firstFailure}` : '')+
     (state.requestFailure ? ` Last request failure: ${state.requestFailure}` : ''),state);
+  const failureKey = (failure: string) => failure.replace(/missing \d+ grid position/g, 'missing grid position');
   // Last resort once re-extraction is exhausted: a retained candidate whose
   // only remaining defect is a few blank table grid positions is accepted
   // with a page warning instead of failing the page. Never used earlier.
@@ -485,10 +488,21 @@ export async function extractPageWithOpenAi(
       );
       return undefined;
     });
-    const retainedCandidate=enforceEnglishProtection(
-      repairExtractedLayout(state.candidate,retainedNative),
+    const original = enforceEnglishProtection(state.candidate, targetLanguage);
+    const originalValidation = validateExtractedPage(original, pageNumber, {extraction:true});
+    const repaired = enforceEnglishProtection(
+      repairExtractedLayout(state.candidate, retainedNative),
       targetLanguage,
     );
+    const repairedValidation = validateExtractedPage(repaired, pageNumber, {extraction:true});
+    const originalFailures = new Set(originalValidation.failures.map(failureKey));
+    const retainedCandidate = originalValidation.valid
+      ? original
+      : (!repairedValidation.valid &&
+          (failureScore(repairedValidation.failures) >= failureScore(originalValidation.failures) ||
+            repairedValidation.failures.some((failure) => !originalFailures.has(failureKey(failure))))
+        ? original
+        : repaired);
     const retainedValidation=validateExtractedPage(retainedCandidate,pageNumber,{extraction:true});
     if(retainedValidation.valid) {
       return {
@@ -546,9 +560,19 @@ export async function extractPageWithOpenAi(
   }
   let inputTokens=0, outputTokens=0;
   const responseIds:string[]=[];
-  const prepare=(layout:PdfPageLayout)=>enforceEnglishProtection(repairExtractedLayout(layout,native),targetLanguage);
+  const prepare=(layout:PdfPageLayout, geometry?: NativeGeometry): PdfPageLayout => {
+    const original = enforceEnglishProtection(layout, targetLanguage);
+    const before = validateExtractedPage(original, pageNumber, {extraction:true});
+    if (before.valid) return original;
+    const repaired = enforceEnglishProtection(repairExtractedLayout(layout, geometry), targetLanguage);
+    const after = validateExtractedPage(repaired, pageNumber, {extraction:true});
+    if (after.valid) return repaired;
+    const keys = new Set(before.failures.map(failureKey));
+    return failureScore(after.failures) < failureScore(before.failures) &&
+      after.failures.every((failure) => keys.has(failureKey(failure))) ? repaired : original;
+  };
   if(state.candidate) {
-    state.candidate=prepare(state.candidate);
+    state.candidate=prepare(state.candidate,native);
     const retainedValidation=validateExtractedPage(state.candidate,pageNumber,{extraction:true});
     if(retainedValidation.valid) return {layout:state.candidate,attempts:state.attempts,model:PDFX_V2_MODEL,responseId:'retained-layout-repair',inputTokens:0,outputTokens:0};
     state.failures=retainedValidation.failures;
@@ -586,7 +610,7 @@ export async function extractPageWithOpenAi(
     }
     inputTokens+=result.inputTokens;outputTokens+=result.outputTokens;responseIds.push(result.responseId);
     delete state.requestFailure;
-    const candidate=prepare(result.value);
+    const candidate=prepare(result.value,native);
     const validation=validateExtractedPage(candidate,pageNumber,{extraction:true});
     if(validation.valid) return {...result,inputTokens,outputTokens,responseId:responseIds.join(','),layout:candidate,attempts:state.attempts};
     // Targeted repairs cannot mutate blocks outside the requested region, even
@@ -776,6 +800,10 @@ export type PageTranslationRecovery = {
   fingerprint: string;
   passes: Record<string, TranslationPassCheckpoint>;
   lastFailure?: string;
+  /** Set only by an explicit, authorized page rerun; consumed durably once. */
+  retryRequested?: boolean;
+  /** Diagnostic only; never a source of reusable drafts or retry permission. */
+  supersededRecovery?: { fingerprint: string; reason: 'explicit-rerun-incompatible-fingerprint' };
 };
 
 export type TranslationRecovery = DenseTranslationRecovery | PageTranslationRecovery;
@@ -1157,7 +1185,70 @@ async function translatePageInFragments(args: {
 
 export type DenseTranslationRecovery = {
   version:'native-cell-batches-v1'; fingerprint:string; values:Record<string,string>;
+  /** Set only by the explicit page-rerun recovery marker. */
+  retryRequested?: boolean;
 };
+
+function denseTableTranslation(
+  source: PdfPageLayout,
+  entries: ReadonlyMap<string, { ids: string[] }>,
+  values: Record<string, string>,
+): PdfPageTranslation {
+  const byCell = new Map<string, string>();
+  entries.forEach((entry, key) => entry.ids.forEach((id) => byCell.set(id, values[key] ?? '')));
+  return {
+    pageNumber: source.pageNumber,
+    warnings: [],
+    elements: orderedTranslatableElements(source).map((element) => ({
+      id: element.id,
+      text: element.text,
+      cells: allCells(element).map((cell) => ({
+        id: cell.id,
+        text: cell.translate && cell.text.trim() ? byCell.get(cell.id) ?? '' : cell.text,
+      })),
+    })),
+  };
+}
+
+/** Identify only cell-value entries that fail validation on their own. A
+ * whole-page failure does not prove every saved value is bad, so entries that
+ * pass this bounded check stay reusable on an explicit rerun. */
+function invalidDenseEntryKeys(
+  source: PdfPageLayout,
+  targetLanguage: PdfxV2TargetLanguage,
+  entries: ReadonlyMap<string, { text: string }>,
+  values: Record<string, string>,
+): Set<string> {
+  const invalid = new Set<string>();
+  entries.forEach((entry, key) => {
+    const value = values[key];
+    if (typeof value !== 'string') return;
+    const fragmentSource: PdfPageLayout = {
+      ...source,
+      elements: [{
+        id: key,
+        kind: 'paragraph',
+        text: entry.text,
+        order: 0,
+        level: 0,
+        translate: true,
+        bbox: [0, 0, 1000, 1000],
+        rowCount: 0,
+        columnCount: 0,
+        rows: [],
+      }],
+    };
+    const fragmentTranslation: PdfPageTranslation = {
+      pageNumber: source.pageNumber,
+      warnings: [],
+      elements: [{ id: key, text: value, cells: [] }],
+    };
+    if (!validateTranslatedPage(fragmentSource, fragmentTranslation, targetLanguage).valid) {
+      invalid.add(key);
+    }
+  });
+  return invalid;
+}
 
 async function translateDenseTable(
   source:PdfPageLayout, context:DocumentContext, targetLanguage:PdfxV2TargetLanguage,
@@ -1179,6 +1270,54 @@ async function translateDenseTable(
   if(!fitsBudget) throw new PdfxRequestBudgetError('This PDF contains too much distinct spreadsheet text for a bounded page translation. Upload the original .xlsx and select the required tables; no translation requests were sent for this page.');
   let inputTokens=0,outputTokens=0,attempts=0;
   const responseIds:string[]=[];
+  const persistDenseState = async () => {
+    try { await options.save?.(state); }
+    catch(error) {
+      if(isPdfxWorkerControlFlowError(error)) throw error;
+      throw new PdfxRequestBudgetError('Could not persist native table recovery; stopped before further spending.',{cause:error});
+    }
+  };
+  const allValuesSaved = () => Array.from(entries.keys()).every((key) => state.values[key] !== undefined);
+
+  // A normal queue retry must never replay a completed native batch. Only an
+  // explicit page rerun may reopen the checkpoint, and even then a valid
+  // assembly reuses every saved value without another provider request.
+  if (prior?.version === state.version && prior.fingerprint === fingerprint && prior.retryRequested) {
+    if (allValuesSaved()) {
+      const savedTranslation = denseTableTranslation(source, entries, state.values);
+      const savedValidation = validateTranslatedPage(source, savedTranslation, targetLanguage);
+      if (savedValidation.valid) {
+        delete state.retryRequested;
+        await persistDenseState();
+        return {
+          translation: savedTranslation,
+          layout: source,
+          validation: savedValidation,
+          model: PDFX_V2_MODEL,
+          responseId: 'retained-native-batches',
+          inputTokens: 0,
+          outputTokens: 0,
+          attempts: 0,
+        };
+      }
+      // First discard only entries that independently fail. If the assembly
+      // defect cannot be attributed to a value, use a fresh bounded checkpoint
+      // for this explicit rerun; ordinary resumes never take this branch.
+      const invalidKeys = invalidDenseEntryKeys(source, targetLanguage, entries, state.values);
+      if (invalidKeys.size) {
+        invalidKeys.forEach((key) => delete state.values[key]);
+      } else {
+        entries.forEach((_, key) => { delete state.values[key]; });
+      }
+    }
+    if (!options.save) {
+      throw new PdfxRequestBudgetError(
+        `Cannot consume the explicit rerun for page ${source.pageNumber} without durable recovery storage. No requests were sent.`,
+      );
+    }
+    delete state.retryRequested;
+    await persistDenseState();
+  }
   for(const group of batches) {
     if(group.every(([key])=>state.values[key]!==undefined)) continue;
     const selected=group.filter(([key])=>state.values[key]===undefined);
@@ -1192,9 +1331,7 @@ async function translateDenseTable(
     }
     inputTokens+=result.inputTokens;outputTokens+=result.outputTokens;attempts+=result.attempts;responseIds.push(result.responseId);
   }
-  const byCell=new Map<string,string>();
-  entries.forEach((entry,key)=>entry.ids.forEach(id=>byCell.set(id,state.values[key])));
-  const translation:PdfPageTranslation={pageNumber:source.pageNumber,warnings:[],elements:orderedTranslatableElements(source).map(element=>({id:element.id,text:element.text,cells:allCells(element).map(cell=>({id:cell.id,text:cell.translate&&cell.text.trim()?byCell.get(cell.id)??'':cell.text}))}))};
+  const translation = denseTableTranslation(source, entries, state.values);
   const validation=validateTranslatedPage(source,translation,targetLanguage);
   if(!validation.valid) throw new TranslationPassError(`Native table assembly failed validation: ${validation.failures.join('; ')}`,{candidate:translation});
   return {translation,layout:source,validation,model:PDFX_V2_MODEL,responseId:responseIds.join(',')||'retained-native-batches',inputTokens,outputTokens,attempts};
@@ -1230,16 +1367,59 @@ export async function translatePageWithOpenAi(
   const fingerprint = translationFingerprint([source, context, targetLanguage, PDFX_V2_MODEL]);
   const prior = recoveryOptions.resume as Partial<PageTranslationRecovery> | undefined;
   const recovery: PageTranslationRecovery = { version: 'page-translation-v1', fingerprint, passes: {} };
-  if (prior?.version === recovery.version && prior.fingerprint !== fingerprint) {
+  const explicitRerun = prior?.version === recovery.version && prior.retryRequested === true;
+  const incompatible = prior?.version === recovery.version && prior.fingerprint !== fingerprint;
+  if (incompatible && !explicitRerun) {
     throw new PdfxTranslationStopError(`Saved translation recovery for page ${source.pageNumber} uses different source/context or an older fingerprint format; targeted recovery is required. No requests were sent.`);
+  }
+  if (explicitRerun && !recoveryOptions.save) {
+    throw new PdfxRequestBudgetError(`Cannot consume the explicit rerun for page ${source.pageNumber} without durable recovery storage. No requests were sent.`);
+  }
+  if (incompatible) {
+    // An explicit page rerun authorizes a fresh bounded pass, not acceptance
+    // of stale drafts under an unproven source/context. Keep only diagnostic
+    // hash metadata; no candidates, fragments, reviews or old attempts migrate.
+    recovery.supersededRecovery = {
+      fingerprint: typeof prior.fingerprint === 'string' ? prior.fingerprint.slice(0, 128) : 'unknown',
+      reason: 'explicit-rerun-incompatible-fingerprint',
+    };
   }
   if (prior?.version === recovery.version && prior.fingerprint === fingerprint) {
     const parsed = z.record(TranslationPassCheckpointSchema).safeParse(prior.passes);
     if (!parsed.success) throw new PdfxRequestBudgetError(`Saved translation recovery for page ${source.pageNumber} is invalid; no model request was sent.`);
     recovery.passes = parsed.data;
     recovery.lastFailure = typeof prior.lastFailure === 'string' ? prior.lastFailure : undefined;
+    if (prior.supersededRecovery?.reason === 'explicit-rerun-incompatible-fingerprint' &&
+        typeof prior.supersededRecovery.fingerprint === 'string') {
+      recovery.supersededRecovery = {
+        fingerprint: prior.supersededRecovery.fingerprint.slice(0, 128),
+        reason: 'explicit-rerun-incompatible-fingerprint',
+      };
+    }
   }
   const save = async () => { await recoveryOptions.save?.(recovery); };
+  if (explicitRerun) {
+    // Reopen only the deepest unfinished pass. Ordinary worker restarts never
+    // refresh these cursors, and completed fragments remain reusable.
+    const reopen = (checkpoint: TranslationPassCheckpoint, attempts: number) => {
+      if (checkpoint.accepted || checkpoint.localDraft) return;
+      delete checkpoint.terminalFailure;
+      checkpoint.attempts = checkpoint.candidate ? attempts : 0;
+      checkpoint.pendingReview = !!checkpoint.candidate;
+      checkpoint.reviewAttempts = 0;
+    };
+    if (recovery.passes.assemblyReview) reopen(recovery.passes.assemblyReview, 1);
+    else if (Object.keys(recovery.passes).some(key => key.startsWith('fragment:'))) {
+      for (const [key, checkpoint] of Object.entries(recovery.passes)) {
+        if (key.startsWith('fragment:')) reopen(checkpoint, 0);
+      }
+    } else if (recovery.passes.whole) {
+      reopen(recovery.passes.whole, 0);
+    }
+    // The reconstructed state deliberately omits retryRequested. Persist its
+    // consumption BEFORE a model call so a crash cannot replay the permission.
+    await saveTranslationRecovery(save);
+  }
   const wholeCheckpoint = recovery.passes.whole ??= { attempts: 0 };
   let wholePageFailure: TranslationPassError;
   try {
