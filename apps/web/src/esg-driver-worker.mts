@@ -65,8 +65,8 @@ const esgDriverJobTypes = [
   "esg_driver_excel_v4",
   "esg_driver_excel_v5",
 ] as const;
-const baseJobTypes: BackgroundJobType[] = esgDriversOnly
-  ? ["esg_driver_excel_v5"]
+const baseJobTypes: readonly BackgroundJobType[] = esgDriversOnly
+  ? (["esg_driver_excel_v5"] as const)
   : [
       ...esgDriverJobTypes,
       "xlsx_translation_v1",
