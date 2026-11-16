@@ -1,19 +1,5 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Sans, Newsreader } from "next/font/google";
-
-const eventSans = IBM_Plex_Sans({
-  display: "swap",
-  subsets: ["latin"],
-  variable: "--font-event-sans",
-  weight: ["400", "500", "600"],
-});
-
-const eventEditorial = Newsreader({
-  display: "swap",
-  subsets: ["latin"],
-  variable: "--font-event-editorial",
-  weight: ["400", "600", "700"],
-});
+import { eventEditorial, eventSans } from "@/lib/fonts/events";
 
 export const metadata: Metadata = {
   title: {

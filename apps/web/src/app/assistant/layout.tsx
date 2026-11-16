@@ -1,17 +1,5 @@
 import { ReactNode } from "react";
-import { Sora, IBM_Plex_Mono } from "next/font/google";
-
-const assistantDisplay = Sora({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--assistant-display",
-});
-
-const assistantMono = IBM_Plex_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500"],
-  variable: "--assistant-mono",
-});
+import { assistantDisplay, assistantMono } from "@/lib/fonts/assistant";
 
 export default function AssistantLayout({ children }: { children: ReactNode }) {
   return (

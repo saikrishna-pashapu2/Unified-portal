@@ -1,19 +1,5 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Sans, Newsreader } from "next/font/google";
-
-const ledgerSans = IBM_Plex_Sans({
-  display: "swap",
-  subsets: ["latin"],
-  variable: "--font-event-alert-sans",
-  weight: ["400", "500", "600"],
-});
-
-const ledgerEditorial = Newsreader({
-  display: "swap",
-  subsets: ["latin"],
-  variable: "--font-event-alert-editorial",
-  weight: ["400", "600", "700"],
-});
+import { ledgerEditorial, ledgerSans } from "@/lib/fonts/events-alert";
 
 export const metadata: Metadata = {
   title: "Event Email Alerts | Admin",
