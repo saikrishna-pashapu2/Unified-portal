@@ -11,9 +11,13 @@ const sharedIds: string[] = [];
 let legacyArticleId: number | undefined;
 const assessmentId = randomUUID();
 const unique = randomUUID();
-const now = new Date();
-const since = new Date(now.getTime() - 86_400_000);
-const until = new Date(now.getTime() + 60_000);
+const targetWeekKey = "2026-11-16";
+const now = new Date("2026-11-16T06:00:00Z");
+const completedAt = new Date("2026-11-15T20:00:00Z");
+const since = new Date("2026-11-09T00:00:00Z");
+const until = new Date("2026-11-14T00:00:00Z");
+const selectionExpiresAt = new Date("2026-11-23T00:00:00Z");
+const digestWindow = { since, until, targetWeekKey };
 
 integration("shared selections with private weekly email eligibility", () => {
   beforeAll(async () => {
@@ -25,11 +29,14 @@ integration("shared selections with private weekly email eligibility", () => {
     ({ creditPrisma: credit } = await import("@esgcredit/db-credit"));
     vi.stubEnv("ARTICLE_AI_ENABLED", "true");
     vi.stubEnv("ARTICLE_AI_EMAIL_ENABLED", "true");
-    const { normalizeArticle } = await import("@/lib/article-ai/policy");
+    const { weeklyArticleContentHash } = await import("@/lib/article-ai/weekly-inputs");
     await esg.$executeRaw`
       INSERT INTO article_ai_domain_assessments
-        (id, domain, assessment_date, policy_version, status, profile_source, history_count, completed_at)
-      VALUES (${assessmentId}::uuid, 'esg', ${now}::date, 2, 'ready', 'domain', 2, ${now})
+        (id, domain, assessment_date, policy_version, status, profile_source, history_count, completed_at,
+         source_start_at, source_cutoff_at, processing_at, email_at, valid_until, phase, coverage_json)
+      VALUES (${assessmentId}::uuid, 'esg', ${targetWeekKey}::date, 3, 'ready', 'domain', 2, ${completedAt},
+        ${since}, ${until}, '2026-11-13T20:15:00Z'::timestamptz, '2026-11-16T05:00:00Z'::timestamptz,
+        '2026-11-23T00:00:00Z'::timestamptz, 'finalize', '{"status":"complete"}'::jsonb)
     `;
     for (let index = 0; index < 2; index++) {
       const user = await esg.users.create({ data: {
@@ -54,10 +61,10 @@ integration("shared selections with private weekly email eligibility", () => {
         VALUES (${title}, 'Evidence about climate finance and transition risk.', ${url}, 'QA', ${since}) RETURNING id
       `;
       articles.push(article.id);
-      const hash = normalizeArticle({ id: article.id, title, summary: "Evidence about climate finance and transition risk.", content: null, url, source: "QA", publishedAt: since }).contentHash;
+      const hash = weeklyArticleContentHash({ domain: "esg", articleId: article.id, title, summary: "Evidence about climate finance and transition risk.", content: null, url, source: "QA", publishedAt: new Date(since.getTime() - 4 * 60 * 60 * 1_000).toISOString() });
       const [selection] = await esg.$queryRaw<Array<{ id: string }>>`
         INSERT INTO article_ai_domain_selections (assessment_id, domain, article_id, reason, selected_at, expires_at, content_hash, relevance_score)
-        VALUES (${assessmentId}::uuid, 'esg', ${article.id}, ${`Shared ESG evidence ${index}`}, ${now}, ${new Date(now.getTime() + 86_400_000)}, ${hash}, 0.9)
+        VALUES (${assessmentId}::uuid, 'esg', ${article.id}, ${`Shared ESG evidence ${index}`}, ${now}, ${selectionExpiresAt}, ${hash}, 0.9)
         RETURNING id
       `;
       sharedIds.push(selection.id);
@@ -68,9 +75,9 @@ integration("shared selections with private weekly email eligibility", () => {
         ${`https://example.test/${unique}/legacy`}, 'QA', ${since}) RETURNING id
     `;
     legacyArticleId = legacy.id;
-    const legacyHash = normalizeArticle({ id: legacy.id, title: 'Legacy personalized pick',
+    const legacyHash = weeklyArticleContentHash({ domain: "esg", articleId: legacy.id, title: 'Legacy personalized pick',
       summary: 'Old account-specific recommendation that must not enter the new shared digest.',
-      content: null, url: `https://example.test/${unique}/legacy`, source: 'QA', publishedAt: since }).contentHash;
+      content: null, url: `https://example.test/${unique}/legacy`, source: 'QA', publishedAt: new Date(since.getTime() - 4 * 60 * 60 * 1_000).toISOString() });
     await esg.$executeRaw`
       INSERT INTO article_ai_selections (user_id, domain, article_id, reason, selected_at, expires_at, content_hash)
       VALUES (${users[0]}, 'esg', ${legacy.id}, 'Retired personal profile', ${now}, ${new Date(now.getTime() + 86_400_000)}, ${legacyHash})
@@ -88,12 +95,21 @@ integration("shared selections with private weekly email eligibility", () => {
 
   it("shares the domain assessment while enforcing private dismissals, opt-out locks, hashes, and email settings", async () => {
     const { getArticleAiDigestPicks, getArticleAiSelections, getArticleAiPreference, filterArticleAiDigestPicksForCommit, recordArticleAiFeedback } = await import("@/lib/article-ai/service");
-    const picks = await getArticleAiDigestPicks(users[0], ["esg", "credit"], { since, until }, now);
+    const picks = await getArticleAiDigestPicks(users[0], ["esg", "credit"], digestWindow, now);
     expect(picks.map(pick => pick.articleId).sort()).toEqual([...articles].sort());
+    await esg.$executeRaw`
+      INSERT INTO alert_preferences (user_id, domain, domains, alert_type, is_active, email_enabled, alert_articles,
+        digest_day, digest_hour, timezone)
+      VALUES (${users[0]}, 'esg', ARRAY['esg']::varchar[], 'weekly_digest', true, true, true,
+        'friday', 9, 'Asia/Dubai')
+    `;
+    expect((await getArticleAiPreference(users[0], "esg")).weeklyDigestConfigured).toBe(true);
+    expect((await getArticleAiPreference(users[0], "esg")).scheduleMismatch).toBe(false);
+    expect((await getArticleAiDigestPicks(users[0], ["esg"], digestWindow)).map(pick => pick.articleId)).toEqual(articles);
     expect(await getArticleAiSelections(users[0], 'esg', [legacyArticleId!])).toEqual([]);
-    const otherPicks = await getArticleAiDigestPicks(users[1], ["esg"], { since, until }, now);
+    const otherPicks = await getArticleAiDigestPicks(users[1], ["esg"], digestWindow, now);
     expect(otherPicks.map(pick => pick.sharedSelectionId).sort()).toEqual(picks.map(pick => pick.sharedSelectionId).sort());
-    expect(await getArticleAiDigestPicks(users[0], ["credit"], { since, until }, now)).toEqual([]);
+    expect(await getArticleAiDigestPicks(users[0], ["credit"], digestWindow, now)).toEqual([]);
 
     const accepted = await esg.$transaction(tx => filterArticleAiDigestPicksForCommit(tx, users[0], picks));
     expect(accepted).toHaveLength(2);
@@ -105,20 +121,20 @@ integration("shared selections with private weekly email eligibility", () => {
 
     await esg.$executeRaw`UPDATE article_ai_preferences SET enabled = false WHERE user_id = ${users[0]} AND domain = 'esg'`;
     expect(await esg.$transaction(tx => filterArticleAiDigestPicksForCommit(tx, users[0], picks))).toEqual([]);
-    expect(await getArticleAiDigestPicks(users[0], ["esg"], { since, until }, now)).toEqual([]);
+    expect(await getArticleAiDigestPicks(users[0], ["esg"], digestWindow, now)).toEqual([]);
     expect(await getArticleAiSelections(users[0], "esg", articles)).toHaveLength(2);
     await esg.$executeRaw`UPDATE article_ai_preferences SET enabled = true WHERE user_id = ${users[0]} AND domain = 'esg'`;
     await esg.$executeRaw`UPDATE esg_articles SET summary = 'Changed by scraper after the model decision.' WHERE id = ${articles[0]}`;
-    expect((await getArticleAiDigestPicks(users[0], ["esg"], { since, until }, now)).map(pick => pick.articleId)).toEqual([articles[1]]);
+    expect((await getArticleAiDigestPicks(users[0], ["esg"], digestWindow, now)).map(pick => pick.articleId)).toEqual([articles[1]]);
     expect(await getArticleAiSelections(users[0], "esg", [articles[0]])).toEqual([]);
 
     await esg.$executeRaw`UPDATE alert_preferences SET alert_articles = false WHERE user_id = ${users[1]}`;
     expect((await getArticleAiPreference(users[1], "esg")).weeklyDigestConfigured).toBe(false);
-    expect(await getArticleAiDigestPicks(users[1], ["esg"], { since, until }, now)).toEqual([]);
+    expect(await getArticleAiDigestPicks(users[1], ["esg"], digestWindow, now)).toEqual([]);
     await esg.$executeRaw`UPDATE alert_preferences SET alert_articles = true WHERE user_id = ${users[1]}`;
 
     vi.stubEnv("ARTICLE_AI_EMAIL_ENABLED", "false");
-    expect(await getArticleAiDigestPicks(users[1], ["esg"], { since, until }, now)).toEqual([]);
+    expect(await getArticleAiDigestPicks(users[1], ["esg"], digestWindow, now)).toEqual([]);
     const [likes] = await esg.$queryRaw<Array<{ count: number }>>`SELECT count(*)::int AS count FROM likes WHERE user_id = ANY(${users}::int[])`;
     expect(likes.count).toBe(0);
   });

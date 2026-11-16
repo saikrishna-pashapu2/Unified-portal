@@ -66,6 +66,7 @@ integration('private weekly mail on disposable databases', () => {
       articleId: 900_000 + index, domain: 'esg', title: `PRIVATE PICK ${index}`,
       url: `https://example.test/${unique}/private-${index}`, source: 'QA',
       publishedAt: '2026-11-15T00:00:00Z', reason: `Private reason ${index}`, contentHash: `hash-${index}`,
+      sharedSelectionId: randomUUID(), assessmentDate: '2026-11-16', policyVersion: 3, targetWeekKey: '2026-11-16',
     }]));
   });
 

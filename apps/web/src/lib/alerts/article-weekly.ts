@@ -4,7 +4,7 @@ import type { ArticleAiDigestPick } from "@/lib/article-ai/types";
 import { enqueueEmailWithHistory } from "./email-queue";
 import { articleWeeklyDeliveryKey, getArticleWeeklyWindow } from "./article-weekly-dates";
 import { getHumanWeeklyItems, listWeeklyArticleAlerts, type WeeklyArticleAlert } from "./article-weekly-repository";
-import { deduplicateWeeklyItems, isPersonalDigestRecipient, matchesWeeklyFilters, normalizeWeeklyDomains, type WeeklyArticleItem } from "./article-weekly-policy";
+import { deduplicateWeeklyItems, isCanonicalArticleAiSchedule, isPersonalDigestRecipient, matchesWeeklyFilters, normalizeWeeklyDomains, type WeeklyArticleItem } from "./article-weekly-policy";
 import { renderArticleWeeklyEmail } from "./article-weekly-template";
 
 export function articleWeeklyDigestEnabled(): boolean {
@@ -50,9 +50,12 @@ async function queueOneWeeklyDigest(
   const availableDomains = domains.filter(domain => !unavailableDomains.includes(domain));
   if (!availableDomains.length) throw new Error('Requested content databases are unavailable');
   let aiPicks: ArticleAiDigestPick[] = [];
-  if (alert.alert_articles !== false && isPersonalDigestRecipient(destination, alert.email)) {
+  const aiScheduleAligned = isCanonicalArticleAiSchedule(alert);
+  if (alert.alert_articles !== false && aiScheduleAligned && isPersonalDigestRecipient(destination, alert.email)) {
     try {
-      aiPicks = await getArticleAiDigestPicks(alert.user_id, availableDomains, window, now);
+      aiPicks = await getArticleAiDigestPicks(alert.user_id, availableDomains, {
+        since: window.since, until: window.until, targetWeekKey: window.weekKey,
+      }, now);
     } catch {
       // Selection/model failures never hold the existing human digest hostage.
       console.warn(`[article-weekly] AI picks unavailable for alert ${alert.id}; using human selections`);

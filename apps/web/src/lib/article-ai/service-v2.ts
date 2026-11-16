@@ -5,26 +5,28 @@ import { creditPrisma } from "@esgcredit/db-credit";
 
 import {
   ARTICLE_AI_MAX_WEEKLY_PICKS,
-  ARTICLE_AI_POLICY_VERSION,
+  ARTICLE_AI_WEEKLY_POLICY_VERSION,
   isArticleAiDomain,
+  isArticleAiWeeklyPolicy,
   type ArticleAiDigestPick,
   type ArticleAiDomain,
   type ArticleAiFeedbackResult,
   type ArticleAiPreference,
   type ArticleAiSelection,
+  type ArticleAiWeeklyCoverage,
+  type ArticleAiWeeklyPhase,
+  type ArticleAiWeeklyStatus,
 } from "./types";
 import { getArticleAiConfig, isArticleAiEmailEnabled } from "./config";
+import { getArticleAiWeeklyCalendar, isArticleAiWeeklyWeekKey, toArticleAiWeeklySummary } from "./weekly-calendar";
+import { weeklyArticleContentHash } from "./weekly-inputs";
 import {
   ArticleAiConflictError,
   ArticleAiNotFoundError,
   ArticleAiUnauthorizedError,
 } from "./errors";
 import {
-  getCurrentSharedSelections,
   getDomainHistorySummary,
-  getLatestDomainAssessment,
-  loadDomainArticles,
-  type SharedSelectionRow,
 } from "./shared";
 
 type RawQueryClient = Pick<typeof esgPrisma, "$queryRaw">;
@@ -46,7 +48,44 @@ interface PreferenceRow {
   last_run_at: Date | null;
 }
 
-interface SharedWithOverlay extends SharedSelectionRow {
+interface WeeklyAssessmentRow {
+  id: string;
+  domain: string;
+  assessment_date: Date;
+  policy_version: number;
+  status: string;
+  profile_source: string;
+  history_count: number;
+  profile_json: unknown;
+  content_hash: string | null;
+  model: string | null;
+  completed_at: Date | null;
+  source_start_at: Date | null;
+  source_cutoff_at: Date | null;
+  processing_at: Date | null;
+  email_at: Date | null;
+  valid_until: Date | null;
+  phase: string | null;
+  coverage_json: unknown;
+  selection_count: number;
+}
+
+interface WeeklySelectionRow {
+  id: string;
+  assessment_id: string;
+  assessment_date: Date;
+  policy_version: number;
+  article_id: number;
+  domain: ArticleAiDomain;
+  reason: string;
+  relevance_score: number | null;
+  selected_at: Date;
+  expires_at: Date;
+  content_hash: string;
+  model: string | null;
+}
+
+interface SharedWithOverlay extends WeeklySelectionRow {
   user_selection_id: string | null;
   user_state: string | null;
   user_version: number | null;
@@ -75,39 +114,168 @@ async function getActiveUser(userId: number): Promise<UserRow> {
   return user;
 }
 
-async function weeklyDigestConfigured(userId: number, domain: ArticleAiDomain, user?: UserRow): Promise<boolean> {
-  const current = user ?? await getActiveUser(userId);
-  if (current.email_notifications === false) return false;
-  const email = normalizeEmail(current.email);
-  if (!email) return false;
-  const rows = await esgPrisma.$queryRaw<Array<{ configured: boolean }>>`
-    SELECT EXISTS (
-      SELECT 1 FROM alert_preferences ap
-      WHERE ap.user_id = ${userId}
-        AND COALESCE(ap.is_active, TRUE) = TRUE
-        AND COALESCE(ap.email_enabled, TRUE) = TRUE
-        AND COALESCE(ap.alert_articles, TRUE) = TRUE
-        AND COALESCE(ap.alert_type, 'weekly_digest') = 'weekly_digest'
-        AND ((COALESCE(cardinality(ap.domains), 0) > 0 AND ${domain} = ANY(ap.domains))
-          OR (COALESCE(cardinality(ap.domains), 0) = 0 AND lower(trim(ap.domain)) = ${domain}))
-        AND (NULLIF(trim(ap.email_address), '') IS NULL OR lower(trim(ap.email_address)) = ${email})
-    ) AS configured
-  `;
-  return Boolean(rows[0]?.configured);
+interface WeeklyDigestSchedule {
+  configured: boolean;
+  mismatch: boolean;
 }
 
-function assessmentStatus(status: string | undefined): ArticleAiPreference["status"] {
-  if (status === "ready") return "ready";
-  if (status === "insufficient") return "insufficient_history";
-  if (status === "error" || status === "budget_exhausted") return "error";
+async function weeklyDigestSchedule(userId: number, domain: ArticleAiDomain, user?: UserRow): Promise<WeeklyDigestSchedule> {
+  const current = user ?? await getActiveUser(userId);
+  if (current.email_notifications === false) return { configured: false, mismatch: false };
+  const email = normalizeEmail(current.email);
+  if (!email) return { configured: false, mismatch: false };
+  const rows = await esgPrisma.$queryRaw<Array<{ configured: boolean; mismatch: boolean }>>`
+    SELECT
+      EXISTS (
+        SELECT 1 FROM alert_preferences ap
+        WHERE ap.user_id = ${userId}
+          AND COALESCE(ap.is_active, TRUE) = TRUE
+          AND COALESCE(ap.email_enabled, TRUE) = TRUE
+          AND COALESCE(ap.alert_articles, TRUE) = TRUE
+          AND COALESCE(ap.alert_type, 'weekly_digest') = 'weekly_digest'
+          AND ((COALESCE(cardinality(ap.domains), 0) > 0 AND ${domain} = ANY(ap.domains))
+            OR (COALESCE(cardinality(ap.domains), 0) = 0 AND lower(trim(ap.domain)) = ${domain}))
+          AND (NULLIF(trim(ap.email_address), '') IS NULL OR lower(trim(ap.email_address)) = ${email})
+          AND lower(trim(COALESCE(ap.digest_day, 'monday'))) = 'monday'
+          AND COALESCE(ap.digest_hour, 9) = 9
+          AND lower(trim(COALESCE(ap.timezone, 'Asia/Dubai'))) = 'asia/dubai'
+      ) AS configured,
+      EXISTS (
+        SELECT 1 FROM alert_preferences ap
+        WHERE ap.user_id = ${userId}
+          AND COALESCE(ap.is_active, TRUE) = TRUE
+          AND COALESCE(ap.email_enabled, TRUE) = TRUE
+          AND COALESCE(ap.alert_articles, TRUE) = TRUE
+          AND COALESCE(ap.alert_type, 'weekly_digest') = 'weekly_digest'
+          AND ((COALESCE(cardinality(ap.domains), 0) > 0 AND ${domain} = ANY(ap.domains))
+            OR (COALESCE(cardinality(ap.domains), 0) = 0 AND lower(trim(ap.domain)) = ${domain}))
+          AND (NULLIF(trim(ap.email_address), '') IS NULL OR lower(trim(ap.email_address)) = ${email})
+          AND NOT (
+            lower(trim(COALESCE(ap.digest_day, 'monday'))) = 'monday'
+            AND COALESCE(ap.digest_hour, 9) = 9
+            AND lower(trim(COALESCE(ap.timezone, 'Asia/Dubai'))) = 'asia/dubai'
+          )
+      ) AS mismatch
+  `;
+  const configured = Boolean(rows[0]?.configured);
+  return { configured, mismatch: !configured && Boolean(rows[0]?.mismatch) };
+}
+
+async function getLatestWeeklyAssessment(domain: ArticleAiDomain): Promise<WeeklyAssessmentRow | null> {
+  const rows = await esgPrisma.$queryRaw<WeeklyAssessmentRow[]>`
+    SELECT a.id::text, a.domain, a.assessment_date, a.policy_version, a.status,
+           a.profile_source, a.history_count, a.profile_json, a.content_hash, a.model,
+           a.completed_at, a.source_start_at, a.source_cutoff_at, a.processing_at,
+           a.email_at, a.valid_until, a.phase, a.coverage_json,
+           (SELECT COUNT(*)::int FROM article_ai_domain_selections ds WHERE ds.assessment_id = a.id) AS selection_count
+    FROM article_ai_domain_assessments a
+    WHERE a.domain = ${domain} AND a.policy_version = ${ARTICLE_AI_WEEKLY_POLICY_VERSION}
+    ORDER BY a.assessment_date DESC, a.created_at DESC
+    LIMIT 1
+  `;
+  return rows[0] ?? null;
+}
+
+async function getLatestReadyWeeklyAssessment(domain: ArticleAiDomain, now = new Date()): Promise<WeeklyAssessmentRow | null> {
+  const rows = await esgPrisma.$queryRaw<WeeklyAssessmentRow[]>`
+    SELECT a.id::text, a.domain, a.assessment_date, a.policy_version, a.status,
+           a.profile_source, a.history_count, a.profile_json, a.content_hash, a.model,
+           a.completed_at, a.source_start_at, a.source_cutoff_at, a.processing_at,
+           a.email_at, a.valid_until, a.phase, a.coverage_json,
+           (SELECT COUNT(*)::int FROM article_ai_domain_selections ds WHERE ds.assessment_id = a.id) AS selection_count
+    FROM article_ai_domain_assessments a
+    WHERE a.domain = ${domain} AND a.policy_version = ${ARTICLE_AI_WEEKLY_POLICY_VERSION}
+      AND a.status = 'ready' AND a.valid_until > ${now}
+    ORDER BY a.assessment_date DESC, a.created_at DESC
+    LIMIT 1
+  `;
+  return rows[0] ?? null;
+}
+
+function assessmentStatus(assessment: WeeklyAssessmentRow | null, now = new Date()): ArticleAiPreference["status"] {
+  if (assessment?.status === "ready" && (!assessment.valid_until || new Date(assessment.valid_until).getTime() > now.getTime())) return "ready";
+  if (assessment?.status === "insufficient") return "insufficient_history";
+  if (assessment?.status === "error" || assessment?.status === "budget_exhausted") return "error";
   return "queued";
+}
+
+const WEEKLY_PHASES: readonly ArticleAiWeeklyPhase[] = [
+  "manifest", "history_profile", "history_merge", "candidate_evaluation", "candidate_merge", "finalize",
+];
+function safeCoverage(value: unknown): ArticleAiWeeklyCoverage {
+  const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const number = (key: string): number => {
+    const value = Number(source[key] ?? 0);
+    return Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0;
+  };
+  return {
+    historyTotal: number("historyTotal"), historyResolved: number("historyResolved"),
+    historyProcessed: number("historyProcessed"), historyUnusable: number("historyUnusable"),
+    historyExcluded: number("historyExcluded"), candidateTotal: number("candidateTotal"),
+    candidateProcessed: number("candidateProcessed"), candidateUnusable: number("candidateUnusable"),
+    candidateExcluded: number("candidateExcluded"), candidateCarryover: number("candidateCarryover"),
+    mergeLeaves: number("mergeLeaves"), mergeNodes: number("mergeNodes"),
+    mergeNodesCompleted: number("mergeNodesCompleted"),
+    status: source.status === "complete" ? "complete" : "incomplete",
+  };
+}
+
+function weeklyAssessmentStatus(assessment: WeeklyAssessmentRow, now = new Date()): ArticleAiWeeklyStatus {
+  if (assessment.status === "ready") {
+    return assessment.valid_until && new Date(assessment.valid_until).getTime() <= now.getTime() ? "expired" : "ready";
+  }
+  if (assessment.status === "insufficient") return "insufficient_history";
+  if (assessment.status === "error") return "error";
+  if (assessment.status === "budget_exhausted") return "budget_exhausted";
+  if (assessment.status === "queued") return "queued";
+  switch (assessment.phase) {
+    case "history_profile": return "assessing_history";
+    case "history_merge": return "merging_history";
+    case "candidate_evaluation": return "evaluating_candidates";
+    case "candidate_merge": return "merging_candidates";
+    case "finalize": return "queued";
+    default: return "manifesting";
+  }
+}
+
+function weeklyPhase(value: string | null): ArticleAiWeeklyPhase {
+  return value && WEEKLY_PHASES.includes(value as ArticleAiWeeklyPhase)
+    ? value as ArticleAiWeeklyPhase
+    : "manifest";
+}
+
+function targetWeekKey(assessmentDate: Date): string {
+  return new Date(assessmentDate).toISOString().slice(0, 10);
+}
+
+function assessmentSummary(assessment: WeeklyAssessmentRow): string | null {
+  if (!assessment.profile_json || typeof assessment.profile_json !== "object") return null;
+  const value = (assessment.profile_json as Record<string, unknown>).summary;
+  return typeof value === "string" ? value.slice(0, 2_000) : null;
+}
+
+function mapWeeklySummary(assessment: WeeklyAssessmentRow | null): ArticleAiPreference["weekly"] {
+  if (!assessment || !isArticleAiWeeklyPolicy(Number(assessment.policy_version))) return null;
+  const key = targetWeekKey(assessment.assessment_date);
+  const calendar = getArticleAiWeeklyCalendar(key);
+  const summaryStatus = weeklyAssessmentStatus(assessment);
+  return toArticleAiWeeklySummary(calendar, {
+    model: assessment.model || getArticleAiConfig().model,
+    status: summaryStatus,
+    phase: weeklyPhase(assessment.phase),
+    coverage: safeCoverage(assessment.coverage_json),
+    selectionCount: Number(assessment.selection_count ?? 0),
+    completedAt: assessment.completed_at ? new Date(assessment.completed_at).toISOString() : null,
+    assessmentSummary: assessmentSummary(assessment),
+  });
 }
 
 function mapPreference(
   row: PreferenceRow,
   history: { count: number; source: "domain" | "insufficient" },
-  assessment: Awaited<ReturnType<typeof getLatestDomainAssessment>>,
-  configured: boolean,
+  assessment: WeeklyAssessmentRow | null,
+  schedule: WeeklyDigestSchedule,
+  readyAssessment: WeeklyAssessmentRow | null,
 ): ArticleAiPreference {
   const source = assessment?.profile_source === "domain" || assessment?.profile_source === "insufficient"
     ? assessment.profile_source
@@ -121,12 +289,14 @@ function mapPreference(
     // current all-user domain history instead of that legacy value.
     historyCount: assessment ? Number(assessment.history_count) : history.count,
     profileSource: source,
-    weeklyDigestConfigured: configured,
-    status: row.enabled ? assessmentStatus(assessment?.status) : "off",
+    weeklyDigestConfigured: schedule.configured,
+    status: row.enabled ? assessmentStatus(assessment) : "off",
     lastRunAt: assessment?.completed_at
       ? new Date(assessment.completed_at).toISOString()
       : row.last_run_at ? new Date(row.last_run_at).toISOString() : null,
     emailInclusionEnabled: getArticleAiConfig().enabled && getArticleAiConfig().emailEnabled,
+    weekly: mapWeeklySummary(readyAssessment ?? assessment),
+    scheduleMismatch: schedule.mismatch,
   };
 }
 
@@ -138,6 +308,7 @@ function sharedSelection(row: SharedWithOverlay): ArticleAiSelection {
     selectedAt: new Date(row.selected_at).toISOString(), expiresAt: new Date(row.expires_at).toISOString(),
     pendingConfirmation: Boolean(row.user_pending_confirmation), sharedSelectionId: row.id,
     assessmentDate: new Date(row.assessment_date).toISOString().slice(0, 10),
+    policyVersion: Number(row.policy_version), targetWeekKey: new Date(row.assessment_date).toISOString().slice(0, 10),
   };
 }
 
@@ -145,9 +316,56 @@ function sharedKey(userId: number, domain: ArticleAiDomain, sharedId: string, ve
   return `article-ai:v2:${userId}:${domain}:${sharedId}:${version}:${action}`;
 }
 
+interface CurrentWeeklyArticle {
+  id: number;
+  title: string | null;
+  summary: string | null;
+  content: string | null;
+  source: string | null;
+  url: string | null;
+  publishedAt: Date | null;
+  contentHash: string;
+}
+
+async function loadCurrentWeeklyArticles(
+  domain: ArticleAiDomain,
+  ids: readonly number[],
+): Promise<CurrentWeeklyArticle[]> {
+  const safeIds = normalizeIds(ids);
+  if (!safeIds.length) return [];
+  type RawArticle = {
+    id: number;
+    title: string | null;
+    summary: string | null;
+    content: string | null;
+    source: string | null;
+    url: string | null;
+    published_at: Date | null;
+  };
+  const rows = domain === "esg"
+    ? await esgPrisma.$queryRaw<RawArticle[]>`
+        SELECT id, title, summary, NULL::text AS content, source,
+               link AS url, published::timestamp AT TIME ZONE 'Asia/Dubai' AS published_at
+        FROM esg_articles WHERE id = ANY(${safeIds}::int[])
+      `
+    : await creditPrisma.$queryRaw<RawArticle[]>`
+        SELECT id, title, summary, content, source,
+               COALESCE(url, link) AS url, date::timestamp AT TIME ZONE 'Asia/Dubai' AS published_at
+        FROM credit_articles WHERE id = ANY(${safeIds}::int[])
+      `;
+  return rows.map((row) => ({
+    id: Number(row.id), title: row.title, summary: row.summary, content: row.content,
+    source: row.source, url: row.url, publishedAt: row.published_at ? new Date(row.published_at) : null,
+    contentHash: weeklyArticleContentHash({
+      domain, articleId: Number(row.id), title: row.title, summary: row.summary,
+      content: row.content, source: row.source, url: row.url,
+      publishedAt: row.published_at ? new Date(row.published_at).toISOString() : null,
+    }),
+  }));
+}
+
 async function articleHash(domain: ArticleAiDomain, articleId: number): Promise<string> {
-  const rows = await loadDomainArticles(domain, [articleId]);
-  const row = rows.find((article) => article.id === articleId);
+  const row = (await loadCurrentWeeklyArticles(domain, [articleId])).find((article) => article.id === articleId);
   if (!row) throw new ArticleAiNotFoundError();
   return row.contentHash;
 }
@@ -155,19 +373,20 @@ async function articleHash(domain: ArticleAiDomain, articleId: number): Promise<
 export async function getArticleAiPreferenceV2(userId: number, domain: ArticleAiDomain): Promise<ArticleAiPreference> {
   const safeDomain = normalizeDomain(domain);
   const user = await getActiveUser(userId);
-  const [rows, history, assessment, configured] = await Promise.all([
+  const [rows, history, assessment, schedule, readyAssessment] = await Promise.all([
     esgPrisma.$queryRaw<PreferenceRow[]>`
       SELECT domain, enabled, settings_version, status, history_count, profile_source, last_run_at
       FROM article_ai_preferences WHERE user_id = ${userId} AND domain = ${safeDomain} LIMIT 1
     `,
     getDomainHistorySummary(safeDomain),
-    getLatestDomainAssessment(safeDomain),
-    weeklyDigestConfigured(userId, safeDomain, user),
+    getLatestWeeklyAssessment(safeDomain),
+    weeklyDigestSchedule(userId, safeDomain, user),
+    getLatestReadyWeeklyAssessment(safeDomain),
   ]);
   return mapPreference(rows[0] ?? {
     domain: safeDomain, enabled: false, settings_version: 0, status: "off",
     history_count: history.count, profile_source: history.source, last_run_at: null,
-  }, history, assessment, configured);
+  }, history, assessment, schedule, readyAssessment);
 }
 
 export async function setArticleAiPreferenceV2(
@@ -198,7 +417,121 @@ export async function setArticleAiPreferenceV2(
   `;
   const row = rows[0];
   if (!row) throw new Error("Unable to persist article AI preference");
-  return mapPreference(row, history, await getLatestDomainAssessment(safeDomain), await weeklyDigestConfigured(userId, safeDomain, user));
+  const [assessment, schedule, readyAssessment] = await Promise.all([
+    getLatestWeeklyAssessment(safeDomain),
+    weeklyDigestSchedule(userId, safeDomain, user),
+    getLatestReadyWeeklyAssessment(safeDomain),
+  ]);
+  return mapPreference(row, history, assessment, schedule, readyAssessment);
+}
+
+async function getWeeklySharedSelections(
+  userId: number,
+  domain: ArticleAiDomain,
+  articleIds: readonly number[] | undefined,
+  now: Date,
+  exactTargetWeekKey?: string,
+  mailEligible = false,
+): Promise<SharedWithOverlay[]> {
+  const ids = articleIds ? normalizeIds(articleIds) : [];
+  const hasIds = ids.length > 0;
+  if (exactTargetWeekKey && !isArticleAiWeeklyWeekKey(exactTargetWeekKey)) return [];
+  const rows = exactTargetWeekKey
+    ? hasIds
+      ? await esgPrisma.$queryRaw<SharedWithOverlay[]>`
+          SELECT ds.id::text, ds.assessment_id::text, a.assessment_date,
+                 a.policy_version, ds.article_id, ds.domain, ds.reason,
+                 ds.relevance_score, ds.selected_at, ds.expires_at,
+                 ds.content_hash, ds.model,
+                 us.id::text AS user_selection_id, us.state AS user_state,
+                 us.version AS user_version,
+                 COALESCE(us.pending_confirmation, FALSE) AS user_pending_confirmation
+          FROM article_ai_domain_assessments a
+          JOIN article_ai_domain_selections ds ON ds.assessment_id = a.id
+          LEFT JOIN article_ai_user_selections us
+            ON us.user_id = ${userId} AND us.domain = ds.domain AND us.article_id = ds.article_id
+          WHERE a.domain = ${domain} AND a.policy_version = ${ARTICLE_AI_WEEKLY_POLICY_VERSION}
+            AND a.status = 'ready' AND a.assessment_date = ${exactTargetWeekKey}::date
+            AND a.valid_until > ${now}
+            AND (${mailEligible} = FALSE OR (
+              a.completed_at IS NOT NULL AND a.email_at IS NOT NULL AND a.completed_at <= a.email_at
+              AND COALESCE(a.coverage_json->>'status', '') = 'complete'
+            ))
+            AND ds.domain = ${domain}
+            AND ds.expires_at > ${now} AND ds.article_id = ANY(${ids}::int[])
+          ORDER BY ds.relevance_score DESC NULLS LAST, ds.selected_at DESC, ds.article_id ASC
+        `
+      : await esgPrisma.$queryRaw<SharedWithOverlay[]>`
+          SELECT ds.id::text, ds.assessment_id::text, a.assessment_date,
+                 a.policy_version, ds.article_id, ds.domain, ds.reason,
+                 ds.relevance_score, ds.selected_at, ds.expires_at,
+                 ds.content_hash, ds.model,
+                 us.id::text AS user_selection_id, us.state AS user_state,
+                 us.version AS user_version,
+                 COALESCE(us.pending_confirmation, FALSE) AS user_pending_confirmation
+          FROM article_ai_domain_assessments a
+          JOIN article_ai_domain_selections ds ON ds.assessment_id = a.id
+          LEFT JOIN article_ai_user_selections us
+            ON us.user_id = ${userId} AND us.domain = ds.domain AND us.article_id = ds.article_id
+          WHERE a.domain = ${domain} AND a.policy_version = ${ARTICLE_AI_WEEKLY_POLICY_VERSION}
+            AND a.status = 'ready' AND a.assessment_date = ${exactTargetWeekKey}::date
+            AND a.valid_until > ${now}
+            AND (${mailEligible} = FALSE OR (
+              a.completed_at IS NOT NULL AND a.email_at IS NOT NULL AND a.completed_at <= a.email_at
+              AND COALESCE(a.coverage_json->>'status', '') = 'complete'
+            ))
+            AND ds.domain = ${domain} AND ds.expires_at > ${now}
+          ORDER BY ds.relevance_score DESC NULLS LAST, ds.selected_at DESC, ds.article_id ASC
+        `
+    : hasIds
+      ? await esgPrisma.$queryRaw<SharedWithOverlay[]>`
+          WITH latest AS (
+            SELECT a.id, a.assessment_date, a.policy_version
+            FROM article_ai_domain_assessments a
+            WHERE a.domain = ${domain} AND a.policy_version = ${ARTICLE_AI_WEEKLY_POLICY_VERSION}
+              AND a.status = 'ready' AND a.valid_until > ${now}
+            ORDER BY a.assessment_date DESC, a.created_at DESC
+            LIMIT 1
+          )
+          SELECT ds.id::text, ds.assessment_id::text, latest.assessment_date,
+                 latest.policy_version, ds.article_id, ds.domain, ds.reason,
+                 ds.relevance_score, ds.selected_at, ds.expires_at,
+                 ds.content_hash, ds.model,
+                 us.id::text AS user_selection_id, us.state AS user_state,
+                 us.version AS user_version,
+                 COALESCE(us.pending_confirmation, FALSE) AS user_pending_confirmation
+          FROM latest
+          JOIN article_ai_domain_selections ds ON ds.assessment_id = latest.id
+          LEFT JOIN article_ai_user_selections us
+            ON us.user_id = ${userId} AND us.domain = ds.domain AND us.article_id = ds.article_id
+          WHERE ds.domain = ${domain} AND ds.expires_at > ${now}
+            AND ds.article_id = ANY(${ids}::int[])
+          ORDER BY ds.relevance_score DESC NULLS LAST, ds.selected_at DESC, ds.article_id ASC
+        `
+      : await esgPrisma.$queryRaw<SharedWithOverlay[]>`
+          WITH latest AS (
+            SELECT a.id, a.assessment_date, a.policy_version
+            FROM article_ai_domain_assessments a
+            WHERE a.domain = ${domain} AND a.policy_version = ${ARTICLE_AI_WEEKLY_POLICY_VERSION}
+              AND a.status = 'ready' AND a.valid_until > ${now}
+            ORDER BY a.assessment_date DESC, a.created_at DESC
+            LIMIT 1
+          )
+          SELECT ds.id::text, ds.assessment_id::text, latest.assessment_date,
+                 latest.policy_version, ds.article_id, ds.domain, ds.reason,
+                 ds.relevance_score, ds.selected_at, ds.expires_at,
+                 ds.content_hash, ds.model,
+                 us.id::text AS user_selection_id, us.state AS user_state,
+                 us.version AS user_version,
+                 COALESCE(us.pending_confirmation, FALSE) AS user_pending_confirmation
+          FROM latest
+          JOIN article_ai_domain_selections ds ON ds.assessment_id = latest.id
+          LEFT JOIN article_ai_user_selections us
+            ON us.user_id = ${userId} AND us.domain = ds.domain AND us.article_id = ds.article_id
+          WHERE ds.domain = ${domain} AND ds.expires_at > ${now}
+          ORDER BY ds.relevance_score DESC NULLS LAST, ds.selected_at DESC, ds.article_id ASC
+        `;
+  return rows.map((row) => ({ ...row, domain: normalizeDomain(row.domain) }));
 }
 
 export async function getArticleAiSelectionsV2(
@@ -210,10 +543,9 @@ export async function getArticleAiSelectionsV2(
   const safeDomain = normalizeDomain(domain);
   const safeIds = normalizeIds(articleIds);
   if (safeIds.length === 0) return [];
-  const rows = await getCurrentSharedSelections(userId, safeDomain, safeIds);
-  const sharedRows = rows as SharedWithOverlay[];
+  const sharedRows = await getWeeklySharedSelections(userId, safeDomain, safeIds, new Date());
   const output = new Map<number, ArticleAiSelection>(sharedRows.map((row) => [Number(row.article_id), sharedSelection(row)]));
-  const current = await loadDomainArticles(safeDomain, safeIds);
+  const current = await loadCurrentWeeklyArticles(safeDomain, safeIds);
   const hashes = new Map(current.map((article) => [article.id, article.contentHash]));
   return Array.from(output.values()).filter((row) => {
     if (row.pendingConfirmation || row.state === "dismissed" || !row.sharedSelectionId) return true;
@@ -229,14 +561,17 @@ export async function recordArticleAiFeedbackV2(
   action: "confirm" | "dismiss",
   expectedVersion: number,
   sharedSelectionId: string,
+  expectedTargetWeekKey?: string,
 ): Promise<ArticleAiFeedbackResult> {
   const safeDomain = normalizeDomain(domain);
   if (!Number.isSafeInteger(articleId) || articleId <= 0) throw new ArticleAiNotFoundError();
   if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) throw new ArticleAiConflictError();
   await getActiveUser(userId);
-  const hash = await articleHash(safeDomain, articleId);
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[4-9][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sharedSelectionId)) {
     throw new ArticleAiConflictError("Shared selection is missing or invalid; refresh the article");
+  }
+  if (expectedTargetWeekKey !== undefined && !isArticleAiWeeklyWeekKey(expectedTargetWeekKey)) {
+    throw new ArticleAiConflictError("Shared selection week is invalid; refresh the article");
   }
   const key = sharedKey(userId, safeDomain, sharedSelectionId, expectedVersion, action);
   return esgPrisma.$transaction(async (tx) => {
@@ -245,7 +580,7 @@ export async function recordArticleAiFeedbackV2(
     // current-assessment gate, and return the same private overlay state.
     const prior = await tx.$queryRaw<Array<SharedWithOverlay & { feedback_status: string }>>`
       SELECT f.status AS feedback_status,
-             ds.id::text, ds.assessment_id::text, a.assessment_date, ds.article_id,
+             ds.id::text, ds.assessment_id::text, a.assessment_date, a.policy_version, ds.article_id,
              ds.domain, ds.reason, ds.relevance_score, ds.selected_at, ds.expires_at,
              ds.content_hash, ds.model,
              us.id::text AS user_selection_id, us.state AS user_state,
@@ -261,6 +596,7 @@ export async function recordArticleAiFeedbackV2(
         AND f.domain_selection_id = ${sharedSelectionId}::uuid
         AND f.action = ${action} AND f.expected_version = ${expectedVersion}
         AND ds.domain = ${safeDomain} AND a.domain = ${safeDomain}
+        AND (${expectedTargetWeekKey ?? null}::date IS NULL OR a.assessment_date = ${expectedTargetWeekKey ?? null}::date)
       LIMIT 1
       FOR SHARE OF ds, us
     `;
@@ -275,21 +611,24 @@ export async function recordArticleAiFeedbackV2(
       };
     }
 
-    const exact = await tx.$queryRaw<Array<SharedSelectionRow>>`
-      SELECT ds.id::text, ds.assessment_id::text, a.assessment_date, ds.article_id,
+    const hash = await articleHash(safeDomain, articleId);
+    const exact = await tx.$queryRaw<Array<WeeklySelectionRow>>`
+      SELECT ds.id::text, ds.assessment_id::text, a.assessment_date, a.policy_version, ds.article_id,
              ds.domain, ds.reason, ds.relevance_score, ds.selected_at, ds.expires_at,
              ds.content_hash, ds.model
       FROM article_ai_domain_selections ds
       JOIN article_ai_domain_assessments a ON a.id = ds.assessment_id
       WHERE ds.id = ${sharedSelectionId}::uuid AND ds.domain = ${safeDomain}
         AND ds.article_id = ${articleId} AND a.domain = ${safeDomain}
-        AND a.policy_version = ${ARTICLE_AI_POLICY_VERSION}
+        AND a.policy_version = ${ARTICLE_AI_WEEKLY_POLICY_VERSION}
         AND a.status = 'ready'
+        AND a.valid_until > now()
+        AND (${expectedTargetWeekKey ?? null}::date IS NULL OR a.assessment_date = ${expectedTargetWeekKey ?? null}::date)
         AND a.assessment_date = (
           SELECT MAX(a2.assessment_date)
           FROM article_ai_domain_assessments a2
           WHERE a2.domain = ${safeDomain}
-            AND a2.policy_version = ${ARTICLE_AI_POLICY_VERSION}
+            AND a2.policy_version = ${ARTICLE_AI_WEEKLY_POLICY_VERSION}
             AND a2.status = 'ready'
         )
         AND ds.expires_at > now()
@@ -350,19 +689,22 @@ export async function recordArticleAiFeedbackV2(
 export async function getArticleAiDigestPicksV2(
   userId: number,
   domains: readonly ArticleAiDomain[],
-  window: { since: Date; until: Date },
+  window: { since: Date; until: Date; targetWeekKey?: string },
   now = new Date(),
 ): Promise<ArticleAiDigestPick[]> {
-  if (!isArticleAiEmailEnabled() || window.until <= window.since) return [];
+  const target = window.targetWeekKey;
+  // Mail must name its immutable cohort. Never fall back to whichever ready
+  // assessment happens to be newest when a caller omits the target key.
+  if (!isArticleAiEmailEnabled() || window.until <= window.since || !target || !isArticleAiWeeklyWeekKey(target)) return [];
   const output: ArticleAiDigestPick[] = [];
   for (const domain of Array.from(new Set(domains.map(normalizeDomain)))) {
     const preference = await getArticleAiPreferenceV2(userId, domain);
     if (!preference.enabled || !preference.weeklyDigestConfigured) continue;
-    const rows = (await getCurrentSharedSelections(userId, domain, undefined, now)) as SharedWithOverlay[];
+    const rows = await getWeeklySharedSelections(userId, domain, undefined, now, target, true);
     const candidates = rows
-      .filter((row) => !row.user_pending_confirmation && row.user_state !== "dismissed" && row.selected_at >= window.since && row.selected_at < window.until)
+      .filter((row) => !row.user_pending_confirmation && row.user_state !== "dismissed")
       .slice(0, ARTICLE_AI_MAX_WEEKLY_PICKS * 7);
-    const articles = await loadDomainArticles(domain, candidates.map((row) => Number(row.article_id)));
+    const articles = await loadCurrentWeeklyArticles(domain, candidates.map((row) => Number(row.article_id)));
     const byId = new Map(articles.map((article) => [article.id, article]));
     const seenSources = new Set<string>();
     let count = 0;
@@ -378,6 +720,7 @@ export async function getArticleAiDigestPicksV2(
         source: article.source || "Unknown source", publishedAt: article.publishedAt?.toISOString() ?? null,
         reason: row.reason.slice(0, 600), contentHash: article.contentHash,
         sharedSelectionId: row.id, assessmentDate: new Date(row.assessment_date).toISOString().slice(0, 10),
+        policyVersion: Number(row.policy_version), targetWeekKey: target,
       });
       count += 1;
     }
@@ -391,15 +734,19 @@ export async function filterArticleAiDigestPicksForCommitV2(
   picks: readonly ArticleAiDigestPick[],
 ): Promise<ArticleAiDigestPick[]> {
   if (!isArticleAiEmailEnabled() || picks.length === 0) return [];
-  const byDomain = new Map<ArticleAiDomain, ArticleAiDigestPick[]>();
+  const byDomain = new Map<string, { domain: ArticleAiDomain; targetWeekKey: string; rows: ArticleAiDigestPick[] }>();
   for (const pick of picks) {
-    if (!isArticleAiDomain(pick.domain)) continue;
-    const rows = byDomain.get(pick.domain) ?? [];
-    if (rows.length < ARTICLE_AI_MAX_WEEKLY_PICKS) rows.push(pick);
-    byDomain.set(pick.domain, rows);
+    if (!isArticleAiDomain(pick.domain) || Number(pick.policyVersion) !== ARTICLE_AI_WEEKLY_POLICY_VERSION
+      || !isArticleAiWeeklyWeekKey(pick.targetWeekKey) || !isArticleAiWeeklyWeekKey(pick.assessmentDate)
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[4-9][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(pick.sharedSelectionId)) continue;
+    const key = `${pick.domain}:${pick.targetWeekKey}`;
+    const group = byDomain.get(key) ?? { domain: pick.domain, targetWeekKey: pick.targetWeekKey, rows: [] };
+    if (group.rows.length < ARTICLE_AI_MAX_WEEKLY_PICKS) group.rows.push(pick);
+    byDomain.set(key, group);
   }
   const valid = new Set<string>();
-  for (const [domain, rows] of Array.from(byDomain.entries())) {
+  for (const group of Array.from(byDomain.values())) {
+    const { domain, targetWeekKey, rows } = group;
     const ids = normalizeIds(rows.map((pick) => pick.articleId));
     const sharedIds = rows.map((pick) => pick.sharedSelectionId).filter(Boolean);
     if (ids.length === 0 || sharedIds.length === 0) continue;
@@ -412,12 +759,11 @@ export async function filterArticleAiDigestPicksForCommitV2(
       SELECT ds.id::text AS shared_id, ds.article_id, ds.content_hash
       FROM article_ai_preferences p
       JOIN article_ai_domain_assessments a
-        ON a.domain = ${domain} AND a.policy_version = ${ARTICLE_AI_POLICY_VERSION} AND a.status = 'ready'
-       AND a.assessment_date = (
-         SELECT MAX(a2.assessment_date) FROM article_ai_domain_assessments a2
-         WHERE a2.domain = ${domain} AND a2.policy_version = ${ARTICLE_AI_POLICY_VERSION}
-           AND a2.status = 'ready'
-       )
+        ON a.domain = ${domain} AND a.policy_version = ${ARTICLE_AI_WEEKLY_POLICY_VERSION} AND a.status = 'ready'
+       AND a.assessment_date = ${targetWeekKey}::date
+       AND a.valid_until > now()
+       AND a.completed_at IS NOT NULL AND a.email_at IS NOT NULL AND a.completed_at <= a.email_at
+       AND COALESCE(a.coverage_json->>'status', '') = 'complete'
       JOIN article_ai_domain_selections ds ON ds.assessment_id = a.id AND ds.domain = ${domain}
       WHERE p.user_id = ${userId} AND p.domain = ${domain} AND p.enabled = TRUE
         AND ds.id = ANY(${sharedIds}::uuid[]) AND ds.article_id = ANY(${ids}::int[])

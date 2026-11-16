@@ -29,6 +29,19 @@ export function isPersonalDigestRecipient(destination: string, accountEmail: str
     && recipient === accountEmail.trim().toLowerCase();
 }
 
+/**
+ * AI picks are an opt-in addition to the existing personal Monday digest.
+ * Custom schedules and override mailboxes continue to receive the human
+ * digest only; toggling AI never changes the subscription itself.
+ */
+export function isCanonicalArticleAiSchedule(
+  schedule: { digest_day?: string | null; digest_hour?: number | null; timezone?: string | null },
+): boolean {
+  return (schedule.digest_day ?? "monday").trim().toLowerCase() === "monday"
+    && (schedule.digest_hour ?? 9) === 9
+    && (schedule.timezone ?? "Asia/Dubai").trim().toLowerCase() === "asia/dubai";
+}
+
 export function safeDigestUrl(value: string): string | null {
   try {
     const url = new URL(value);

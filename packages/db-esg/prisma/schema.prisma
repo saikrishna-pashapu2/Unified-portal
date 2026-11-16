@@ -470,16 +470,114 @@ model article_ai_domain_assessments {
   lease_owner       String?                         @db.VarChar(180)
   lease_token       String?                         @db.Uuid
   lease_expires_at  DateTime?                       @db.Timestamptz(6)
+  source_start_at   DateTime?                       @db.Timestamptz(6)
+  source_cutoff_at  DateTime?                       @db.Timestamptz(6)
+  processing_at     DateTime?                       @db.Timestamptz(6)
+  email_at          DateTime?                       @db.Timestamptz(6)
+  valid_until       DateTime?                       @db.Timestamptz(6)
+  manifest_cutoff_at DateTime?                      @db.Timestamptz(6)
+  phase             String?                         @db.VarChar(32)
+  coverage_json     Json?
+  manifest_hash     String?                         @db.VarChar(128)
   error             String?
   created_at        DateTime                        @default(now()) @db.Timestamptz(6)
   started_at        DateTime?                       @db.Timestamptz(6)
   completed_at      DateTime?                       @db.Timestamptz(6)
   updated_at        DateTime                        @default(now()) @updatedAt @db.Timestamptz(6)
   selections        article_ai_domain_selections[]
+  weekly_inputs     article_ai_weekly_inputs[]
+  weekly_batches    article_ai_weekly_batches[]
 
   @@unique([domain, assessment_date, policy_version], map: "article_ai_domain_assessments_domain_date_policy_key")
   @@index([domain, status, assessment_date(sort: Desc)], map: "idx_article_ai_domain_assessments_domain_status_date")
   @@index([status, lease_expires_at], map: "idx_article_ai_domain_assessments_lease")
+}
+
+model article_ai_weekly_inputs {
+  id                    String                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  assessment_id         String                         @db.Uuid
+  kind                  String                         @db.VarChar(16)
+  domain                String                         @db.VarChar(10)
+  article_id            Int
+  content_hash          String?                        @db.VarChar(128)
+  title                 String?
+  summary               String?
+  content               String?
+  source                String?
+  url                   String?
+  published_at          DateTime?                      @db.Timestamptz(6)
+  observed_at           DateTime                       @default(now()) @db.Timestamptz(6)
+  eligible_at           DateTime?                      @db.Timestamptz(6)
+  first_seen_at         DateTime?                      @db.Timestamptz(6)
+  first_seen_known      Boolean                        @default(false)
+  source_period_start   DateTime?                      @db.Timestamptz(6)
+  source_period_end     DateTime?                      @db.Timestamptz(6)
+  carryover_from_week  DateTime?                      @db.Date
+  exclusion_reason      String?
+  snapshot_json         Json?
+  state                 String                         @default("pending") @db.VarChar(16)
+  ordinal               Int
+  batch_id              String?                        @db.Uuid
+  created_at            DateTime                       @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime                       @default(now()) @updatedAt @db.Timestamptz(6)
+  assessment            article_ai_domain_assessments @relation(fields: [assessment_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  batch                 article_ai_weekly_batches?     @relation(fields: [batch_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@unique([assessment_id, kind, article_id], map: "article_ai_weekly_inputs_assessment_kind_article_key")
+  @@index([assessment_id, kind, state], map: "idx_article_ai_weekly_inputs_assessment_kind_state")
+  @@index([assessment_id, article_id], map: "idx_article_ai_weekly_inputs_assessment_article")
+  @@index([domain, article_id, content_hash], map: "idx_article_ai_weekly_inputs_domain_article_hash")
+}
+
+model article_ai_weekly_batches {
+  id                    String                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  assessment_id         String                         @db.Uuid
+  phase                 String                         @db.VarChar(32)
+  level                 Int                            @default(0)
+  batch_index           Int
+  state                 String                         @default("queued") @db.VarChar(16)
+  input_hash            String                         @db.VarChar(128)
+  input_count           Int                            @default(0)
+  processed_count       Int                            @default(0)
+  input_refs_json       Json
+  output_json            Json?
+  output_hash            String?                        @db.VarChar(128)
+  eliminations_json     Json?
+  attempt               Int                            @default(0)
+  request_count         Int                            @default(0)
+  input_tokens          Int                            @default(0)
+  output_tokens         Int                            @default(0)
+  lease_owner           String?                         @db.VarChar(180)
+  lease_token           String?                         @db.Uuid
+  lease_expires_at      DateTime?                       @db.Timestamptz(6)
+  error                 String?
+  created_at            DateTime                        @default(now()) @db.Timestamptz(6)
+  started_at            DateTime?                       @db.Timestamptz(6)
+  completed_at          DateTime?                       @db.Timestamptz(6)
+  updated_at            DateTime                        @default(now()) @updatedAt @db.Timestamptz(6)
+  assessment            article_ai_domain_assessments  @relation(fields: [assessment_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  inputs                article_ai_weekly_inputs[]
+
+  @@unique([assessment_id, phase, level, batch_index, input_hash], map: "article_ai_weekly_batches_assessment_phase_batch_key")
+  @@index([assessment_id, phase, state], map: "idx_article_ai_weekly_batches_assessment_phase_state")
+  @@index([state, lease_expires_at], map: "idx_article_ai_weekly_batches_lease")
+}
+
+model article_ai_weekly_batch_cache {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  domain          String   @db.VarChar(10)
+  policy_version  Int
+  model           String   @db.VarChar(80)
+  phase           String   @db.VarChar(32)
+  input_hash      String   @db.VarChar(128)
+  input_count     Int      @default(0)
+  output_json     Json
+  output_hash     String   @db.VarChar(128)
+  created_at      DateTime @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([domain, policy_version, model, phase, input_hash], map: "article_ai_weekly_batch_cache_scope_key")
+  @@index([domain, policy_version, phase, created_at(sort: Desc)], map: "idx_article_ai_weekly_batch_cache_lookup")
 }
 
 // Shared provider decisions. Per-user state lives in article_ai_user_selections

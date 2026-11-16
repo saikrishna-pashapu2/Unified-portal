@@ -1,24 +1,251 @@
 "use client";
 
-import { AlertCircle, Check, Loader2, Mail, Sparkles } from "lucide-react";
-import type { ArticleAiDomain } from "@/lib/article-ai/types";
+import {
+  AlertCircle,
+  CalendarClock,
+  Check,
+  ClipboardList,
+  Clock3,
+  Loader2,
+  Mail,
+  Sparkles,
+} from "lucide-react";
+import type {
+  ArticleAiDomain,
+  ArticleAiWeeklyStatus,
+  ArticleAiWeeklySummary,
+} from "@/lib/article-ai/types";
 import { useArticleAi } from "./ArticleAiProvider";
 
-function statusCopy(status: string | undefined) {
+const DUBAI_TIMEZONE = "Asia/Dubai";
+
+function formatDubaiDate(value: string | null | undefined) {
+  if (!value) return "Not available";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: DUBAI_TIMEZONE,
+    dateStyle: "medium",
+  }).format(date);
+}
+
+function formatDubaiExclusiveDate(value: string | null | undefined) {
+  if (!value) return "Not available";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  // Weekly sourceEnd is the exclusive Saturday 00:00 Dubai boundary. Show
+  // the last included calendar day so the UI reads as Monday–Friday.
+  date.setTime(date.getTime() - 1);
+  return formatDubaiDate(date.toISOString());
+}
+
+function formatDubaiDateTime(value: string | null | undefined) {
+  if (!value) return "Not available";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: DUBAI_TIMEZONE,
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+}
+
+function formatCount(value: number | null | undefined) {
+  return Number.isFinite(value) ? new Intl.NumberFormat("en-US").format(Number(value)) : "0";
+}
+
+function weeklyStatusLabel(status: ArticleAiWeeklyStatus | undefined) {
   switch (status) {
-    case "queued":
-      return "The shared domain assessment is queued for its next article pass.";
+    case "manifesting":
+      return "Preparing this week's inputs";
+    case "assessing_history":
+      return "Reviewing liked-article history";
+    case "merging_history":
+      return "Combining history review";
+    case "evaluating_candidates":
+      return "Reviewing current candidates";
+    case "merging_candidates":
+      return "Combining candidate review";
     case "ready":
-      return "The shared domain assessment is ready and will be refreshed as new articles arrive.";
-    case "insufficient_history":
-      return "We are still collecting usable human-liked articles for the shared domain assessment.";
-    case "preview":
-      return "Preview mode is on for this deployment.";
+      return "Ready for the Monday email";
     case "error":
-      return "The last article pass needs attention. Your human likes are unchanged.";
+      return "Weekly assessment needs attention";
+    case "budget_exhausted":
+      return "Weekly assessment paused at its AI budget";
+    case "insufficient_history":
+      return "Waiting for usable liked-article history";
+    case "expired":
+      return "The previous weekly pass has expired";
+    case "cancelled":
+      return "Weekly assessment cancelled";
+    case "queued":
+      return "Queued for the next weekly pass";
     default:
-      return null;
+      return "Weekly status is not available yet";
   }
+}
+
+function weeklyStatusTone(status: ArticleAiWeeklyStatus | undefined) {
+  if (status === "ready") return "bg-emerald-100 text-emerald-800";
+  if (status === "error" || status === "budget_exhausted" || status === "cancelled") {
+    return "bg-rose-100 text-rose-800";
+  }
+  if (status === "insufficient_history" || status === "expired") {
+    return "bg-amber-100 text-amber-800";
+  }
+  return "bg-sky-100 text-sky-800";
+}
+
+function weeklyCoverageCopy(weekly: ArticleAiWeeklySummary) {
+  const history = `${formatCount(weekly.coverage.historyProcessed)} of ${formatCount(weekly.coverage.historyTotal)} history inputs`;
+  const candidates = `${formatCount(weekly.coverage.candidateProcessed)} of ${formatCount(weekly.coverage.candidateTotal)} candidates`;
+  const complete = weekly.coverage.status === "complete" && weekly.status === "ready";
+  return complete
+    ? `Reviewed ${history} and ${candidates}.`
+    : `Reviewed ${history} and ${candidates} so far.`;
+}
+
+function WeeklySummary({
+  domain,
+  weekly,
+}: {
+  domain: ArticleAiDomain;
+  weekly: ArticleAiWeeklySummary | null | undefined;
+}) {
+  const status = weekly?.status;
+  const coverage = weekly?.coverage;
+  const complete = Boolean(weekly && coverage?.status === "complete" && status === "ready");
+  const statusLabel = weeklyStatusLabel(status);
+
+  return (
+    <div
+      className="mt-4 rounded-xl border border-slate-200 bg-slate-50/80 p-3.5"
+      data-testid={`article-ai-weekly-${domain}`}
+      aria-label={`Weekly ${domain.toUpperCase()} AI assessment`}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="flex min-w-0 items-start gap-2.5">
+          <span className="mt-0.5 rounded-lg bg-slate-200 p-2 text-slate-700">
+            <CalendarClock className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-700">
+              Shared weekly assessment
+            </p>
+            <p className="mt-1 text-xs leading-5 text-slate-600">
+              This status and these shared picks are visible whether your private email switch is on or off.
+            </p>
+          </div>
+        </div>
+        <span
+          className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] ${weeklyStatusTone(status)}`}
+          data-testid={`article-ai-weekly-status-${domain}`}
+        >
+          {statusLabel}
+        </span>
+      </div>
+
+      <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+          <p className="font-semibold text-slate-700">Target week · Monday delivery</p>
+          <p className="mt-0.5 text-slate-600">
+            {weekly ? formatDubaiDate(weekly.targetWeekKey) : "Next Monday"}
+          </p>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+          <p className="font-semibold text-slate-700">Review window</p>
+          <p className="mt-0.5 text-slate-600">
+            {weekly
+              ? `${formatDubaiDate(weekly.sourceStart)} – ${formatDubaiExclusiveDate(weekly.sourceEnd)} Dubai`
+              : "Monday–Friday · Dubai"}
+          </p>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+          <p className="font-semibold text-slate-700">Processing</p>
+          <p className="mt-0.5 text-slate-600">
+            Saturday at 12:15 am Dubai
+            {weekly ? <span className="block text-[11px] text-slate-500">{formatDubaiDateTime(weekly.processingAt)}</span> : null}
+          </p>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+          <p className="font-semibold text-slate-700">Email window</p>
+          <p className="mt-0.5 text-slate-600">
+            Monday at 9:00 am Dubai
+            {weekly ? <span className="block text-[11px] text-slate-500">{formatDubaiDateTime(weekly.emailAt)}</span> : null}
+          </p>
+        </div>
+      </div>
+
+      {weekly ? (
+        <>
+          <div
+            className="mt-3 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4"
+            data-testid={`article-ai-weekly-coverage-${domain}`}
+          >
+            <div className="flex items-start gap-2 rounded-lg bg-white px-3 py-2">
+              <ClipboardList className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500" aria-hidden="true" />
+              <span>
+                <span className="block font-semibold text-slate-700">Input review</span>
+                <span className="mt-0.5 block text-slate-600">{weeklyCoverageCopy(weekly)}</span>
+              </span>
+            </div>
+            <div className="flex items-start gap-2 rounded-lg bg-white px-3 py-2">
+              <span className="mt-0.5 text-slate-500" aria-hidden="true">×</span>
+              <span>
+                <span className="block font-semibold text-slate-700">Explicit exclusions</span>
+                <span className="mt-0.5 block text-slate-600">
+                  {formatCount(weekly.coverage.historyExcluded)} history · {formatCount(weekly.coverage.candidateExcluded)} candidates
+                </span>
+              </span>
+            </div>
+            <div className="flex items-start gap-2 rounded-lg bg-white px-3 py-2">
+              <Clock3 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500" aria-hidden="true" />
+              <span>
+                <span className="block font-semibold text-slate-700">Carryover</span>
+                <span className="mt-0.5 block text-slate-600">
+                  {formatCount(weekly.coverage.candidateCarryover)} candidate{weekly.coverage.candidateCarryover === 1 ? "" : "s"}
+                </span>
+              </span>
+            </div>
+            <div className="flex items-start gap-2 rounded-lg bg-white px-3 py-2">
+              <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500" aria-hidden="true" />
+              <span>
+                <span className="block font-semibold text-slate-700">Shared picks</span>
+                <span className="mt-0.5 block text-slate-600">{formatCount(weekly.selectionCount)} selected</span>
+              </span>
+            </div>
+          </div>
+
+          {weekly.assessmentSummary ? (
+            <p className="mt-3 rounded-lg bg-white px-3 py-2 text-xs leading-5 text-slate-700">
+              {weekly.assessmentSummary}
+            </p>
+          ) : null}
+
+          {complete ? (
+            weekly.selectionCount === 0 ? (
+              <p className="mt-3 text-[11px] leading-5 text-slate-600">
+                This weekly pass completed without selecting a shared pick.
+              </p>
+            ) : null
+          ) : (
+            <p className="mt-3 text-[11px] leading-5 text-amber-800">
+              Coverage is partial or this pass did not finish; these results do not claim that every input was reviewed.
+            </p>
+          )}
+
+          <p className="mt-2 text-[11px] text-slate-500">
+            Expires {formatDubaiDateTime(weekly.validUntil)} in Dubai · model {weekly.model}
+            {weekly.completedAt ? ` · completed ${formatDubaiDateTime(weekly.completedAt)}` : ""}
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 text-xs leading-5 text-slate-600">
+          The next shared pass reviews Monday–Friday inputs, processes them Saturday at 12:15 am Dubai, and prepares the shared result for Monday at 9:00 am Dubai.
+        </p>
+      )}
+    </div>
+  );
 }
 
 export default function ArticleAiControls({
@@ -122,13 +349,8 @@ export default function ArticleAiControls({
     );
   }
 
-  const statusMessage = statusCopy(preference.status);
-  const profileMessage = preference.status === "insufficient_history"
-    ? preference.historyCount > 0
-      ? `The shared ${domain.toUpperCase()} assessment is building from ${preference.historyCount} human-liked articles. AI picks will appear when usable domain history is available.`
-      : `No shared ${domain.toUpperCase()} liked-article history is available yet. AI picks will start after users have liked useful articles.`
-    : `The shared ${domain.toUpperCase()} assessment learns from human-liked articles across the domain. Your switch controls only whether those picks appear in your private weekly email.`;
-  const emailReady = preference.emailInclusionEnabled && preference.weeklyDigestConfigured;
+  const profileMessage = `The shared ${domain.toUpperCase()} profile learns from all human-liked articles in this domain. Your switch controls only whether shared picks appear in your private weekly email.`;
+  const emailReady = preference.emailInclusionEnabled && preference.weeklyDigestConfigured && !preference.scheduleMismatch;
 
   return (
     <section
@@ -175,38 +397,47 @@ export default function ArticleAiControls({
 
       <div className="mt-4 grid gap-2 text-xs sm:grid-cols-2">
         <p className="rounded-lg bg-slate-50 px-3 py-2 leading-5 text-slate-600">{profileMessage}</p>
-        {statusMessage ? (
-          <p className="rounded-lg bg-slate-50 px-3 py-2 leading-5 text-slate-600">{statusMessage}</p>
-        ) : null}
+        <p className="rounded-lg bg-slate-50 px-3 py-2 leading-5 text-slate-600">
+          This is a shared weekly result. It is not a personal-like threshold, and turning this switch on does not start a separate AI run.
+        </p>
       </div>
+
+      <WeeklySummary domain={domain} weekly={preference.weekly} />
 
       {!preference.emailInclusionEnabled ? (
         <p className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          AI selection is in preview mode here. It will not be added to an email until email inclusion is enabled.
+          AI email inclusion is currently unavailable here. Shared picks remain reviewable, but they will not be added to email.
         </p>
       ) : !preference.weeklyDigestConfigured ? (
         <p className="mt-3 flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs leading-5 text-sky-900">
           <Mail className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <span>
-          To receive private AI picks, configure a weekly article email for this domain to your account email in{" "}
+          To receive private AI picks, configure an existing weekly article email for this domain to your account email on Monday at 9:00 am Dubai in{" "}
             <a href="/profile" className="font-semibold underline underline-offset-4">
               Profile → Alerts
             </a>
-            .
+            . This switch will not create or change that subscription.
+          </span>
+        </p>
+      ) : preference.scheduleMismatch ? (
+        <p className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+          <Clock3 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>
+            Your existing weekly article email uses a different schedule. AI picks require Monday at 9:00 am Dubai. Update this in{" "}
+            <a href="/profile" className="font-semibold underline underline-offset-4">
+              Profile → Alerts
+            </a>
+            ; this switch will not silently change it.
           </span>
         </p>
       ) : null}
 
-      {preference.enabled && preference.status === "ready" && emailReady ? (
+      {preference.enabled && preference.weekly?.status === "ready" && emailReady ? (
         <p className="mt-3 flex items-center gap-2 text-[11px] font-medium text-emerald-700">
           <Check className="h-3.5 w-3.5" aria-hidden="true" />
-          Future picks will be added to emails assembled after they are generated.
+          Your opted-in AI picks will be included in the next compatible Monday 9:00 am Dubai email.
         </p>
-      ) : null}
-
-      {preference.enabled && preference.status === "off" ? (
-        <p className="mt-3 text-[11px] text-slate-500">Turn the switch on to begin a private article pass.</p>
       ) : null}
 
       {!preference.enabled ? (
@@ -215,11 +446,6 @@ export default function ArticleAiControls({
         </p>
       ) : null}
 
-      {preference.enabled && preference.status === "queued" ? (
-        <p className="mt-3 text-[11px] leading-5 text-slate-500">
-          New picks will affect only emails assembled after this article pass completes.
-        </p>
-      ) : null}
 
       {error ? (
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-rose-700" role="alert">
