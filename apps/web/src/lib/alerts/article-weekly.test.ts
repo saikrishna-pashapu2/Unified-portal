@@ -19,7 +19,12 @@ function alert(overrides: Partial<WeeklyArticleAlert> = {}): WeeklyArticleAlert 
     alert_articles: true, alert_events: false, alert_publications: false, sources: [], keywords: [], ...overrides,
   };
 }
-const pick = { articleId: 21, domain: 'credit', title: 'Bank ratings', url: 'https://example.org/bank', source: 'Ratings', publishedAt: null, reason: 'Matches the shared credit-risk history.', contentHash: 'hash' };
+const pick = {
+  articleId: 21, domain: 'credit', title: 'Bank ratings', url: 'https://example.org/bank', source: 'Ratings',
+  publishedAt: null, reason: 'Matches the shared credit-risk history.', contentHash: 'hash',
+  sharedSelectionId: '11111111-1111-4111-8111-111111111111', assessmentDate: '2026-11-16',
+  policyVersion: 3, targetWeekKey: '2026-11-16',
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -62,6 +67,13 @@ describe('canonical weekly article emails', () => {
     expect(mocks.picks).not.toHaveBeenCalled();
     expect(mocks.enqueue.mock.calls[0][0].html).not.toContain('AI picks for you');
     expect(mocks.enqueue.mock.calls[0][0].to).toBe('team@example.org');
+  });
+  it('keeps AI out of a custom-scheduled human digest', async () => {
+    const custom = alert({ digest_day: 'friday', digest_hour: 9 });
+    mocks.list.mockResolvedValue([custom]); mocks.query.mockResolvedValue([custom]);
+    await queueDueArticleWeeklyDigests(new Date('2026-11-20T05:01:00Z'));
+    expect(mocks.picks).not.toHaveBeenCalled();
+    expect(mocks.enqueue.mock.calls[0][0].html).not.toContain('AI picks for you');
   });
   it('uses human content when AI is unavailable or was disabled before assembly commits', async () => {
     mocks.picks.mockRejectedValueOnce(new Error('AI unavailable'));

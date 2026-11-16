@@ -12,53 +12,57 @@ import {
   type ClaimedBackgroundJob,
 } from "@/lib/jobs/queue";
 import { isArticleAiEnabled } from "./config";
-import { runSharedArticleAiAssessment } from "./shared";
+import { getArticleAiWeeklyCalendar, getDueArticleAiWeeklyTarget, isArticleAiWeeklyGenerationDue } from "./weekly-calendar";
+import { runArticleAiWeeklyAssessment } from "./weekly";
 import {
-  ARTICLE_AI_POLICY_VERSION,
+  ARTICLE_AI_WEEKLY_POLICY_VERSION,
   type ArticleAiDomain,
-  type ArticleAiDomainJobPayload,
+  type ArticleAiWeeklyJobPayload,
 } from "./types";
 
 const LEGACY_ESG_JOB = "article_ai_esg_v1" as BackgroundJobType;
 const LEGACY_CREDIT_JOB = "article_ai_credit_v1" as BackgroundJobType;
-const ESG_JOB = "article_ai_esg_v2" as BackgroundJobType;
-const CREDIT_JOB = "article_ai_credit_v2" as BackgroundJobType;
+const RETIRED_ESG_JOB = "article_ai_esg_v2" as BackgroundJobType;
+const RETIRED_CREDIT_JOB = "article_ai_credit_v2" as BackgroundJobType;
+const ESG_JOB = "article_ai_esg_v3" as BackgroundJobType;
+const CREDIT_JOB = "article_ai_credit_v3" as BackgroundJobType;
 
 function isDomain(value: unknown): value is ArticleAiDomain {
   return value === "esg" || value === "credit";
 }
 
-function utcDate(now: Date): string {
-  return now.toISOString().slice(0, 10);
-}
-
-function parseDomainPayload(job: ClaimedBackgroundJob): ArticleAiDomainJobPayload {
+function parseWeeklyPayload(job: ClaimedBackgroundJob): ArticleAiWeeklyJobPayload {
   const payload = job.payload as Record<string, unknown>;
   const expectedDomain = job.jobType === ESG_JOB ? "esg" : job.jobType === CREDIT_JOB ? "credit" : null;
-  if (!expectedDomain || !isDomain(payload.domain) || payload.domain !== expectedDomain || payload.policyVersion !== ARTICLE_AI_POLICY_VERSION || typeof payload.runDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(payload.runDate)) {
-    throw new Error("Invalid article AI domain job payload");
+  if (!expectedDomain || !isDomain(payload.domain) || payload.domain !== expectedDomain
+      || payload.policyVersion !== ARTICLE_AI_WEEKLY_POLICY_VERSION
+      || typeof payload.targetWeekKey !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(payload.targetWeekKey)) {
+    throw new Error("Invalid article AI weekly job payload");
   }
-  return { domain: payload.domain, runDate: payload.runDate, policyVersion: ARTICLE_AI_POLICY_VERSION };
+  const calendar = getArticleAiWeeklyCalendar(payload.targetWeekKey);
+  if (calendar.targetWeekKey !== payload.targetWeekKey) throw new Error("Invalid article AI weekly target week");
+  return { domain: payload.domain, targetWeekKey: calendar.targetWeekKey, policyVersion: ARTICLE_AI_WEEKLY_POLICY_VERSION };
 }
 
-/** Enqueue one domain assessment per day; queue user_id is accounting only. */
+/** Enqueue one shared weekly assessment per domain; queue user_id is accounting only. */
 export async function queueDueArticleAiJobs(now = new Date()): Promise<number> {
   if (!isArticleAiEnabled()) return 0;
+  const target = getDueArticleAiWeeklyTarget(now);
+  if (!target || !isArticleAiWeeklyGenerationDue(target, now)) return 0;
   const owners = await esgPrisma.$queryRaw<Array<{ id: number }>>`
     SELECT id FROM users WHERE is_active_db = TRUE ORDER BY id ASC LIMIT 1
   `;
   const owner = owners[0];
   if (!owner) return 0;
-  const runDate = utcDate(now);
   let queued = 0;
   for (const domain of ["esg", "credit"] as const) {
     await enqueueBackgroundJob({
       id: randomUUID(),
       jobType: domain === "esg" ? ESG_JOB : CREDIT_JOB,
       userId: Number(owner.id),
-      payload: { domain, runDate, policyVersion: ARTICLE_AI_POLICY_VERSION } satisfies ArticleAiDomainJobPayload,
-      maxAttempts: 2,
-      idempotencyKey: `article-ai:v2:${domain}:${runDate}:${ARTICLE_AI_POLICY_VERSION}`,
+      payload: { domain, targetWeekKey: target, policyVersion: ARTICLE_AI_WEEKLY_POLICY_VERSION } satisfies ArticleAiWeeklyJobPayload,
+      maxAttempts: 4,
+      idempotencyKey: `article-ai:v3:${domain}:${target}:${ARTICLE_AI_WEEKLY_POLICY_VERSION}`,
     });
     queued += 1;
   }
@@ -68,19 +72,20 @@ export async function queueDueArticleAiJobs(now = new Date()): Promise<number> {
 export async function runArticleAiJob(job: ClaimedBackgroundJob): Promise<{ result: unknown }> {
   // Drain old rows without reading preferences/history, touching Credit,
   // reserving budget, or calling the provider.
-  if (job.jobType === LEGACY_ESG_JOB || job.jobType === LEGACY_CREDIT_JOB) {
+  if (job.jobType === LEGACY_ESG_JOB || job.jobType === LEGACY_CREDIT_JOB
+      || job.jobType === RETIRED_ESG_JOB || job.jobType === RETIRED_CREDIT_JOB) {
     return { result: { status: "stale_policy", jobType: job.jobType } };
   }
   if (job.jobType !== ESG_JOB && job.jobType !== CREDIT_JOB) {
     throw new Error(`Unsupported article AI job type: ${job.jobType}`);
   }
+  const payload = parseWeeklyPayload(job);
   if (!isArticleAiEnabled()) return { result: { status: "disabled" } };
-  const payload = parseDomainPayload(job);
-  if (payload.runDate !== utcDate(new Date())) {
-    return { result: { status: "expired_run", domain: payload.domain, runDate: payload.runDate } };
+  if (!isArticleAiWeeklyGenerationDue(payload.targetWeekKey, new Date())) {
+    return { result: { status: "expired_run", domain: payload.domain, targetWeekKey: payload.targetWeekKey } };
   }
   await throwIfJobCancelled(job.id, job.leaseOwner);
-  return { result: await runSharedArticleAiAssessment(job, payload) };
+  return { result: await runArticleAiWeeklyAssessment(job, payload) };
 }
 
 /** Drain only legacy Credit confirmations created before the v2 cutover. */

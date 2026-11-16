@@ -77,6 +77,11 @@ export default function ArticleAiSelection({ articleId }: { articleId: number })
             ) : null}
           </div>
           <p className="mt-1 text-xs leading-5 text-slate-700">{selection.reason}</p>
+          {selection.targetWeekKey ? (
+            <p className="mt-1 text-[10px] font-medium uppercase tracking-[0.1em] text-slate-500">
+              Shared week {selection.targetWeekKey} · Dubai
+            </p>
+          ) : null}
 
           {!isConfirmed ? (
             <div className="mt-2 flex flex-wrap items-center gap-2">

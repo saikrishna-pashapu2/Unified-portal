@@ -3,17 +3,77 @@ import { expect, test, type Page } from "@playwright/test";
 type Domain = "esg" | "credit";
 type SelectionState = "selected" | "confirmed" | "dismissed";
 
+const TARGET_WEEK = "2026-11-16";
+
+type WeeklyStatus =
+  | "queued"
+  | "manifesting"
+  | "assessing_history"
+  | "merging_history"
+  | "evaluating_candidates"
+  | "merging_candidates"
+  | "ready"
+  | "error"
+  | "budget_exhausted"
+  | "insufficient_history"
+  | "expired"
+  | "cancelled";
+
+function weeklySummary(
+  domain: Domain,
+  overrides: Record<string, unknown> = {},
+  coverageOverrides: Record<string, unknown> = {},
+) {
+  const historyTotal = domain === "esg" ? 20 : 8;
+  const candidateTotal = 12;
+  return {
+    targetWeekKey: TARGET_WEEK,
+    sourceStart: "2026-11-09T00:00:00+04:00",
+    sourceEnd: "2026-11-14T00:00:00+04:00",
+    processingAt: "2026-11-14T00:15:00+04:00",
+    emailAt: "2026-11-16T09:00:00+04:00",
+    validUntil: "2026-11-23T00:00:00+04:00",
+    timezone: "Asia/Dubai",
+    model: "gpt-6-luna",
+    status: "ready" as WeeklyStatus,
+    phase: "finalize",
+    coverage: {
+      historyTotal,
+      historyResolved: historyTotal - 2,
+      historyProcessed: historyTotal - 2,
+      historyUnusable: 2,
+      historyExcluded: 2,
+      candidateTotal,
+      candidateProcessed: candidateTotal - 3,
+      candidateUnusable: 3,
+      candidateExcluded: 3,
+      candidateCarryover: 2,
+      mergeLeaves: 4,
+      mergeNodes: 2,
+      mergeNodesCompleted: 2,
+      status: "complete",
+      ...coverageOverrides,
+    },
+    selectionCount: 1,
+    completedAt: "2026-11-14T00:22:00+04:00",
+    assessmentSummary: `${domain.toUpperCase()} weekly profile reviewed shared history and candidate inputs.`,
+    ...overrides,
+  };
+}
+
 const selectionFor = (domain: Domain, articleId: number, overrides: Record<string, unknown> = {}) => ({
   articleId,
   domain,
   state: "selected" as SelectionState,
   reason: domain === "esg" ? "Matches shared ESG liked-article history." : "Matches shared Credit liked-article history.",
   version: 1,
-  selectedAt: "2026-11-16T08:00:00.000Z",
-  expiresAt: "2026-11-23T08:00:00.000Z",
+  selectedAt: "2026-11-13T20:22:00.000Z",
+  expiresAt: "2026-11-22T20:00:00.000Z",
   pendingConfirmation: false,
   sharedSelectionId: `00000000-0000-4000-8000-${String(articleId).padStart(12, "0")}`,
   assessmentDate: "2026-11-16",
+  policyVersion: 3,
+  targetWeekKey: TARGET_WEEK,
   ...overrides,
 });
 
@@ -28,6 +88,8 @@ function preference(domain: Domain, overrides: Record<string, unknown> = {}) {
     status: "ready",
     lastRunAt: "2026-11-16T08:00:00.000Z",
     emailInclusionEnabled: domain === "esg",
+    weekly: weeklySummary(domain),
+    scheduleMismatch: false,
     ...overrides,
   };
 }
@@ -45,31 +107,80 @@ async function mockArticleAiApis(
     sharedHistoryCount?: number;
     sharedHistoryReady?: boolean;
     esgEnabled?: boolean;
+    esgWeeklyDigestConfigured?: boolean;
+    esgEmailInclusionEnabled?: boolean;
+    creditWeeklyDigestConfigured?: boolean;
+    creditEmailInclusionEnabled?: boolean;
+    scheduleMismatch?: boolean;
+    weeklyStatus?: WeeklyStatus;
+    weeklyReadyZero?: boolean;
+    weeklyPartial?: boolean;
+    weeklyError?: boolean;
   } = {},
 ) {
+  const sharedHistoryCount = options.sharedHistoryCount ?? 20;
+  const sharedHistoryReady = options.sharedHistoryReady !== false;
+  const weeklyStatus = options.weeklyError
+    ? "error"
+    : options.weeklyReadyZero
+      ? "ready"
+      : options.weeklyStatus ?? (sharedHistoryReady ? "ready" : "insufficient_history");
+  const weeklyCoverageStatus = options.weeklyPartial || weeklyStatus !== "ready" ? "incomplete" : "complete";
   const prefs: Record<Domain, any> = {
     esg: preference("esg", {
-      ...(options.sharedHistoryCount === undefined ? {} : {
-        historyCount: options.sharedHistoryCount,
-        profileSource: "domain",
-        status: options.sharedHistoryReady === false ? "insufficient_history" : "ready",
-      }),
+      historyCount: sharedHistoryCount,
+      profileSource: "domain",
+      status: sharedHistoryReady ? "ready" : "insufficient_history",
+      weeklyDigestConfigured: options.esgWeeklyDigestConfigured ?? false,
+      emailInclusionEnabled: options.esgEmailInclusionEnabled ?? true,
+      scheduleMismatch: options.scheduleMismatch ?? false,
+      weekly: weeklySummary(
+        "esg",
+        {
+          status: weeklyStatus,
+          selectionCount: options.weeklyReadyZero ? 0 : 1,
+          ...(options.weeklyReadyZero ? { assessmentSummary: "This completed pass found no candidates strong enough to select." } : {}),
+        },
+        {
+          historyTotal: sharedHistoryCount,
+          historyResolved: Math.max(0, sharedHistoryCount - 2),
+          historyProcessed: Math.max(0, sharedHistoryCount - (options.weeklyPartial ? 4 : 2)),
+          status: weeklyCoverageStatus,
+          ...(options.weeklyPartial ? { candidateProcessed: 4, candidateExcluded: 1 } : {}),
+        },
+      ),
       ...(options.esgEnabled === undefined ? {} : {
         enabled: options.esgEnabled,
         status: options.esgEnabled ? "ready" : "off",
       }),
     }),
-    credit: preference("credit", { weeklyDigestConfigured: true, emailInclusionEnabled: false }),
+    credit: preference("credit", {
+      weeklyDigestConfigured: options.creditWeeklyDigestConfigured ?? true,
+      emailInclusionEnabled: options.creditEmailInclusionEnabled ?? false,
+      scheduleMismatch: options.scheduleMismatch ?? false,
+      weekly: weeklySummary("credit", {
+        status: weeklyStatus,
+        selectionCount: options.weeklyReadyZero ? 0 : 1,
+        ...(options.weeklyReadyZero ? { assessmentSummary: "This completed pass found no candidates strong enough to select." } : {}),
+      }, {
+        status: weeklyCoverageStatus,
+      }),
+    }),
   };
   const selections: Record<Domain, any[]> = {
-    esg: options.includePendingEsg
+    esg: options.weeklyReadyZero
+      ? []
+      : options.includePendingEsg
       ? [selectionFor("esg", 101), selectionFor("esg", 102, { pendingConfirmation: true })]
       : [selectionFor("esg", 101)],
-    credit: options.resolveCreditPending
+    credit: options.weeklyReadyZero
+      ? []
+      : options.resolveCreditPending
       ? [selectionFor("credit", 201), selectionFor("credit", 202, { pendingConfirmation: true })]
       : [selectionFor("credit", 201)],
   };
   const selectionCalls: Record<Domain, number> = { esg: 0, credit: 0 };
+  const feedbackRequests: Array<Record<string, unknown>> = [];
   let selectionFailureRemaining = options.selectionFailureOnce ? 1 : 0;
   let conflictRemaining = options.conflictFirst ? 1 : 0;
 
@@ -85,7 +196,6 @@ async function mockArticleAiApis(
       prefs[body.domain] = {
         ...prefs[body.domain],
         enabled: body.enabled,
-        status: body.enabled ? "queued" : "off",
       };
       await route.fulfill({ json: prefs[body.domain] });
       return;
@@ -119,9 +229,16 @@ async function mockArticleAiApis(
       action: "confirm" | "dismiss";
       expectedVersion: number;
       sharedSelectionId: string;
+      targetWeekKey?: string;
     };
-    if (!body.sharedSelectionId) {
+    feedbackRequests.push(body);
+    const current = selections[body.domain].find((selection) => selection.articleId === body.articleId);
+    if (!body.sharedSelectionId || body.sharedSelectionId !== current?.sharedSelectionId) {
       await route.fulfill({ status: 400, json: { error: "Shared selection identity is required." } });
+      return;
+    }
+    if (body.targetWeekKey && body.targetWeekKey !== current?.targetWeekKey) {
+      await route.fulfill({ status: 409, json: { error: "Selection week is stale." } });
       return;
     }
     if (
@@ -135,7 +252,6 @@ async function mockArticleAiApis(
       await route.fulfill({ status: 409, json: { error: "Selection version is stale." } });
       return;
     }
-    const current = selections[body.domain].find((selection) => selection.articleId === body.articleId);
     const next = {
       ...(current ?? selectionFor(body.domain, body.articleId)),
       state: body.action === "confirm" ? "confirmed" : "dismissed",
@@ -154,7 +270,7 @@ async function mockArticleAiApis(
     });
   });
 
-  return { selectionCalls };
+  return { selectionCalls, feedbackRequests };
 }
 
 test("keeps ESG and Credit switches independent, batches selections, and preserves filters", async ({ page }) => {
@@ -163,8 +279,10 @@ test("keeps ESG and Credit switches independent, batches selections, and preserv
 
   await expect(page.getByTestId("article-ai-controls-esg")).toBeVisible();
   await expect(page.getByTestId("article-ai-controls-credit").first()).toBeVisible();
-  await expect(page.getByText("To receive private AI picks, configure a weekly article email for this domain to your account email in")).toBeVisible();
-  await expect(page.getByText("AI selection is in preview mode here.")).toBeVisible();
+  await expect(page.getByText(/configure an existing weekly article email for this domain/)).toBeVisible();
+  await expect(page.getByText("AI email inclusion is currently unavailable here.")).toBeVisible();
+  await expect(page.getByTestId("article-ai-weekly-status-esg")).toContainText("Ready for the Monday email");
+  await expect(page.getByTestId("article-ai-weekly-status-credit")).toContainText("Ready for the Monday email");
   expect(selectionCalls).toEqual({ esg: 1, credit: 1 });
 
   const esgSwitch = page.getByTestId("article-ai-toggle-esg");
@@ -183,7 +301,7 @@ test("describes shared domain history without requiring personal likes", async (
   await page.goto("/articles");
 
   const esgControls = page.getByTestId("article-ai-controls-esg");
-  await expect(esgControls.getByText("The shared ESG assessment learns from human-liked articles across the domain. Your switch controls only whether those picks appear in your private weekly email.")).toBeVisible();
+  await expect(esgControls.getByText("The shared ESG profile learns from all human-liked articles in this domain. Your switch controls only whether shared picks appear in your private weekly email.")).toBeVisible();
   await expect(esgControls.getByText(/personal likes/)).toHaveCount(0);
 });
 
@@ -194,6 +312,7 @@ test("keeps shared picks visible when private email inclusion is off", async ({ 
   const esgControls = page.getByTestId("article-ai-controls-esg");
   await expect(esgControls.getByTestId("article-ai-toggle-esg")).toHaveAttribute("aria-checked", "false");
   await expect(esgControls).toContainText("Shared AI picks remain visible here");
+  await expect(esgControls.getByTestId("article-ai-weekly-esg")).toBeVisible();
   const sharedPick = page.getByTestId("article-ai-selection-101");
   await expect(sharedPick).toBeVisible();
   await expect(sharedPick.getByRole("button", { name: "Keep & like" })).toBeVisible();
@@ -267,4 +386,91 @@ test("does not apply delayed feedback after navigating from ESG to Credit", asyn
   await page.waitForTimeout(1_100);
   await expect(focus.getByTestId("article-ai-selection-201")).toBeVisible();
   await expect(focus.getByTestId("article-ai-selection-101")).toHaveCount(0);
+});
+
+test("shows the fixed Dubai schedule and upcoming weekly window for both domains", async ({ page }) => {
+  await mockArticleAiApis(page);
+  await page.goto("/articles");
+
+  for (const domain of ["esg", "credit"] as const) {
+    const weekly = page.getByTestId(`article-ai-weekly-${domain}`);
+    await expect(weekly).toContainText("Target week");
+    await expect(weekly).toContainText("Nov 16, 2026");
+    await expect(weekly).toContainText("Nov 9, 2026");
+    await expect(weekly).toContainText("Nov 13, 2026");
+    await expect(weekly).toContainText("Saturday at 12:15 am Dubai");
+    await expect(weekly).toContainText("Monday at 9:00 am Dubai");
+    await expect(weekly).toContainText("gpt-6-luna");
+  }
+});
+
+test("reports partial review coverage, exclusions, carryover, and completion limits", async ({ page }) => {
+  await mockArticleAiApis(page, {
+    weeklyStatus: "evaluating_candidates",
+    weeklyPartial: true,
+  });
+  await page.goto("/articles");
+
+  const weekly = page.getByTestId("article-ai-weekly-esg");
+  await expect(weekly.getByTestId("article-ai-weekly-status-esg")).toContainText("Reviewing current candidates");
+  await expect(weekly.getByTestId("article-ai-weekly-coverage-esg")).toContainText("16 of 20 history inputs");
+  await expect(weekly.getByTestId("article-ai-weekly-coverage-esg")).toContainText("4 of 12 candidates");
+  await expect(weekly.getByTestId("article-ai-weekly-coverage-esg")).toContainText("2 history · 1 candidates");
+  await expect(weekly.getByTestId("article-ai-weekly-coverage-esg")).toContainText("2 candidates");
+  await expect(weekly).toContainText("do not claim that every input was reviewed");
+  await expect(weekly).not.toContainText("Reviewed 20 of 20 history inputs and 12 of 12 candidates.");
+});
+
+test("shows a completed weekly pass with zero shared selections", async ({ page }) => {
+  await mockArticleAiApis(page, { weeklyReadyZero: true });
+  await page.goto("/articles");
+  const readyZero = page.getByTestId("article-ai-weekly-esg");
+  await expect(readyZero.getByTestId("article-ai-weekly-status-esg")).toContainText("Ready for the Monday email");
+  await expect(readyZero).toContainText("completed without selecting a shared pick");
+  await expect(page.getByTestId("article-ai-selection-101")).toHaveCount(0);
+});
+
+test("shows a failed weekly outcome without claiming complete input review", async ({ page }) => {
+  await mockArticleAiApis(page, { weeklyError: true });
+  await page.goto("/articles");
+  const failed = page.getByTestId("article-ai-weekly-esg");
+  await expect(failed.getByTestId("article-ai-weekly-status-esg")).toContainText("Weekly assessment needs attention");
+  await expect(failed).toContainText("do not claim that every input was reviewed");
+  await expect(failed).not.toContainText("Ready for the Monday email");
+});
+
+test("explains a missing subscription without changing it", async ({ page }) => {
+  await mockArticleAiApis(page, { esgWeeklyDigestConfigured: false });
+  await page.goto("/articles");
+  const missing = page.getByTestId("article-ai-controls-esg");
+  await expect(missing).toContainText("configure an existing weekly article email");
+  await expect(missing).toContainText("will not create or change that subscription");
+});
+
+test("explains a mismatched subscription schedule", async ({ page }) => {
+  await mockArticleAiApis(page, {
+    esgWeeklyDigestConfigured: true,
+    scheduleMismatch: true,
+    esgEmailInclusionEnabled: true,
+  });
+  await page.goto("/articles");
+  const mismatched = page.getByTestId("article-ai-controls-esg");
+  await expect(mismatched).toContainText("uses a different schedule");
+  await expect(mismatched).toContainText("will not silently change it");
+});
+
+test("sends the exact shared UUID and weekly key with feedback", async ({ page }) => {
+  const { feedbackRequests } = await mockArticleAiApis(page, { esgEmailInclusionEnabled: true });
+  await page.goto("/articles");
+
+  const pick = page.getByTestId("article-ai-selection-101");
+  await pick.getByRole("button", { name: "Keep & like" }).click();
+  await expect(pick).toContainText("AI pick confirmed for your digest");
+  expect(feedbackRequests[0]).toMatchObject({
+    domain: "esg",
+    articleId: 101,
+    action: "confirm",
+    sharedSelectionId: "00000000-0000-4000-8000-000000000101",
+    targetWeekKey: TARGET_WEEK,
+  });
 });

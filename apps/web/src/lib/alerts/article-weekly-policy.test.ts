@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canonicalDigestUrl, deduplicateWeeklyItems, isPersonalDigestRecipient, matchesWeeklyFilters, normalizeWeeklyDomains, type WeeklyArticleItem } from './article-weekly-policy';
+import { canonicalDigestUrl, deduplicateWeeklyItems, isCanonicalArticleAiSchedule, isPersonalDigestRecipient, matchesWeeklyFilters, normalizeWeeklyDomains, type WeeklyArticleItem } from './article-weekly-policy';
 import { renderArticleWeeklyEmail } from './article-weekly-template';
 
 const item = (overrides: Partial<WeeklyArticleItem> = {}): WeeklyArticleItem => ({
@@ -20,6 +20,12 @@ describe('private weekly email policy', () => {
       expect(isPersonalDigestRecipient(address, 'member@example.org')).toBe(false);
     }
     expect(isPersonalDigestRecipient('member@example.org', null)).toBe(false);
+  });
+  it('requires the fixed Monday 09:00 Dubai schedule for AI inclusion', () => {
+    expect(isCanonicalArticleAiSchedule({ digest_day: 'Monday', digest_hour: 9, timezone: 'Asia/Dubai' })).toBe(true);
+    expect(isCanonicalArticleAiSchedule({ digest_day: 'monday', digest_hour: 9, timezone: 'UTC' })).toBe(false);
+    expect(isCanonicalArticleAiSchedule({ digest_day: 'friday', digest_hour: 9, timezone: 'Asia/Dubai' })).toBe(false);
+    expect(isCanonicalArticleAiSchedule({ digest_day: null, digest_hour: null, timezone: null })).toBe(true);
   });
   it('keeps domain IDs separate while removing repeated story links and preferring human choices', () => {
     const result = deduplicateWeeklyItems([

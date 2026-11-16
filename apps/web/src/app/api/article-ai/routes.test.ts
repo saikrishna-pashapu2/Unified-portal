@@ -110,6 +110,14 @@ describe("private article AI routes", () => {
     expect((await POST(request("feedback", feedback))).status).toBe(409);
   });
 
+  it("accepts an optional exact Monday cohort key and rejects non-Monday keys", async () => {
+    const withCohort = { ...feedback, targetWeekKey: "2026-11-16" };
+    const response = await POST(request("feedback", withCohort));
+    expect(response.status).toBe(200);
+    expect(mocks.feedback).toHaveBeenCalledWith(7, "credit", 19, "confirm", 3, feedback.sharedSelectionId, "2026-11-16");
+    expect((await POST(request("feedback", { ...feedback, targetWeekKey: "2026-11-17" }))).status).toBe(400);
+  });
+
   it("sanitizes dependency failures", async () => {
     const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
     mocks.getPreference.mockRejectedValueOnce(new Error("password=SECRET another-user@example.test"));

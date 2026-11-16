@@ -313,10 +313,17 @@ export default function ArticleAiProvider({
           setError(normalizeError(payload, "Could not save AI article settings."));
           return false;
         }
-        setPreference(payload as ArticleAiPreference);
-        if (enabled) {
-          await loadState(true);
-        }
+        setPreference((current) => {
+          const next = payload as Partial<ArticleAiPreference>;
+          return {
+            ...(current ?? {}),
+            ...next,
+            // Keep the shared run visible if an older deployment returns only
+            // the changed preference fields from the mutation endpoint.
+            weekly: next.weekly ?? current?.weekly ?? null,
+            scheduleMismatch: next.scheduleMismatch ?? current?.scheduleMismatch ?? false,
+          } as ArticleAiPreference;
+        });
         return true;
       } catch (caught) {
         if (caught instanceof DOMException && caught.name === "AbortError") return false;
@@ -327,7 +334,7 @@ export default function ArticleAiProvider({
         if (activeRequestKey.current === mutationKey) setSavingPreference(false);
       }
     },
-    [domain, isAuthenticated, loadState, requestKey],
+    [domain, isAuthenticated, requestKey],
   );
 
   const submitFeedback = useCallback(
@@ -346,16 +353,26 @@ export default function ArticleAiProvider({
       const feedbackGeneration = requestGeneration.current;
       setPendingArticleIds((current) => new Set(current).add(articleId));
       try {
+        const feedbackBody: {
+          domain: ArticleAiDomain;
+          articleId: number;
+          action: FeedbackAction;
+          expectedVersion: number;
+          sharedSelectionId: string;
+          targetWeekKey?: string;
+        } = {
+          domain,
+          articleId,
+          action,
+          expectedVersion: selection.version,
+          sharedSelectionId: selection.sharedSelectionId,
+        };
+        if (selection.targetWeekKey) feedbackBody.targetWeekKey = selection.targetWeekKey;
+
         const response = await fetch("/api/article-ai/feedback", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            domain,
-            articleId,
-            action,
-            expectedVersion: selection.version,
-            sharedSelectionId: selection.sharedSelectionId,
-          }),
+          body: JSON.stringify(feedbackBody),
         });
         const payload = await readJson(response);
         if (

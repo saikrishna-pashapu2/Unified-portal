@@ -7,7 +7,7 @@ function localParts(now: Date, timeZone: string) {
     hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
   }).formatToParts(now);
   const read = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find(part => part.type === type)?.value);
-  return { year: read('year'), month: read('month'), day: read('day'), hour: read('hour'), minute: read('minute'), second: read('second') };
+  return { year: read("year"), month: read("month"), day: read("day"), hour: read("hour"), minute: read("minute"), second: read("second") };
 }
 
 function wallTime(now: Date, zone: string): number {
@@ -46,11 +46,10 @@ export function getArticleWeeklyWindow(
   schedule: { digest_day?: string | null; digest_hour?: number | null; timezone?: string | null },
 ): ArticleWeeklyWindow {
   if (!Number.isFinite(now.getTime())) throw new RangeError("Invalid weekly digest clock");
-  const zone = schedule.timezone || 'Asia/Dubai';
-  const day = WEEKDAYS.indexOf((schedule.digest_day || 'monday').toLowerCase());
+  const zone = schedule.timezone || "Asia/Dubai";
+  const day = WEEKDAYS.indexOf((schedule.digest_day || "monday").toLowerCase());
   const hour = schedule.digest_hour ?? 9;
   if (day < 0 || !Number.isInteger(hour) || hour < 0 || hour > 23) throw new RangeError("Invalid weekly digest schedule");
-  // Intl validates the IANA timezone and never uses the host's timezone.
   const p = localParts(now, zone);
   const today = Date.UTC(p.year, p.month - 1, p.day);
   const monday = today - ((new Date(today).getUTCDay() + 6) % 7) * DAY_MS;

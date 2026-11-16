@@ -20,7 +20,7 @@ import {
 import { buildArticleAiProviderRequest, requestArticleAiDecisions } from "./provider";
 import {
   ARTICLE_AI_MAX_SHARED_SELECTIONS,
-  ARTICLE_AI_POLICY_VERSION,
+  ARTICLE_AI_V2_POLICY_VERSION,
   type ArticleAiDomain,
   type ArticleAiDomainJobPayload,
 } from "./types";
@@ -238,7 +238,7 @@ export async function getDomainHistorySummary(domain: ArticleAiDomain): Promise<
 
 export async function getLatestDomainAssessment(
   domain: ArticleAiDomain,
-  policyVersion = ARTICLE_AI_POLICY_VERSION,
+  policyVersion = ARTICLE_AI_V2_POLICY_VERSION,
 ): Promise<SharedAssessmentRow | null> {
   const rows = await esgPrisma.$queryRaw<SharedAssessmentRow[]>`
     SELECT id::text, domain, assessment_date, policy_version, status,
@@ -276,7 +276,7 @@ export async function getCurrentSharedSelections(
     WITH latest AS (
       SELECT id, domain, assessment_date, status
       FROM article_ai_domain_assessments
-      WHERE domain = ${domain} AND policy_version = ${ARTICLE_AI_POLICY_VERSION}
+      WHERE domain = ${domain} AND policy_version = ${ARTICLE_AI_V2_POLICY_VERSION}
         AND status = 'ready'
       ORDER BY assessment_date DESC
       LIMIT 1
@@ -302,7 +302,7 @@ export async function getCurrentSharedSelections(
     WITH latest AS (
       SELECT id, domain, assessment_date, status
       FROM article_ai_domain_assessments
-      WHERE domain = ${domain} AND policy_version = ${ARTICLE_AI_POLICY_VERSION}
+      WHERE domain = ${domain} AND policy_version = ${ARTICLE_AI_V2_POLICY_VERSION}
         AND status = 'ready'
       ORDER BY assessment_date DESC
       LIMIT 1
@@ -386,7 +386,7 @@ export async function runSharedArticleAiAssessment(
     INSERT INTO article_ai_domain_assessments (
       domain, assessment_date, policy_version, status, request_limit, token_limit, updated_at
     ) VALUES (
-      ${domain}, ${runDate}::date, ${ARTICLE_AI_POLICY_VERSION}, 'queued', ${config.dailyRequestLimit},
+      ${domain}, ${runDate}::date, ${ARTICLE_AI_V2_POLICY_VERSION}, 'queued', ${config.dailyRequestLimit},
       ${config.dailyTokenLimit}, now()
     )
     ON CONFLICT (domain, assessment_date, policy_version) DO NOTHING
@@ -394,7 +394,7 @@ export async function runSharedArticleAiAssessment(
   const initial = await esgPrisma.$queryRaw<Array<{ id: string }>>`
     SELECT id::text FROM article_ai_domain_assessments
     WHERE domain = ${domain} AND assessment_date = ${runDate}::date
-      AND policy_version = ${ARTICLE_AI_POLICY_VERSION}
+      AND policy_version = ${ARTICLE_AI_V2_POLICY_VERSION}
     LIMIT 1
   `;
   const assessmentId = initial[0]?.id;
