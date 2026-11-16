@@ -7,6 +7,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/nextauth-options";
 import { parseKeywords } from "@/lib/keywords";
 import { ExternalLink, Calendar, Building2, Clock, Newspaper, Filter, TrendingUp, Leaf, Users, Shield } from "lucide-react";
+import ArticleAiProvider from "@/components/articles/ArticleAiProvider";
+import ArticleAiControls from "@/components/articles/ArticleAiControls";
+import ArticleAiSelection from "@/components/articles/ArticleAiSelection";
 
 export const revalidate = 0;
 
@@ -55,6 +58,11 @@ export default async function EsgArticlesPage({
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-green-50">
+      <ArticleAiProvider
+        domain={domain}
+        articleIds={ids}
+        isAuthenticated={userId > 0}
+      >
       <div className="mx-auto max-w-7xl px-4 py-8">
         {/* Hero Header */}
         <div className="text-center mb-12">
@@ -150,6 +158,7 @@ export default async function EsgArticlesPage({
               Reset
             </Link>
           </form>
+          <ArticleAiControls domain={domain} className="mt-6" />
         </div>
 
         {/* Articles List */}
@@ -164,6 +173,7 @@ export default async function EsgArticlesPage({
         ) : (
           <div className="space-y-6">
             {serializedItems.map((a: any, i: number) => {
+              const numericId = Number(a.id);
               const backParams = new URLSearchParams();
               if (resolvedSearchParams.date) backParams.set('date', resolvedSearchParams.date);
               if (resolvedSearchParams.source) backParams.set('source', resolvedSearchParams.source);
@@ -231,6 +241,8 @@ export default async function EsgArticlesPage({
                       </div>
                     )}
 
+                    {Number.isFinite(numericId) ? <ArticleAiSelection articleId={numericId} /> : null}
+
                     <div className="flex items-center gap-4 mt-4">
                       <div className="flex items-center gap-2 text-green-600">
                         <Leaf className="w-4 h-4" />
@@ -249,10 +261,10 @@ export default async function EsgArticlesPage({
 
                   <div className="flex flex-col items-center gap-4 flex-shrink-0">
                     {(() => {
-                      const numericId = Number(a.id);
                       return Number.isFinite(numericId) && (
                         <div className="flex flex-col items-center">
                           <LikeButton
+                            key={`like-${numericId}-${likedSet.has(numericId)}-${countMap[numericId] ?? 0}`}
                             domain={domain}
                             contentId={numericId}
                             initialLiked={likedSet.has(numericId)}
@@ -293,6 +305,7 @@ export default async function EsgArticlesPage({
           </div>
         )}
       </div>
+      </ArticleAiProvider>
     </main>
   );
 }

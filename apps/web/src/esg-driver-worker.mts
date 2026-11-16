@@ -1,3 +1,6 @@
+import { creditPrisma } from "@esgcredit/db-credit";
+import { queueDueArticleWeeklyDigests } from "@/lib/alerts/article-weekly";
+import { queueDueArticleAiJobs, reconcileArticleAiFeedback, runArticleAiJob } from "@/lib/article-ai/jobs";
 import os from "node:os";
 import { randomUUID } from "node:crypto";
 import {
@@ -25,6 +28,7 @@ import {
   reconcileTerminalDomainJobs,
   throwIfJobCancelled,
   type ClaimedBackgroundJob,
+  type BackgroundJobType,
 } from "@/lib/jobs/queue";
 import {
   PDF_TRANSLATION_MAX_ATTEMPTS,
@@ -61,13 +65,18 @@ const esgDriverJobTypes = [
   "esg_driver_excel_v4",
   "esg_driver_excel_v5",
 ] as const;
-const enabledJobTypes = esgDriversOnly
-  ? (["esg_driver_excel_v5"] as const)
+const baseJobTypes: BackgroundJobType[] = esgDriversOnly
+  ? ["esg_driver_excel_v5"]
   : [
       ...esgDriverJobTypes,
       "xlsx_translation_v1",
       ...PDFX_V2_QUEUE_JOB_TYPES,
-    ] as const;
+      ...(process.env.ARTICLE_AI_ENABLED === "true" ? ["article_ai_esg_v1" as const] : []),
+    ];
+let enabledJobTypes: BackgroundJobType[] = [...baseJobTypes];
+let creditReady = false;
+let lastCreditCheck = 0;
+let lastArticlePoll = 0;
 let stopping = false;
 let lastEmailPoll = 0;
 let lastEsgEventsDigestPoll = 0;
@@ -82,6 +91,7 @@ process.on("SIGTERM", () => {
 async function main(): Promise<void> {
   await connectEsgWithRetry();
   await verifyWorkerSchema();
+  if (!esgDriversOnly && process.env.ARTICLE_AI_ENABLED === "true") await refreshCreditCapability();
   if (esgDriversOnly) await reconcileEsgDriverDomainJobs();
   else await reconcileTerminalDomainJobs();
   console.log(`[esg-driver-worker] started ${workerId} (concurrency=${concurrency}, jobTypes=${enabledJobTypes.join(",")})`);
@@ -95,6 +105,8 @@ async function main(): Promise<void> {
   const claimPollState = createTransientPollState();
   let emailWork: Promise<void> | null = null;
   let esgEventsDigestWork: Promise<void> | null = null;
+  let articleWork: Promise<void> | null = null;
+  let creditCheckWork: Promise<void> | null = null;
   do {
     if (!stopping) {
       const availableSlots = concurrency - activeJobs.size;
@@ -140,6 +152,20 @@ async function main(): Promise<void> {
       }
     }
 
+    if (!esgDriversOnly && !articleWork && Date.now() - lastArticlePoll >= 60_000) {
+      lastArticlePoll = Date.now();
+      articleWork = Promise.allSettled([
+        queueDueArticleAiJobs(), queueDueArticleWeeklyDigests(),
+        ...(creditReady ? [reconcileArticleAiFeedback()] : []),
+      ]).then(results => {
+        for (const result of results) {
+          if (result.status === 'rejected') console.error('[esg-driver-worker] Article selection/digest check failed; will retry');
+        }
+      }).finally(() => { articleWork = null; });
+    }
+    if (!esgDriversOnly && process.env.ARTICLE_AI_ENABLED === 'true' && !creditCheckWork && Date.now() - lastCreditCheck >= 60_000) {
+      creditCheckWork = refreshCreditCapability().finally(() => { creditCheckWork = null; });
+    }
     if (!esgDriversOnly && !emailWork && Date.now() - lastEmailPoll >= emailPollMs) {
       lastEmailPoll = Date.now();
       emailWork = processEmailQueue(`${workerId}:email`, 10)
@@ -176,10 +202,29 @@ async function main(): Promise<void> {
   await Promise.allSettled([
     ...activeJobs,
     ...(emailWork ? [emailWork] : []),
+    ...(articleWork ? [articleWork] : []),
+    ...(creditCheckWork ? [creditCheckWork] : []),
     ...(esgEventsDigestWork ? [esgEventsDigestWork] : []),
   ]);
-  await esgPrisma.$disconnect();
+  await Promise.all([esgPrisma.$disconnect(), creditPrisma.$disconnect()]);
   console.log(`[esg-driver-worker] stopped ${workerId}`);
+}
+
+async function refreshCreditCapability(): Promise<void> {
+  lastCreditCheck = Date.now();
+  try {
+    await creditPrisma.$connect();
+    await creditPrisma.$queryRaw`SELECT user_id, content_id, content_type, created_at FROM likes LIMIT 0`;
+    const restored = !creditReady;
+    creditReady = true;
+    enabledJobTypes = [...baseJobTypes, 'article_ai_credit_v1'];
+    if (restored) console.log('[esg-driver-worker] Credit article AI ready');
+  } catch {
+    creditReady = false;
+    enabledJobTypes = [...baseJobTypes];
+    await creditPrisma.$disconnect().catch(() => undefined);
+    console.warn('[esg-driver-worker] Credit article AI unavailable; retrying later');
+  }
 }
 
 function workerErrorMessage(error: unknown): string {
@@ -202,6 +247,8 @@ async function executeJob(job: ClaimedBackgroundJob): Promise<void> {
   try {
     const output = isEsgDriverJobType(job.jobType)
       ? await runEsgDriverGenerationJob(job as any)
+      : job.jobType === "article_ai_esg_v1" || job.jobType === "article_ai_credit_v1"
+        ? await runArticleAiJob(job)
       : job.jobType === "xlsx_translation_v1"
         ? await processExcelTranslation(job)
         : isPdfxV2QueueJobType(job.jobType)
@@ -219,6 +266,11 @@ async function executeJob(job: ClaimedBackgroundJob): Promise<void> {
       throw new JobLeaseLostError();
     }
   } catch (error) {
+    if (job.jobType === 'article_ai_credit_v1' && isTransientPrismaConnectivityError(error)) {
+      creditReady = false;
+      enabledJobTypes = [...baseJobTypes];
+      await creditPrisma.$disconnect().catch(() => undefined);
+    }
     if (error instanceof JobCancelledError) {
       const transitioned = isEsgDriverJobType(job.jobType)
         ? await markEsgDriverJobCancelled(job.id, job.leaseOwner)
@@ -277,6 +329,10 @@ async function executeJob(job: ClaimedBackgroundJob): Promise<void> {
 
 async function verifyWorkerSchema(): Promise<void> {
   const requiredTables = [
+    ...(process.env.ARTICLE_AI_ENABLED === "true" ? [
+      "article_ai_preferences", "article_ai_profiles", "article_ai_article_features",
+      "article_ai_runs", "article_ai_budgets", "article_ai_selections", "article_ai_feedback",
+    ] : []),
     "background_jobs",
     "esg_driver_jobs",
     ...(esgDriversOnly ? [] : ["pdf_translation_v2_jobs", "pdf_translation_v2_pages"]),
@@ -356,8 +412,14 @@ function boundedInteger(
 if (checkDatabasesOnly) {
   connectEsgWithRetry()
     .then(verifyWorkerSchema)
-    .then(() => console.log("[esg-driver-worker] database and migration check passed"))
-    .then(() => esgPrisma.$disconnect())
+    .then(async () => {
+      if (process.env.ARTICLE_AI_ENABLED === 'true') {
+        await refreshCreditCapability();
+        if (!creditReady) throw new Error('Article AI preflight requires the Credit database and likes schema');
+      }
+      console.log('[esg-driver-worker] database and migration check passed');
+    })
+    .finally(() => Promise.all([esgPrisma.$disconnect(), creditPrisma.$disconnect()]))
     .catch((error) => {
       console.error("[esg-driver-worker] database connectivity check failed", error);
       process.exitCode = 1;

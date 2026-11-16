@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CalendarDays, ExternalLink, MapPin, Newspaper, Tag } from "lucide-react";
 import LikeButton from "@/components/LikeButton";
+import ArticleAiSelection from "@/components/articles/ArticleAiSelection";
 import { parseKeywords } from "@/lib/keywords";
 
 type CreditArticleRowCardProps = {
@@ -67,12 +68,14 @@ export default function CreditArticleRowCard({
               </span>
             ))}
           </div>
+          {articleId ? <ArticleAiSelection articleId={articleId} /> : null}
         </div>
 
         <div className="flex items-center gap-3 flex-shrink-0">
           {/* Like button */}
           {articleId && (
             <LikeButton
+              key={`like-${articleId}-${initialLiked}-${initialLikeCount}`}
               domain="credit"
               contentId={articleId}
               initialLiked={initialLiked}

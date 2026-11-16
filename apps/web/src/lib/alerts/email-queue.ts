@@ -35,6 +35,8 @@ export type EnqueueEmailResult = {
   deduplicated: boolean;
 };
 
+export type EmailEnqueueTransaction = Pick<typeof esgPrisma, "$queryRaw">;
+
 export async function enqueueEmailWithHistory(args: {
   userId: number | null;
   to: string;
@@ -52,7 +54,7 @@ export async function enqueueEmailWithHistory(args: {
   deliveryKey?: string;
   templateVersion?: string;
   jobId?: string;
-}): Promise<EnqueueEmailResult> {
+}, existingTransaction?: EmailEnqueueTransaction): Promise<EnqueueEmailResult> {
   if (args.userId !== null && (!Number.isSafeInteger(args.userId) || args.userId <= 0)) {
     throw new RangeError("userId must be a positive integer or null");
   }
@@ -63,7 +65,14 @@ export async function enqueueEmailWithHistory(args: {
   const contentIds = args.contentIds ?? [];
   const metadataJson = serializeMetadata(args.metadata);
 
-  return esgPrisma.$transaction(async (transaction) => {
+  // Scheduled digests poll throughout the week. An already recorded delivery
+  // needs only a read, even when its queue row has since been cleaned up.
+  if (deliveryKey) {
+    const existing = await findEmailDelivery(existingTransaction ?? esgPrisma, deliveryKey);
+    if (existing) return existing;
+  }
+
+  const enqueue = async (transaction: EmailEnqueueTransaction): Promise<EnqueueEmailResult> => {
     const insertedHistory = await transaction.$queryRaw<Array<{ id: number }>>`
       INSERT INTO alert_history (
         user_id, domain, alert_type, content_type, content_ids, email_to,
@@ -83,7 +92,7 @@ export async function enqueueEmailWithHistory(args: {
         ${jobId}::varchar,
         ${deliveryKey}::varchar
       )
-      ON CONFLICT DO NOTHING
+      ON CONFLICT (delivery_key) DO NOTHING
       RETURNING id
     `;
 
@@ -123,26 +132,30 @@ export async function enqueueEmailWithHistory(args: {
     if (!deliveryKey) {
       throw new Error("Email history insert conflicted without a delivery key");
     }
-    const existingHistory = await transaction.$queryRaw<Array<{ id: number }>>`
-      SELECT id
-      FROM alert_history
-      WHERE delivery_key = ${deliveryKey}
-      LIMIT 1
-    `;
-    const existing = existingHistory[0];
+    const existing = await findEmailDelivery(transaction, deliveryKey);
     if (!existing) throw new Error("Deduplicated email history could not be loaded");
-    const existingQueue = await transaction.$queryRaw<Array<{ id: number }>>`
-      SELECT id
-      FROM email_queue
-      WHERE alert_history_id = ${existing.id}::integer
-      LIMIT 1
-    `;
-    return {
-      queueId: existingQueue[0]?.id ?? null,
-      historyId: existing.id,
-      deduplicated: true,
-    };
-  });
+    return existing;
+  };
+  // Weekly assembly can hold preference/feedback locks through the email snapshot.
+  return existingTransaction ? enqueue(existingTransaction) : esgPrisma.$transaction(enqueue);
+}
+
+async function findEmailDelivery(
+  database: Pick<typeof esgPrisma, "$queryRaw">,
+  deliveryKey: string,
+): Promise<EnqueueEmailResult | null> {
+  const [existing] = await database.$queryRaw<Array<{ history_id: number; queue_id: number | null }>>`
+    SELECT h.id AS history_id, q.id AS queue_id
+    FROM alert_history h
+    LEFT JOIN email_queue q ON q.alert_history_id = h.id
+    WHERE h.delivery_key = ${deliveryKey}
+    LIMIT 1
+  `;
+  return existing ? {
+    queueId: existing.queue_id,
+    historyId: existing.history_id,
+    deduplicated: true,
+  } : null;
 }
 
 function boundedOptionalValue(

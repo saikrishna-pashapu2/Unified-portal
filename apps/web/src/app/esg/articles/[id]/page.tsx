@@ -11,6 +11,8 @@ import Link from "next/link";
 import { ArrowLeft, ExternalLink, Calendar, Building2, Heart, Users, Sparkles, Leaf, Shield, User2, Clock } from "lucide-react";
 import SafeHTMLContent from "@/components/SafeHTMLContent";
 import ArticleAssistant from "@/components/articles/ArticleAssistant";
+import ArticleAiProvider from "@/components/articles/ArticleAiProvider";
+import ArticleAiSelection from "@/components/articles/ArticleAiSelection";
 import { TrackActivity } from "@/components/analytics/UserActivityTracker";
 
 async function fetchArticle(id: string) {
@@ -123,6 +125,11 @@ export default async function ArticleDetail({
       </div>
 
       {/* Main Content: 40% Agent + 60% Article */}
+      <ArticleAiProvider
+        domain={domain}
+        articleIds={[contentId]}
+        isAuthenticated={userId > 0}
+      >
       <div className="flex h-[calc(100vh-64px)]">
         {/* Agent - 40% */}
         <div className="w-[40%] h-full">
@@ -235,6 +242,7 @@ export default async function ArticleDetail({
               {Number.isFinite(contentId) && (
                 <div className="flex items-center gap-4">
                   <LikeButton
+                    key={`like-${contentId}-${liked}-${likeCount}`}
                     domain={domain}
                     contentId={contentId}
                     initialLiked={liked}
@@ -242,6 +250,9 @@ export default async function ArticleDetail({
                   />
                 </div>
               )}
+            </div>
+            <div className="mt-4">
+              {Number.isFinite(contentId) ? <ArticleAiSelection articleId={contentId} /> : null}
             </div>
 
             {/* Likers */}
@@ -277,6 +288,7 @@ export default async function ArticleDetail({
           </div>
         </div>
       </div>
+      </ArticleAiProvider>
     </main>
   );
 }

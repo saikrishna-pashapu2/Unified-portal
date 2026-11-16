@@ -111,6 +111,7 @@ model pdf_translation_v2_jobs {
   completed_at     DateTime?                  @db.Timestamptz(6)
   user             users                      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "pdf_translation_v2_jobs_user_id_fkey")
   pages            pdf_translation_v2_pages[]
+  usage_events     pdf_translation_v2_usage_events[]
 
   @@index([user_id, created_at(sort: Desc)], map: "idx_pdf_translation_v2_jobs_user_created")
   @@index([status, created_at], map: "idx_pdf_translation_v2_jobs_status_created")
@@ -140,6 +141,23 @@ model pdf_translation_v2_pages {
 
   @@unique([job_id, page_number], map: "pdf_translation_v2_pages_job_page_key")
   @@index([job_id, status, page_number], map: "idx_pdf_translation_v2_pages_job_status")
+}
+
+model pdf_translation_v2_usage_events {
+  id          BigInt                 @id @default(autoincrement()) @db.BigInt
+  job_id      String                 @db.Uuid
+  page_number Int?
+  operation   String                 @db.VarChar(40)
+  response_id String
+  model       String                 @db.VarChar(80)
+  input_tokens Int                   @default(0)
+  output_tokens Int                  @default(0)
+  created_at  DateTime               @default(now()) @db.Timestamptz(6)
+  job         pdf_translation_v2_jobs @relation(fields: [job_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "pdf_translation_v2_usage_events_job_id_fkey")
+
+  @@unique([job_id, operation, response_id], map: "pdf_translation_v2_usage_event_key")
+  @@index([created_at], map: "idx_pdf_translation_v2_usage_created")
+  @@index([job_id, page_number], map: "idx_pdf_translation_v2_usage_job_page")
 }
 
 model publications {
@@ -201,6 +219,12 @@ model users {
   background_jobs                                background_jobs[]
   esg_driver_catalog_versions                    esg_driver_catalog_versions[]
   esg_driver_catalog_activations                 esg_driver_catalog_activations[]
+  article_ai_preferences                         article_ai_preferences[]
+  article_ai_profiles                            article_ai_profiles[]
+  article_ai_runs                                article_ai_runs[]
+  article_ai_selections                          article_ai_selections[]
+  article_ai_feedback                            article_ai_feedback[]
+  article_ai_budgets                             article_ai_budgets[]
 
   @@index([team], map: "ix_users_team")
 }
@@ -228,12 +252,12 @@ model alert_preferences {
   alert_name              String?              @default("My Alert") @db.VarChar(255)
   alert_type              String?              @default("weekly_digest") @db.VarChar(50)
   is_active               Boolean?             @default(true)
-  immediate_sources       String[]             @default([]) @db.VarChar(50)
-  immediate_keywords      String[]             @default([]) @db.VarChar(100)
+  immediate_sources       String[]             @default(dbgenerated("(ARRAY[]::character varying[])::character varying(50)[]")) @db.VarChar(50)
+  immediate_keywords      String[]             @default(dbgenerated("(ARRAY[]::character varying[])::character varying(100)[]")) @db.VarChar(100)
   immediate_content_types String[]             @default(["articles"]) @db.VarChar(50)
   last_sent_at            DateTime?            @db.Timestamp(6)
   next_send_at            DateTime?            @db.Timestamp(6)
-  domains                 String[]             @default([]) @db.VarChar(20)
+  domains                 String[]             @default(dbgenerated("(ARRAY[]::character varying[])::character varying(20)[]")) @db.VarChar(20)
   alert_content_sent      alert_content_sent[]
   users                   users                @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
@@ -303,6 +327,7 @@ model email_queue {
   alert_history       alert_history? @relation(fields: [alert_history_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
 
   @@unique([alert_history_id], map: "email_queue_alert_history_id_key")
+  @@index([status, scheduled_for, lease_expires_at, priority(sort: Desc)], map: "idx_email_queue_claim")
   @@index([priority(sort: Desc), scheduled_for], map: "idx_email_queue_priority")
   @@index([scheduled_for], map: "idx_email_queue_scheduled")
   @@index([status], map: "idx_email_queue_status")
@@ -318,8 +343,8 @@ model esg_event_digest_recipients {
   updated_by_user_id Int?
   created_at         DateTime @default(now()) @db.Timestamptz(6)
   updated_at         DateTime @default(now()) @updatedAt @db.Timestamptz(6)
-  created_by         users?   @relation("esg_event_digest_recipients_created_by", fields: [created_by_user_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
-  updated_by         users?   @relation("esg_event_digest_recipients_updated_by", fields: [updated_by_user_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  created_by         users?   @relation("esg_event_digest_recipients_created_by", fields: [created_by_user_id], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "esg_event_digest_recipients_created_by_fkey")
+  updated_by         users?   @relation("esg_event_digest_recipients_updated_by", fields: [updated_by_user_id], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "esg_event_digest_recipients_updated_by_fkey")
 
   @@index([is_active, starts_on], map: "idx_esg_event_digest_recipients_active")
   @@index([created_by_user_id], map: "idx_esg_event_digest_recipients_created_by")
@@ -354,6 +379,148 @@ model background_jobs {
   @@index([status, available_at, lease_expires_at, created_at], map: "idx_background_jobs_claim")
   @@index([user_id, status, created_at(sort: Desc)], map: "idx_background_jobs_user_status")
   @@index([job_type, status], map: "idx_background_jobs_type_status")
+}
+
+// Per-user, per-domain controls for the private article assistant. These
+// tables intentionally live in the ESG database: the ESG user directory is
+// the source of identity and the Credit database remains an external content
+// and like sink for confirmed Credit feedback.
+model article_ai_preferences {
+  id              Int       @id @default(autoincrement())
+  user_id         Int
+  domain          String    @db.VarChar(10)
+  enabled         Boolean   @default(false)
+  settings_version Int      @default(1)
+  status          String    @default("off") @db.VarChar(32)
+  history_count   Int       @default(0)
+  profile_source  String    @default("insufficient") @db.VarChar(16)
+  last_run_at     DateTime? @db.Timestamptz(6)
+  last_error      String?
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+  users           users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "article_ai_preferences_user_id_fkey")
+
+  @@unique([user_id, domain], map: "article_ai_preferences_user_domain_key")
+  @@index([user_id, enabled], map: "idx_article_ai_preferences_user_enabled")
+  @@index([domain, status], map: "idx_article_ai_preferences_domain_status")
+}
+
+model article_ai_profiles {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id        Int
+  domain         String   @db.VarChar(10)
+  profile_version Int
+  profile_source String   @db.VarChar(16)
+  human_like_count Int
+  profile_json   Json
+  content_hash   String   @db.VarChar(128)
+  model          String?  @db.VarChar(80)
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  users          users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "article_ai_profiles_user_id_fkey")
+
+  @@unique([user_id, domain, profile_version], map: "article_ai_profiles_user_domain_version_key")
+  @@index([user_id, domain, created_at(sort: Desc)], map: "idx_article_ai_profiles_user_domain_created")
+}
+
+model article_ai_article_features {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  domain         String   @db.VarChar(10)
+  article_id     Int
+  content_hash   String   @db.VarChar(128)
+  normalized_text String
+  feature_json   Json     @default("{}")
+  embedding_json Json?
+  model          String?  @db.VarChar(80)
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([domain, article_id, content_hash], map: "article_ai_features_domain_article_hash_key")
+  @@index([domain, article_id, created_at(sort: Desc)], map: "idx_article_ai_features_domain_article_created")
+}
+
+model article_ai_runs {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id         Int
+  domain          String    @db.VarChar(10)
+  run_date        DateTime  @db.Date
+  settings_version Int
+  status          String    @default("queued") @db.VarChar(24)
+  model           String?   @db.VarChar(80)
+  profile_source  String?   @db.VarChar(16)
+  input_tokens    Int       @default(0)
+  output_tokens   Int       @default(0)
+  request_count   Int       @default(0)
+  error           String?
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  started_at      DateTime? @db.Timestamptz(6)
+  completed_at    DateTime? @db.Timestamptz(6)
+  users           users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "article_ai_runs_user_id_fkey")
+
+  @@unique([user_id, domain, run_date], map: "article_ai_runs_user_domain_date_key")
+  @@index([user_id, domain, created_at(sort: Desc)], map: "idx_article_ai_runs_user_domain_created")
+}
+
+model article_ai_budgets {
+  user_id          Int
+  domain           String   @db.VarChar(10)
+  budget_date      DateTime @db.Date
+  request_limit    Int      @default(2)
+  requests_reserved Int     @default(0)
+  token_limit      Int      @default(12000)
+  tokens_reserved  Int      @default(0)
+  updated_at       DateTime @default(now()) @db.Timestamptz(6)
+  users            users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "article_ai_budgets_user_id_fkey")
+
+  @@id([user_id, domain, budget_date], map: "article_ai_budgets_pkey")
+  @@index([budget_date], map: "idx_article_ai_budgets_date")
+}
+
+model article_ai_selections {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id              Int
+  domain               String   @db.VarChar(10)
+  article_id           Int
+  state                String   @default("selected") @db.VarChar(16)
+  reason               String
+  relevance_score      Float?   @db.DoublePrecision
+  decision_json        Json?
+  version              Int      @default(1)
+  selected_at          DateTime @default(now()) @db.Timestamptz(6)
+  expires_at           DateTime @db.Timestamptz(6)
+  content_hash         String   @db.VarChar(128)
+  pending_confirmation Boolean  @default(false)
+  profile_version      Int?
+  model                String?  @db.VarChar(80)
+  created_at           DateTime @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  users                users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "article_ai_selections_user_id_fkey")
+  feedback             article_ai_feedback[] @relation("article_ai_feedback_selection")
+
+  @@unique([user_id, domain, article_id], map: "article_ai_selections_user_domain_article_key")
+  @@index([user_id, domain, state, expires_at], map: "idx_article_ai_selections_digest")
+  @@index([domain, article_id], map: "idx_article_ai_selections_article")
+}
+
+model article_ai_feedback {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id         Int
+  domain          String   @db.VarChar(10)
+  article_id      Int
+  selection_id    String?  @db.Uuid
+  action          String   @db.VarChar(16)
+  expected_version Int
+  status          String   @default("pending") @db.VarChar(16)
+  idempotency_key String   @unique(map: "article_ai_feedback_idempotency_key") @db.VarChar(180)
+  error           String?
+  created_at      DateTime @default(now()) @db.Timestamptz(6)
+  applied_at      DateTime? @db.Timestamptz(6)
+  users           users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "article_ai_feedback_user_id_fkey")
+  selection       article_ai_selections? @relation("article_ai_feedback_selection", fields: [selection_id], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "article_ai_feedback_selection_id_fkey")
+
+  @@unique([user_id, domain, article_id, expected_version, action], map: "article_ai_feedback_version_action_key")
+  @@index([status, created_at], map: "idx_article_ai_feedback_status_created")
+  @@index([user_id, domain, article_id], map: "idx_article_ai_feedback_user_article")
 }
 
 model api_usage_buckets {

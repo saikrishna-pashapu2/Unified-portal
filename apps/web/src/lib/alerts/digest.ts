@@ -274,61 +274,9 @@ export async function generateDailyDigest(
  * Queue digest emails for all users with enabled digests
  */
 export async function queueWeeklyDigests(): Promise<number> {
-  // Get all users with weekly_digest enabled
-  const users = await esgPrisma.$queryRaw<any[]>`
-    SELECT ap.*, u.email, u.username, u.first_name, u.last_name
-    FROM alert_preferences ap
-    JOIN users u ON u.id = ap.user_id
-    WHERE ap.weekly_digest = true
-      AND ap.email_enabled = true
-  `;
-
-  let queued = 0;
-
-  for (const user of users) {
-    try {
-      const digest = await generateWeeklyDigest(
-        user.user_id,
-        user.domain,
-        user
-      );
-
-      if (digest.totalItems === 0) {
-        console.log(`Skipping user ${user.user_id} - no content`);
-        continue;
-      }
-
-      // Generate email HTML using template
-      const emailHtml = generateWeeklyDigestHTML(user, digest, user.domain);
-      const emailTo = user.email_address || user.email;
-
-      // Insert into queue
-      await esgPrisma.$queryRaw`
-        INSERT INTO email_queue (
-          user_id, email_to, email_subject, email_body, email_html,
-          priority, scheduled_for, status, alert_type, domain
-        ) VALUES (
-          ${user.user_id},
-          ${emailTo},
-          ${"Weekly Digest - " + user.domain.toUpperCase() + " Portal"},
-          ${"Your weekly digest of team activity"},
-          ${emailHtml},
-          5,
-          NOW(),
-          'queued',
-          'weekly_digest',
-          ${user.domain}
-        )
-      `;
-
-      queued++;
-    } catch (error) {
-      console.error(`Error queuing digest for user ${user.user_id}:`, error);
-    }
-  }
-
-  console.log(`📧 Queued ${queued} weekly digest emails`);
-  return queued;
+  // Compatibility entrypoint: use the same due window and permanent delivery key.
+  const { queueDueArticleWeeklyDigests } = await import("./article-weekly");
+  return (await queueDueArticleWeeklyDigests()).queued;
 }
 
 /**
@@ -395,6 +343,5 @@ export async function queueDailyDigests(): Promise<number> {
 
 // Import email templates
 import {
-  generateWeeklyDigestHTML,
   generateDailyDigestHTML,
 } from "./email-templates";

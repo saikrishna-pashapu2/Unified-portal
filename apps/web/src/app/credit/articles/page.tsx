@@ -21,6 +21,8 @@ import {
 import { fetchCreditSources } from "@/lib/articles";
 import CreditArticlesHeader from "@/components/articles/CreditArticlesHeader";
 import CreditArticleRowCard from "@/components/articles/CreditArticleRowCard";
+import ArticleAiProvider from "@/components/articles/ArticleAiProvider";
+import ArticleAiControls from "@/components/articles/ArticleAiControls";
 import { getLikeCounts, getUserLikedSet } from "@/lib/likes";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/nextauth-options";
@@ -177,6 +179,7 @@ export default async function CreditArticlesPage({
   const nextDisabled = page >= pageCount;
 
   const filtersNode = (
+    <>
     <form
       method="get"
       action="/credit/articles"
@@ -251,9 +254,16 @@ export default async function CreditArticlesPage({
         Reset
       </Link>
     </form>
+    <ArticleAiControls domain="credit" className="mt-4" />
+    </>
   );
 
   return (
+    <ArticleAiProvider
+      domain="credit"
+      articleIds={articleIds}
+      isAuthenticated={userId > 0}
+    >
     <div className="container mx-auto px-4 py-8 md:px-6">
       <div className="mt-6 grid grid-cols-12 gap-6">
         <aside className="col-span-12 md:col-span-3">
@@ -470,5 +480,6 @@ export default async function CreditArticlesPage({
         </main>
       </div>
     </div>
+    </ArticleAiProvider>
   );
 }

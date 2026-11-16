@@ -1,3 +1,4 @@
+import { queueDueArticleWeeklyDigests } from "@/lib/alerts/article-weekly";
 import { NextResponse } from "next/server";
 import { esgPrisma } from "@esgcredit/db-esg";
 import { creditPrisma } from "@esgcredit/db-credit";
@@ -68,51 +69,11 @@ export async function GET(req: Request) {
 
 async function processWeeklyDigests(now: Date, results: any) {
   try {
-    // Get all weekly digests that are active
-    const weeklyAlerts = await esgPrisma.$queryRaw<any[]>`
-      SELECT ap.*, u.email, u.first_name, u.last_name, u.team
-      FROM alert_preferences ap
-      JOIN users u ON ap.user_id = u.id
-      WHERE ap.alert_type = 'weekly_digest'
-        AND ap.is_active = true
-        AND ap.email_enabled = true
-        AND (ap.last_sent_at IS NULL OR ap.last_sent_at < NOW() - INTERVAL '6 days')
-    `;
-
-    // Check each alert with its specific timezone
-    for (const alert of weeklyAlerts) {
-      try {
-        // Convert current UTC time to alert's timezone
-        const timezone = alert.timezone || 'Asia/Dubai';
-        const currentTimeInTz = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
-        const currentDay = currentTimeInTz.toLocaleDateString("en-US", { weekday: "long", timeZone: timezone }).toLowerCase();
-        const currentHour = currentTimeInTz.getHours();
-
-        // Check if it's the right day and hour for this alert
-        const alertDay = (alert.digest_day || 'monday').toLowerCase();
-        const alertHour = alert.digest_hour || 9;
-
-        if (currentDay !== alertDay || currentHour !== alertHour) {
-          continue; // Skip this alert, not the right time yet
-        }
-
-        await sendWeeklyDigest(alert);
-        
-        // Update last_sent_at and next_send_at
-        await esgPrisma.$executeRaw`
-          UPDATE alert_preferences
-          SET last_sent_at = NOW(),
-              next_send_at = NOW() + INTERVAL '7 days'
-          WHERE id = ${alert.id}
-        `;
-        
-        results.weekly_digests_sent++;
-      } catch (error: any) {
-        results.errors.push(`Weekly digest error for alert ${alert.id}: ${error.message}`);
-      }
-    }
-  } catch (error: any) {
-    results.errors.push(`Weekly digest processing error: ${error.message}`);
+    const weekly = await queueDueArticleWeeklyDigests(now);
+    results.weekly_digests_sent += weekly.queued;
+    if (weekly.failed) results.errors.push(`${weekly.failed} weekly digests remain due for retry`);
+  } catch {
+    results.errors.push("Weekly digest processing failed");
   }
 }
 
@@ -328,34 +289,6 @@ async function findNewContentForAlert(alert: any, since: Date, alreadySent: Set<
   }
 
   return newContent;
-}
-
-async function sendWeeklyDigest(alert: any) {
-  // Get all team-liked content from the past week
-  const domains = alert.domains || [alert.domain];
-  const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-
-  const likedContent = await getTeamLikedContent(alert.team, domains, oneWeekAgo);
-
-  // Build user name from first_name and last_name
-  const userName = [alert.first_name, alert.last_name].filter(Boolean).join(' ') || 'User';
-
-  // Queue email
-  await queueEmail({
-    userId: alert.user_id,
-    to: alert.email_address || alert.email,
-    subject: `${alert.alert_name} - Weekly Digest`,
-    type: "weekly_digest",
-    alertType: 'weekly_digest',
-    domain: alert.domain || alert.domains?.[0] || 'esg',
-    data: {
-      userName,
-      alertName: alert.alert_name,
-      content: likedContent,
-      count: likedContent.length, // FIX: Add count
-      period: "past week",
-    },
-  });
 }
 
 async function sendDailyDigest(alert: any) {

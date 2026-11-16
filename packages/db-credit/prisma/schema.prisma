@@ -544,6 +544,21 @@ model user_article_stars {
   @@index([user_id], map: "idx_user_stars_user_id")
 }
 
+// The application-owned like contract used by article alerts. Credit
+// deployments historically have this table without a users foreign key,
+// because identity is mastered by the ESG database.
+model likes {
+  id           Int       @id @default(autoincrement())
+  user_id      Int
+  content_type String    @db.VarChar(20)
+  content_id   Int
+  created_at   DateTime? @db.Timestamp(6)
+
+  @@unique([user_id, content_type, content_id], map: "unique_like")
+  @@index([content_type], map: "ix_likes_content_type")
+  @@index([user_id], map: "ix_likes_user_id")
+}
+
 model user_events {
   id          Int       @id @default(autoincrement())
   user_email  String    @db.VarChar(100)
@@ -645,6 +660,7 @@ model fitch_upload_history {
   error_count       Int      @default(0)
   file_size         Int?     // in bytes
   created_at        DateTime @default(now()) @db.Timestamptz(6)
+  job_id             String?  @unique @db.Uuid
 
   @@index([user_email])
   @@index([created_at])

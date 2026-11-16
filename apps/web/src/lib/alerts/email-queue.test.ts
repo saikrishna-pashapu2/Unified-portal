@@ -53,7 +53,7 @@ describe("enqueueEmailWithHistory", () => {
   });
 
   it("queues a system-owned email and records its permanent delivery key", async () => {
-    mocks.responses.push([{ id: 41 }], [{ id: 91 }]);
+    mocks.responses.push([], [{ id: 41 }], [{ id: 91 }]);
     const { enqueueEmailWithHistory } = await import("./email-queue");
 
     const result = await enqueueEmailWithHistory({
@@ -74,15 +74,15 @@ describe("enqueueEmailWithHistory", () => {
     });
 
     expect(result).toEqual({ queueId: 91, historyId: 41, deduplicated: false });
-    expect(mocks.sql[0]).toContain("delivery_key");
-    expect(mocks.sql[0]).toContain("ON CONFLICT DO NOTHING");
-    expect(mocks.values[0]).toContain(null);
-    expect(mocks.values[0]).toContain("esg-events:2026-08-10:recipient@example.com");
-    expect(mocks.values[1]).toContain('{"weekStart":"2026-08-10"}');
+    expect(mocks.sql[1]).toContain("delivery_key");
+    expect(mocks.sql[1]).toContain("ON CONFLICT (delivery_key) DO NOTHING");
+    expect(mocks.values[1]).toContain(null);
+    expect(mocks.values[1]).toContain("esg-events:2026-08-10:recipient@example.com");
+    expect(mocks.values[2]).toContain('{"weekStart":"2026-08-10"}');
   });
 
-  it("returns the existing queue when a delivery key was already enqueued", async () => {
-    mocks.responses.push([], [{ id: 41 }], [{ id: 91 }]);
+  it("returns an existing delivery without opening a write transaction", async () => {
+    mocks.responses.push([{ history_id: 41, queue_id: 91 }]);
     const { enqueueEmailWithHistory } = await import("./email-queue");
 
     const result = await enqueueEmailWithHistory({
@@ -96,13 +96,14 @@ describe("enqueueEmailWithHistory", () => {
     });
 
     expect(result).toEqual({ queueId: 91, historyId: 41, deduplicated: true });
-    expect(mocks.sql).toHaveLength(3);
-    expect(mocks.sql[1]).toContain("WHERE delivery_key =");
-    expect(mocks.sql[2]).toContain("WHERE alert_history_id =");
+    expect(mocks.transaction).not.toHaveBeenCalled();
+    expect(mocks.sql).toHaveLength(1);
+    expect(mocks.sql[0]).toContain("WHERE h.delivery_key =");
+    expect(mocks.values[0]).toEqual(["esg-events:2026-08-10:recipient@example.com"]);
   });
 
   it("remains deduplicated after the old queue row has been cleaned up", async () => {
-    mocks.responses.push([], [{ id: 41 }], []);
+    mocks.responses.push([{ history_id: 41, queue_id: null }]);
     const { enqueueEmailWithHistory } = await import("./email-queue");
 
     const result = await enqueueEmailWithHistory({
@@ -116,6 +117,44 @@ describe("enqueueEmailWithHistory", () => {
     });
 
     expect(result).toEqual({ queueId: null, historyId: 41, deduplicated: true });
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
+  it("uses the concurrent winner when another scheduler inserts after the initial lookup", async () => {
+    mocks.responses.push([], [], [{ history_id: 41, queue_id: 91 }]);
+    const { enqueueEmailWithHistory } = await import("./email-queue");
+
+    const result = await enqueueEmailWithHistory({
+      userId: null,
+      to: "recipient@example.com",
+      subject: "This week's ESG events",
+      text: "Plain text",
+      domain: "esg",
+      alertType: "event_digest",
+      deliveryKey: "esg-events:2026-08-10:recipient@example.com",
+    });
+
+    expect(result).toEqual({ queueId: 91, historyId: 41, deduplicated: true });
+    expect(mocks.transaction).toHaveBeenCalledOnce();
+    expect(mocks.sql).toHaveLength(3);
+    expect(mocks.sql.every((sql) => !sql.includes("INSERT INTO email_queue"))).toBe(true);
+  });
+
+  it("propagates a failed duplicate lookup without attempting a write", async () => {
+    const databaseError = Object.assign(new Error("database connection lost"), { code: "P1017" });
+    mocks.queryRaw.mockRejectedValueOnce(databaseError);
+    const { enqueueEmailWithHistory } = await import("./email-queue");
+
+    await expect(enqueueEmailWithHistory({
+      userId: null,
+      to: "recipient@example.com",
+      subject: "This week's ESG events",
+      text: "Plain text",
+      domain: "esg",
+      alertType: "event_digest",
+      deliveryKey: "esg-events:2026-08-10:recipient@example.com",
+    })).rejects.toBe(databaseError);
+    expect(mocks.transaction).not.toHaveBeenCalled();
   });
 
   it("rejects malformed ownership and delivery identifiers before opening a transaction", async () => {
