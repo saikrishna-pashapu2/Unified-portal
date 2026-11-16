@@ -5,7 +5,11 @@ const nextConfig = {
   output: 'standalone',
   outputFileTracingRoot: path.join(__dirname, '../..'),
   outputFileTracingIncludes: {
-    '/*': ['./node_modules/pdfjs-dist/standard_fonts/**/*'],
+    '/*': [
+      './node_modules/pdfjs-dist/standard_fonts/**/*',
+      // tiktoken resolves its WASM asset relative to its external Node entry.
+      './node_modules/tiktoken/**/*',
+    ],
     // The catalog parser resolves SheetJS inside an unbundled worker. Include
     // its runtime files explicitly because the tracer cannot see that import.
     '/api/esg/drivers/workbooks': ['./node_modules/xlsx/**/*'],
@@ -16,6 +20,7 @@ const nextConfig = {
     'prisma',
     'pdfjs-dist',
     '@napi-rs/canvas',
+    'tiktoken',
     // lib/workbook.ts passes `require.resolve('xlsx')` into a worker thread.
     // When xlsx is bundled, webpack rewrites that to a numeric module id, and
     // the worker (a plain Node context) then does require(78365) and throws
