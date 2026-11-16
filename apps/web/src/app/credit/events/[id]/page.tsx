@@ -15,6 +15,7 @@ import {
   ChevronRight
 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import ShareButton from "@/components/events/ShareButton";
 import { TrackActivity } from "@/components/analytics/UserActivityTracker";
@@ -260,9 +261,12 @@ export default async function CreditEventDetailPage({
               {event.image_url && (
                 <div className="flex-shrink-0 w-full lg:w-80 xl:w-96">
                   <div className="rounded-2xl overflow-hidden shadow-2xl border border-white/20">
-                    <img
+                    <Image
                       src={event.image_url}
                       alt={event.title}
+                      width={384}
+                      height={224}
+                      unoptimized
                       className="w-full h-48 lg:h-56 object-cover"
                     />
                   </div>

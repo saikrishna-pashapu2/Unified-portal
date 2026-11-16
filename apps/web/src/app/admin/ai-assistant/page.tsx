@@ -3,7 +3,7 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import {
   Sparkles,
   TrendingUp,
@@ -109,7 +109,7 @@ export default function AIAssistantStatsPage() {
   const [domain, setDomain] = useState('all');
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       setRefreshing(true);
       const response = await fetch(`/api/admin/ai-assistant/stats?days=${days}&domain=${domain}`);
@@ -133,11 +133,11 @@ export default function AIAssistantStatsPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [days, domain]);
 
   useEffect(() => {
     fetchStats();
-  }, [days, domain]);
+  }, [fetchStats]);
 
   if (loading) {
     return (
