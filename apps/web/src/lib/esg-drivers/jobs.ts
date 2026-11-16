@@ -208,7 +208,7 @@ export async function createEsgDriverJob(
     if (checkpoint.version === 2 && checkpoint.selectionPolicy && !isRankedSelectionPolicy(checkpoint.selectionPolicy)) {
       throw new Error(`Unsupported driver selection policy: ${String(checkpoint.selectionPolicy)}`);
     }
-    // New category-balanced checkpoints use the v6 fence. Older pinned
+    // New category-balanced checkpoints use the current v7 fence. Older pinned
     // checkpoints retain their queue version so automatic retries stay on the
     // policy and worker contract they were created with.
     const queueType = checkpoint.version === 2
@@ -407,7 +407,7 @@ export async function updateEsgDriverJobProgress(
           lease_expires_at = now() + (90 * INTERVAL '1 second'),
           updated_at = now()
       WHERE id = ${id}::uuid
-        AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6')
+        AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6', 'esg_driver_excel_v7')
         AND status = 'processing'
         AND lease_owner = ${leaseOwner}
         AND lease_expires_at >= now()
@@ -458,7 +458,7 @@ export async function updateEsgDriverJobCheckpoint(
           lease_expires_at = now() + (90 * INTERVAL '1 second'),
           updated_at = now()
       WHERE id = ${id}::uuid
-        AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6')
+        AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6', 'esg_driver_excel_v7')
         AND status = 'processing'
         AND lease_owner = ${leaseOwner}
         AND lease_expires_at >= now()
@@ -501,8 +501,9 @@ export async function completeEsgDriverJob(
   await ensureEsgDriverJobsTable();
   const completionStage =
     result.selection?.excluded.some((item) => item.reason === 'unscored') ? 'complete with assessment gaps'
-      : result.selection?.categoryQuotas?.some((quota) => quota.gap > 0) ? 'complete with category gaps'
-      : result.completion === "partial" || hasCandidateGaps(result) ? "complete with unavailable updates" : "complete";
+      : hasCandidateGaps(result) || (!result.selection && result.completion === "partial") ? "complete with unavailable updates"
+      : result.selection?.categoryQuotas?.some((quota) => quota.gap > 0) || result.completion === "partial" ? 'complete with category gaps'
+      : "complete";
   const queueResult = {
     generatedDrivers: result.drivers.length,
     expectedDrivers: result.expectedDriverCount ?? result.drivers.length,
@@ -514,7 +515,7 @@ export async function completeEsgDriverJob(
       SELECT user_id, status, attempts, max_attempts, cancel_requested,
              lease_owner, lease_expires_at >= now() AS lease_valid
       FROM background_jobs
-      WHERE id = ${id}::uuid AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6')
+      WHERE id = ${id}::uuid AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6', 'esg_driver_excel_v7')
       FOR UPDATE
     `;
     const queue = queueRows[0];
@@ -568,7 +569,7 @@ export async function completeEsgDriverJob(
           lease_owner = NULL, lease_expires_at = NULL,
           heartbeat_at = now(), completed_at = now(), updated_at = now()
       WHERE id = ${id}::uuid
-        AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6')
+        AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6', 'esg_driver_excel_v7')
         AND status = 'processing'
         AND lease_owner = ${leaseOwner}
         AND lease_expires_at >= now()
@@ -595,7 +596,7 @@ export async function failEsgDriverJob(
       SELECT user_id, status, attempts, max_attempts, cancel_requested,
              lease_owner, lease_expires_at >= now() AS lease_valid
       FROM background_jobs
-      WHERE id = ${job.id}::uuid AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6')
+      WHERE id = ${job.id}::uuid AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6', 'esg_driver_excel_v7')
       FOR UPDATE
     `;
     const queue = queueRows[0];
@@ -635,7 +636,7 @@ export async function failEsgDriverJob(
           completed_at = CASE WHEN ${retry} THEN NULL ELSE now() END,
           updated_at = now()
       WHERE id = ${job.id}::uuid
-        AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6')
+        AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6', 'esg_driver_excel_v7')
         AND status = 'processing'
         AND lease_owner = ${job.leaseOwner}
         AND lease_expires_at >= now()
@@ -679,7 +680,7 @@ export async function markEsgDriverJobCancelled(
       SELECT user_id, status, attempts, max_attempts, cancel_requested,
              lease_owner, lease_expires_at >= now() AS lease_valid
       FROM background_jobs
-      WHERE id = ${id}::uuid AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6')
+      WHERE id = ${id}::uuid AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6', 'esg_driver_excel_v7')
       FOR UPDATE
     `;
     const queue = queueRows[0];
@@ -699,7 +700,7 @@ export async function markEsgDriverJobCancelled(
           lease_owner = NULL, lease_expires_at = NULL,
           completed_at = now(), updated_at = now()
       WHERE id = ${id}::uuid
-        AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6')
+        AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6', 'esg_driver_excel_v7')
         AND status = 'processing'
         AND lease_owner = ${leaseOwner}
         AND lease_expires_at >= now()
@@ -757,7 +758,11 @@ export async function getEsgDriverJob(
           WHERE assessed.slot->'driver'->>'generationStatus' = 'unavailable'
              OR (assessed.slot->'driver'->'relevance'->>'policyVersion' = ${DRIVER_SELECTION_POLICY}
                  AND assessed.slot->'driver'->'relevance'->>'assessmentVersion' = ${RELEVANCE_ASSESSMENT_VERSION})
-             OR assessed.slot->'driver'->'relevanceFailure'->'assessment'->>'assessmentVersion' = ${RELEVANCE_ASSESSMENT_VERSION})
+             OR (assessed.slot->'driver'->'relevanceFailure'->>'kind' = 'evidence-binding'
+                 AND assessed.slot->'driver'->'relevanceFailure'->>'policyVersion' = ${DRIVER_SELECTION_POLICY}
+                 AND assessed.slot->'driver'->'relevanceFailure'->>'assessmentVersion' = ${RELEVANCE_ASSESSMENT_VERSION})
+             OR (assessed.slot->'driver'->'relevanceFailure'->'assessment'->>'policyVersion' = ${DRIVER_SELECTION_POLICY}
+                 AND assessed.slot->'driver'->'relevanceFailure'->'assessment'->>'assessmentVersion' = ${RELEVANCE_ASSESSMENT_VERSION}))
       ) END AS checkpoint_summary,
       catalog_version,
       checkpoint_json->>'catalogVersion' AS checkpoint_catalog_version,
@@ -806,7 +811,11 @@ export async function listEsgDriverJobsPage(
                    WHERE assessed.slot->'driver'->>'generationStatus' = 'unavailable'
                       OR (assessed.slot->'driver'->'relevance'->>'policyVersion' = ${DRIVER_SELECTION_POLICY}
                           AND assessed.slot->'driver'->'relevance'->>'assessmentVersion' = ${RELEVANCE_ASSESSMENT_VERSION})
-                      OR assessed.slot->'driver'->'relevanceFailure'->'assessment'->>'assessmentVersion' = ${RELEVANCE_ASSESSMENT_VERSION})
+                      OR (assessed.slot->'driver'->'relevanceFailure'->>'kind' = 'evidence-binding'
+                          AND assessed.slot->'driver'->'relevanceFailure'->>'policyVersion' = ${DRIVER_SELECTION_POLICY}
+                          AND assessed.slot->'driver'->'relevanceFailure'->>'assessmentVersion' = ${RELEVANCE_ASSESSMENT_VERSION})
+                      OR (assessed.slot->'driver'->'relevanceFailure'->'assessment'->>'policyVersion' = ${DRIVER_SELECTION_POLICY}
+                          AND assessed.slot->'driver'->'relevanceFailure'->'assessment'->>'assessmentVersion' = ${RELEVANCE_ASSESSMENT_VERSION}))
                ) END AS checkpoint_summary,
                created_at, updated_at, completed_at
         FROM esg_driver_jobs
@@ -835,7 +844,11 @@ export async function listEsgDriverJobsPage(
                    WHERE assessed.slot->'driver'->>'generationStatus' = 'unavailable'
                       OR (assessed.slot->'driver'->'relevance'->>'policyVersion' = ${DRIVER_SELECTION_POLICY}
                           AND assessed.slot->'driver'->'relevance'->>'assessmentVersion' = ${RELEVANCE_ASSESSMENT_VERSION})
-                      OR assessed.slot->'driver'->'relevanceFailure'->'assessment'->>'assessmentVersion' = ${RELEVANCE_ASSESSMENT_VERSION})
+                      OR (assessed.slot->'driver'->'relevanceFailure'->>'kind' = 'evidence-binding'
+                          AND assessed.slot->'driver'->'relevanceFailure'->>'policyVersion' = ${DRIVER_SELECTION_POLICY}
+                          AND assessed.slot->'driver'->'relevanceFailure'->>'assessmentVersion' = ${RELEVANCE_ASSESSMENT_VERSION})
+                      OR (assessed.slot->'driver'->'relevanceFailure'->'assessment'->>'policyVersion' = ${DRIVER_SELECTION_POLICY}
+                          AND assessed.slot->'driver'->'relevanceFailure'->'assessment'->>'assessmentVersion' = ${RELEVANCE_ASSESSMENT_VERSION}))
                ) END AS checkpoint_summary,
                created_at, updated_at, completed_at
         FROM esg_driver_jobs
@@ -889,7 +902,7 @@ export async function deleteEsgDriverJob(
     // cannot acquire this job until the cancellation or deletion commits.
     const queueRows = await transaction.$queryRaw<Array<{ status: BackgroundJobStatus }>>`
       SELECT status FROM background_jobs
-      WHERE id = ${id}::uuid AND user_id = ${userId} AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6')
+      WHERE id = ${id}::uuid AND user_id = ${userId} AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6', 'esg_driver_excel_v7')
       FOR UPDATE
     `;
     const queue = queueRows[0];
@@ -1003,7 +1016,7 @@ function mapJobRow(row: EsgDriverJobRow): EsgDriverJob {
     ...(selectionPolicy ? {
       selectionPolicy,
       candidateCount: checkpoint?.definitions.length ?? row.checkpoint_summary?.candidateCount ?? row.result_json?.selection?.candidateCount ?? 0,
-      candidateAssessedCount: checkpoint?.slots.filter((slot) => slot.driver.generationStatus === 'unavailable' || (slot.driver.relevance?.policyVersion === DRIVER_SELECTION_POLICY && slot.driver.relevance.assessmentVersion === RELEVANCE_ASSESSMENT_VERSION) || slot.driver.relevanceFailure?.assessment.assessmentVersion === RELEVANCE_ASSESSMENT_VERSION).length ?? row.checkpoint_summary?.candidateAssessedCount ?? row.result_json?.candidatePool?.length ?? 0,
+      candidateAssessedCount: checkpoint?.slots.filter((slot) => slot.driver.generationStatus === 'unavailable' || (slot.driver.relevance?.policyVersion === DRIVER_SELECTION_POLICY && slot.driver.relevance.assessmentVersion === RELEVANCE_ASSESSMENT_VERSION) || (slot.driver.relevanceFailure?.kind === 'evidence-binding' && slot.driver.relevanceFailure.policyVersion === DRIVER_SELECTION_POLICY && slot.driver.relevanceFailure.assessmentVersion === RELEVANCE_ASSESSMENT_VERSION) || (slot.driver.relevanceFailure?.kind !== 'evidence-binding' && slot.driver.relevanceFailure?.assessment?.policyVersion === DRIVER_SELECTION_POLICY && slot.driver.relevanceFailure?.assessment?.assessmentVersion === RELEVANCE_ASSESSMENT_VERSION)).length ?? row.checkpoint_summary?.candidateAssessedCount ?? row.result_json?.candidatePool?.length ?? 0,
       publishedDriverCount: integrityError ? 0 : row.result_json?.drivers.length ?? 0,
       expectedDriverCount: 15,
     } : {}),

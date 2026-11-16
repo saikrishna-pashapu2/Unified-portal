@@ -12,8 +12,8 @@ import { relevanceEvidenceFingerprint } from './relevance-evidence';
 import { isPlausibleSourceDate } from './excel-source-metadata';
 
 export const ESG_EVIDENCE_CONTRACT = 'excel-evidence-v3' as const;
-export const ESG_DRIVER_QUEUE_TYPE = 'esg_driver_excel_v6' as const;
-export const isEsgDriverJobType = (type: string) => type === ESG_DRIVER_QUEUE_TYPE || type === 'esg_driver_excel_v5' || type === 'esg_driver_excel_v4' || type === 'esg_driver_excel_v3' || type === 'esg_driver';
+export const ESG_DRIVER_QUEUE_TYPE = 'esg_driver_excel_v7' as const;
+export const isEsgDriverJobType = (type: string) => type === ESG_DRIVER_QUEUE_TYPE || type === 'esg_driver_excel_v6' || type === 'esg_driver_excel_v5' || type === 'esg_driver_excel_v4' || type === 'esg_driver_excel_v3' || type === 'esg_driver';
 
 // JSONB reorders object keys; compare values canonically across the DB boundary.
 const canonicalJson = (value: unknown): string => JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item) ? Object.fromEntries(Object.keys(item).sort().map((key) => [key, item[key]])) : item);
@@ -91,8 +91,13 @@ export function workbookResultIssues(result: EsgDriverResult, checkpoint: EsgWor
     }
     if (ranked) {
       for (const problem of driver.relevanceFailure ? relevanceFailureIssues(driver) : relevanceIssues(driver)) issue(problem);
-      const assessment = driver.relevance || driver.relevanceFailure?.assessment;
-      if (assessment?.evidenceFingerprint !== relevanceEvidenceFingerprint(driver, checkpoint.input)) issue('Relevance assessment does not match the candidate evidence and scope.');
+      const expectedRelevanceFingerprint = relevanceEvidenceFingerprint(driver, checkpoint.input);
+      if (driver.relevanceFailure?.kind === 'evidence-binding') {
+        if (driver.relevanceFailure.evidenceFingerprint !== expectedRelevanceFingerprint) issue('Relevance assessment does not match the candidate evidence and scope.');
+      } else {
+        const assessment = driver.relevance || driver.relevanceFailure?.assessment;
+        if (assessment?.evidenceFingerprint !== expectedRelevanceFingerprint) issue('Relevance assessment does not match the candidate evidence and scope.');
+      }
     }
   }
   const verified = drivers.filter((d) => d.generationStatus === 'verified').length;

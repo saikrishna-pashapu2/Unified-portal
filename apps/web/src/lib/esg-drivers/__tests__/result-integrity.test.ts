@@ -18,6 +18,33 @@ function rejectedRelevanceFixture() {
   return fixture;
 }
 
+function evidenceBindingFixture() {
+  const fixture = rankedWorkbookResultFixture(20);
+  const driver = fixture.result.candidatePool![0];
+  const evidenceFingerprint = relevanceEvidenceFingerprint(driver, fixture.checkpoint.input);
+  driver.relevanceFailure = {
+    kind: 'evidence-binding',
+    policyVersion: 'relevance-top15-v1',
+    assessmentVersion: 'driver-specific-v2',
+    evidenceFingerprint,
+    attemptedAt: '2026-09-15T00:00:00.000Z',
+    assessor: { model: 'gpt-5.6-luna', responseId: 'assessment-response' },
+    attempts: 2,
+    failedDimensions: ['urgency'],
+    reasons: ['The urgency relevance rating cited a passage outside the supplied evidence.'],
+  };
+  driver.statusReason = 'Relevance score unavailable: The urgency relevance rating cited a passage outside the supplied evidence.';
+  delete driver.relevance;
+  fixture.checkpoint.slots[0].driver = structuredClone(driver);
+  const selected = selectRankedDrivers(fixture.result.candidatePool!, fixture.result.generatedAt);
+  fixture.result = {
+    ...fixture.result,
+    ...selected,
+    warnings: ['One supported candidate has no approved relevance score.'],
+  };
+  return fixture;
+}
+
 function categoryBalancedFixture() {
   const fixture = rankedWorkbookResultFixture(15);
   fixture.checkpoint.selectionPolicy = CATEGORY_SELECTION_POLICY;
@@ -116,13 +143,32 @@ describe('ranked workbook integrity', () => {
     expect(result.candidatePool![0].citations).toHaveLength(1);
     expect(() => assertWorkbookResult(result, checkpoint, true)).not.toThrow();
   });
+  it('accepts an honest evidence-binding failure without a numeric score or reviewer', () => {
+    const { result, checkpoint } = evidenceBindingFixture();
+    expect(workbookResultIssues(result, checkpoint)).toEqual([]);
+    expect(() => assertWorkbookResult(result, checkpoint, true)).not.toThrow();
+    expect(result.candidatePool![0].relevanceFailure).not.toHaveProperty('assessment');
+  });
+  it.each(['attempts', 'duplicate-dimension', 'fake-score', 'fingerprint'] as const)('rejects tampered evidence-binding proof: %s', (defect) => {
+    const { result, checkpoint } = evidenceBindingFixture();
+    const failure = result.candidatePool![0].relevanceFailure;
+    if (!failure || failure.kind !== 'evidence-binding') throw new Error('Expected an evidence-binding fixture.');
+    if (defect === 'attempts') failure.attempts = 1;
+    if (defect === 'duplicate-dimension') failure.failedDimensions = ['urgency', 'urgency'];
+    if (defect === 'fake-score') (failure as unknown as Record<string, unknown>).score = 80;
+    if (defect === 'fingerprint') failure.evidenceFingerprint = 'Different candidate evidence';
+    expect(workbookResultIssues(result, checkpoint).length).toBeGreaterThan(0);
+  });
   it.each(['no-record', 'no-reason', 'approved', 'fingerprint', 'no-warning'] as const)('rejects invalid unscored qualification proof: %s', (defect) => {
     const { result, checkpoint } = rejectedRelevanceFixture();
     const driver = result.candidatePool![0];
     if (defect === 'no-record') delete driver.relevanceFailure;
     if (defect === 'no-reason') driver.relevanceFailure!.reasons = [];
-    if (defect === 'approved') driver.relevanceFailure!.assessment.review!.checks.noBorrowedObligations = true;
-    if (defect === 'fingerprint') driver.relevanceFailure!.assessment.evidenceFingerprint = 'Different driver';
+    if (defect === 'approved' || defect === 'fingerprint') {
+      if (!driver.relevanceFailure || driver.relevanceFailure.kind === 'evidence-binding') throw new Error('Expected a legacy rejected relevance fixture.');
+      if (defect === 'approved') driver.relevanceFailure.assessment.review!.checks.noBorrowedObligations = true;
+      if (defect === 'fingerprint') driver.relevanceFailure.assessment.evidenceFingerprint = 'Different driver';
+    }
     if (defect === 'no-warning') result.warnings = [];
     expect(workbookResultIssues(result, checkpoint).length).toBeGreaterThan(0);
   });

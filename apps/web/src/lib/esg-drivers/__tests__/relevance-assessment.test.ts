@@ -41,6 +41,7 @@ import {
   buildRelevanceScoringPayload,
   ensureDriverRelevance,
   needsRelevanceAssessment,
+  RelevanceAssessmentEvidenceBindingError,
   RelevanceAssessmentRejectedError,
 } from "../relevance-assessment";
 import type { EsgDriver } from "../types";
@@ -213,6 +214,197 @@ describe("evidence-grounded relevance assessment", () => {
       .mockReturnValueOnce(scoredResponse());
     const result = await assessDriverRelevance(baseDriver, input);
     expect(result.score).toBe(75);
+    expect(mocks.calls.filter(({ name }) => name === "esg_driver_relevance_assessment")).toHaveLength(2);
+    expect(mocks.calls.filter(({ name }) => name === "esg_driver_relevance_review")).toHaveLength(1);
+    const correctionPayload = JSON.parse((mocks.calls[1].messages[1] as { content: string }).content);
+    expect(correctionPayload.repairFeedback).toEqual([
+      "The country relevance rating cited a passage outside the supplied evidence.",
+    ]);
+  });
+
+  it("repairs a deterministic urgency citation error using only the supplied evidence", async () => {
+    mocks.assessment
+      .mockReturnValueOnce({
+        ...scoredResponse(),
+        dimensions: {
+          ...scoredResponse().dimensions,
+          urgency: {
+            rating: 2,
+            reason: "The urgency rationale must use an exact supplied passage.",
+            passageIds: ["urgency-passage-from-another-driver"],
+          },
+        },
+      })
+      .mockReturnValueOnce(scoredResponse());
+
+    const result = await assessDriverRelevance(baseDriver, input);
+    expect(result.score).toBe(75);
+    expect(result.dimensions.urgency.passageIds).toEqual(["passage-1"]);
+    expect(mocks.calls.filter(({ name }) => name === "esg_driver_relevance_assessment")).toHaveLength(2);
+    const correctionPayload = JSON.parse((mocks.calls[1].messages[1] as { content: string }).content);
+    expect(correctionPayload.repairFeedback).toEqual([
+      "The urgency relevance rating cited a passage outside the supplied evidence.",
+    ]);
+    expect(correctionPayload.citedPassages.map((passage: { passageId: string }) => passage.passageId)).toEqual(["passage-1"]);
+  });
+
+  it("fails closed when the bounded urgency correction still cites nonexistent evidence", async () => {
+    const invalid = {
+      ...scoredResponse(),
+      dimensions: {
+        ...scoredResponse().dimensions,
+        urgency: {
+          rating: 2,
+          reason: "The urgency rationale must use an exact supplied passage.",
+          passageIds: ["urgency-passage-from-another-driver"],
+        },
+      },
+    };
+    mocks.assessment.mockReturnValue(invalid);
+
+    let rejection: unknown;
+    try {
+      await assessDriverRelevance(baseDriver, input);
+    } catch (error) {
+      rejection = error;
+    }
+    expect(rejection).toBeInstanceOf(RelevanceAssessmentEvidenceBindingError);
+    const evidenceFailure = (rejection as RelevanceAssessmentEvidenceBindingError).failure;
+    expect(evidenceFailure).toMatchObject({
+      kind: "evidence-binding",
+      policyVersion: "relevance-top15-v1",
+      assessmentVersion: "driver-specific-v2",
+      attempts: 2,
+      failedDimensions: ["urgency"],
+      assessor: { model: "gpt-5.6-luna", responseId: "esg_driver_relevance_assessment-response" },
+    });
+    expect(evidenceFailure).not.toHaveProperty("assessment");
+    expect(evidenceFailure).not.toHaveProperty("review");
+    expect(evidenceFailure.reasons).toEqual([
+      "The urgency relevance rating cited a passage outside the supplied evidence.",
+    ]);
+    expect(mocks.calls.filter(({ name }) => name === "esg_driver_relevance_assessment")).toHaveLength(2);
+    expect(mocks.calls.filter(({ name }) => name === "esg_driver_relevance_review")).toHaveLength(0);
+    expect(mocks.calls.filter(({ name }) => name === "esg_driver_relevance_translation")).toHaveLength(0);
+  });
+
+  it("reports a mixed valid-and-forged urgency citation without retaining the forged ID", async () => {
+    const invalid = {
+      ...scoredResponse(),
+      dimensions: {
+        ...scoredResponse().dimensions,
+        urgency: {
+          rating: 2,
+          reason: "The urgency rationale must use an exact supplied passage.",
+          passageIds: ["passage-1", "forged-urgency"],
+        },
+      },
+    };
+    mocks.assessment.mockReturnValue(invalid);
+
+    let rejection: unknown;
+    try {
+      await assessDriverRelevance(baseDriver, input);
+    } catch (error) {
+      rejection = error;
+    }
+    expect(rejection).toBeInstanceOf(RelevanceAssessmentEvidenceBindingError);
+    expect((rejection as RelevanceAssessmentEvidenceBindingError).failure.failedDimensions).toEqual(["urgency"]);
+    expect(JSON.stringify((rejection as RelevanceAssessmentEvidenceBindingError).failure)).not.toContain("forged-urgency");
+    expect(mocks.calls.filter(({ name }) => name === "esg_driver_relevance_assessment")).toHaveLength(2);
+    expect(mocks.calls.filter(({ name }) => name === "esg_driver_relevance_review")).toHaveLength(0);
+  });
+
+  it("repairs a zero-rating forged citation instead of treating the invalid ID as harmless", async () => {
+    const first = {
+      ...scoredResponse(),
+      dimensions: {
+        ...scoredResponse().dimensions,
+        urgency: { rating: 0, reason: "No exact-driver deadline is supplied.", passageIds: ["forged-urgency"] },
+      },
+    };
+    const second = {
+      ...scoredResponse(),
+      dimensions: {
+        ...scoredResponse().dimensions,
+        urgency: { rating: 0, reason: "No exact-driver deadline is supplied.", passageIds: [] },
+      },
+    };
+    mocks.assessment.mockReturnValueOnce(first).mockReturnValueOnce(second);
+
+    const result = await assessDriverRelevance(baseDriver, input);
+    expect(result.score).toBe(69);
+    expect(result.dimensions.urgency).toEqual({ rating: 0, reason: "No exact-driver deadline is supplied.", passageIds: [] });
+    expect(mocks.calls.filter(({ name }) => name === "esg_driver_relevance_assessment")).toHaveLength(2);
+    const correctionPayload = JSON.parse((mocks.calls[1].messages[1] as { content: string }).content);
+    expect(correctionPayload.repairFeedback).toEqual([
+      "The urgency relevance rating cited a passage outside the supplied evidence.",
+    ]);
+  });
+
+  it("keeps provider/schema failures as ordinary bounded errors", async () => {
+    mocks.assessment.mockReturnValue({});
+
+    let failure: unknown;
+    try {
+      await assessDriverRelevance(baseDriver, input);
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).not.toBeInstanceOf(RelevanceAssessmentEvidenceBindingError);
+    expect(failure).toBeTruthy();
+    expect(mocks.calls.filter(({ name }) => name === "esg_driver_relevance_assessment")).toHaveLength(2);
+    expect(mocks.calls.filter(({ name }) => name === "esg_driver_relevance_review")).toHaveLength(0);
+  });
+
+  it("does not start a third scorer call when an evidence repair then fails review", async () => {
+    const invalid = {
+      ...scoredResponse(),
+      dimensions: {
+        ...scoredResponse().dimensions,
+        urgency: { rating: 2, reason: "The urgency rationale must use an exact supplied passage.", passageIds: ["forged-urgency"] },
+      },
+    };
+    mocks.assessment.mockReturnValueOnce(invalid).mockReturnValueOnce(scoredResponse());
+    mocks.review.mockReturnValue({
+      checks: { exactDriverSupport: false, noBorrowedObligations: true, urgencySupported: false, ratingsProportionate: false },
+      reasons: ["The urgency rating remains unsupported for this exact driver."],
+    });
+
+    let rejection: unknown;
+    try {
+      await assessDriverRelevance(baseDriver, input);
+    } catch (error) {
+      rejection = error;
+    }
+    expect(rejection).toBeInstanceOf(RelevanceAssessmentRejectedError);
+    expect(rejection).not.toBeInstanceOf(RelevanceAssessmentEvidenceBindingError);
+    expect(mocks.calls.filter(({ name }) => name === "esg_driver_relevance_assessment")).toHaveLength(2);
+    expect(mocks.calls.filter(({ name }) => name === "esg_driver_relevance_review")).toHaveLength(1);
+  });
+
+  it("records an evidence-binding failure when review repair consumes the first scorer call", async () => {
+    const invalid = {
+      ...scoredResponse(),
+      dimensions: {
+        ...scoredResponse().dimensions,
+        urgency: { rating: 2, reason: "The urgency rationale must use an exact supplied passage.", passageIds: ["forged-urgency"] },
+      },
+    };
+    mocks.assessment.mockReturnValueOnce(scoredResponse()).mockReturnValueOnce(invalid);
+    mocks.review.mockReturnValue({
+      checks: { exactDriverSupport: false, noBorrowedObligations: true, urgencySupported: false, ratingsProportionate: false },
+      reasons: ["The urgency rating remains unsupported for this exact driver."],
+    });
+
+    let rejection: unknown;
+    try {
+      await assessDriverRelevance(baseDriver, input);
+    } catch (error) {
+      rejection = error;
+    }
+    expect(rejection).toBeInstanceOf(RelevanceAssessmentEvidenceBindingError);
+    expect((rejection as RelevanceAssessmentEvidenceBindingError).failure.attempts).toBe(2);
     expect(mocks.calls.filter(({ name }) => name === "esg_driver_relevance_assessment")).toHaveLength(2);
     expect(mocks.calls.filter(({ name }) => name === "esg_driver_relevance_review")).toHaveLength(1);
   });

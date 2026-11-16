@@ -372,4 +372,42 @@ describe('September workbook generation', () => {
     expect(result.drivers[0].generationStatus).toBe('unavailable');
     expect(mocks.writer).not.toHaveBeenCalled();
   });
+
+  it('persists an evidence-binding failure without a score and continues to the next candidate', async () => {
+    const checkpoint = rankedSnapshot(2);
+    checkpoint.allowedSources = createWorkbookCheckpoint(input).allowedSources;
+    mocks.relevance.mockImplementation((messages: Array<{ content: string }>) => {
+      const assessed = relevance(messages);
+      const payload = JSON.parse(messages.at(-1)!.content) as { workbookDriver: { id: string } };
+      if (payload.workbookDriver.id !== checkpoint.definitions[0].id) return assessed;
+      return {
+        ...assessed,
+        dimensions: {
+          ...assessed.dimensions,
+          urgency: {
+            rating: 2,
+            reason: 'The urgency rationale cites an unavailable passage.',
+            passageIds: ['forged-urgency-passage'],
+          },
+        },
+      };
+    });
+
+    const result = await generateEsgDriverResult(input, { checkpoint });
+    const first = result.candidatePool?.[0];
+    const second = result.candidatePool?.[1];
+    expect(first?.generationStatus).toBe('verified');
+    expect(first?.relevance).toBeUndefined();
+    expect(first?.relevanceFailure).toMatchObject({
+      kind: 'evidence-binding',
+      attempts: 2,
+      failedDimensions: ['urgency'],
+      assessor: { model: 'test-returned-model' },
+    });
+    expect(first?.statusReason).toContain('Relevance score unavailable:');
+    expect(second?.relevance).toMatchObject({ policyVersion: 'relevance-top15-v1', score: 75 });
+    expect(second?.relevanceFailure).toBeUndefined();
+    expect(mocks.relevance).toHaveBeenCalledTimes(3);
+    expect(mocks.relevanceReview).toHaveBeenCalledTimes(1);
+  }, 20_000);
 });

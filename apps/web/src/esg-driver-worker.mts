@@ -66,9 +66,10 @@ const esgDriverJobTypes = [
   "esg_driver_excel_v4",
   "esg_driver_excel_v5",
   "esg_driver_excel_v6",
+  "esg_driver_excel_v7",
 ] as const;
 const baseJobTypes: readonly BackgroundJobType[] = esgDriversOnly
-  ? (["esg_driver_excel_v5", "esg_driver_excel_v6"] as const)
+  ? (["esg_driver_excel_v5", "esg_driver_excel_v6", "esg_driver_excel_v7"] as const)
   : [
       ...esgDriverJobTypes,
       "xlsx_translation_v1",
@@ -378,7 +379,8 @@ function isEsgDriverJobType(jobType: string): boolean {
     jobType === "esg_driver_excel_v3" ||
     jobType === "esg_driver_excel_v4" ||
     jobType === "esg_driver_excel_v5" ||
-    jobType === "esg_driver_excel_v6"
+    jobType === "esg_driver_excel_v6" ||
+    jobType === "esg_driver_excel_v7"
   );
 }
 

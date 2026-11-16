@@ -33,6 +33,10 @@ function normalizeCategoryLabel(value: string): string {
   return value.normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('en-US');
 }
 
+function hasText(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
 /**
  * Map an immutable workbook row to a report category. Global rows are identified
  * by their section first; country rows use the workbook's normalized type label.
@@ -97,6 +101,38 @@ export function relevanceIssues(driver: EsgDriver): string[] {
 /** Preserve a failed qualification without presenting its rejected numeric score. */
 export function relevanceFailureIssues(driver: EsgDriver): string[] {
   const failure = driver.relevanceFailure;
+  if (failure && failure.kind !== undefined && failure.kind !== 'review-rejected' && failure.kind !== 'evidence-binding') {
+    return ['An unscored candidate has an unknown relevance failure kind.'];
+  }
+  if (failure?.kind === 'evidence-binding') {
+    const invalidShape = driver.relevance
+      || !hasText(driver.statusReason)
+      || failure.policyVersion !== DRIVER_SELECTION_POLICY
+      || failure.assessmentVersion !== RELEVANCE_ASSESSMENT_VERSION
+      || !hasText(failure.evidenceFingerprint)
+      || !hasText(failure.attemptedAt)
+      || !Number.isFinite(Date.parse(failure.attemptedAt))
+      || !hasText(failure.assessor?.model)
+      || (failure.assessor.responseId !== null && !hasText(failure.assessor.responseId))
+      || failure.attempts !== 2
+      || !Array.isArray(failure.failedDimensions)
+      || !failure.failedDimensions.length
+      || failure.failedDimensions.some((dimension) => !RELEVANCE_DIMENSIONS.includes(dimension))
+      || new Set(failure.failedDimensions).size !== failure.failedDimensions.length
+      || !Array.isArray(failure.reasons)
+      || !failure.reasons.length
+      || failure.reasons.some((reason) => !hasText(reason))
+      || Object.prototype.hasOwnProperty.call(failure, 'assessment')
+      || Object.prototype.hasOwnProperty.call(failure, 'review')
+      || Object.prototype.hasOwnProperty.call(failure, 'reviewer')
+      || Object.prototype.hasOwnProperty.call(failure, 'score')
+      || Object.prototype.hasOwnProperty.call(failure, 'band')
+      || Object.prototype.hasOwnProperty.call(failure, 'dimensions')
+      || Object.prototype.hasOwnProperty.call(failure, 'rating')
+      || Object.prototype.hasOwnProperty.call(failure, 'rationale')
+      || Object.prototype.hasOwnProperty.call(failure, 'raw');
+    return invalidShape ? ['An unscored candidate is missing its failed evidence-binding assessment.'] : [];
+  }
   const assessment = failure?.assessment;
   if (driver.relevance || !assessment || assessment.assessmentVersion !== RELEVANCE_ASSESSMENT_VERSION
     || !assessment.review?.reviewer?.model?.trim() || !driver.statusReason?.trim()

@@ -12,7 +12,7 @@ import { assertWorkbookResult, ESG_EVIDENCE_CONTRACT, EsgDriverQualityGateError 
 import { ESG_DRIVER_QUALITY_POLICY, hasSuggestedEvidenceKpi, hasUnverifiedPriMapping, hasCurrentNzbaClaimFromOldReport } from './quality-policy';
 import { sourceDateOptions } from './excel-source-metadata';
 import { MAX_PUBLISHED_DRIVERS, isRankedSelectionPolicy, selectDriversForPolicy } from './ranking-policy';
-import { ensureDriverRelevance, needsRelevanceAssessment, RelevanceAssessmentRejectedError } from './relevance-assessment';
+import { ensureDriverRelevance, needsRelevanceAssessment, RelevanceAssessmentEvidenceBindingError, RelevanceAssessmentRejectedError } from './relevance-assessment';
 import type { DriverSelection, EsgDriver, EsgDriverResult, EsgDriverSource, GenerateEsgDriverOptions, GenerateEsgDriversInput } from './types';
 
 export function assertDriverGenerationConfig(): void {
@@ -202,10 +202,18 @@ export async function generateEsgDriverResult(input: GenerateEsgDriversInput, op
       }
       return scored;
     } catch (error) {
+      if (error instanceof RelevanceAssessmentEvidenceBindingError) {
+        const failed = { ...driver };
+        delete failed.relevance;
+        failed.relevanceFailure = error.failure;
+        failed.statusReason = `Relevance score unavailable: ${error.failure.reasons.join(' ')}`;
+        return failed;
+      }
       if (!(error instanceof RelevanceAssessmentRejectedError)) throw error;
       const failed = { ...driver };
       delete failed.relevance;
       failed.relevanceFailure = {
+        kind: 'review-rejected',
         assessment: error.assessment,
         reasons: [...error.reasons],
       };
@@ -401,8 +409,9 @@ export async function generateEsgDriverResult(input: GenerateEsgDriversInput, op
     ...(d.verification?.editorial ? [d.verification.editorial.reviewer.model] : []),
     ...(d.relevance?.assessor?.model ? [d.relevance.assessor.model] : []),
     ...(d.relevance?.review?.reviewer?.model ? [d.relevance.review.reviewer.model] : []),
-    ...(d.relevanceFailure?.assessment?.assessor?.model ? [d.relevanceFailure.assessment.assessor.model] : []),
-    ...(d.relevanceFailure?.assessment?.review?.reviewer?.model ? [d.relevanceFailure.assessment.review.reviewer.model] : []),
+    ...(d.relevanceFailure?.kind === 'evidence-binding' && d.relevanceFailure.assessor?.model ? [d.relevanceFailure.assessor.model] : []),
+    ...(d.relevanceFailure?.kind !== 'evidence-binding' && d.relevanceFailure?.assessment?.assessor?.model ? [d.relevanceFailure.assessment.assessor.model] : []),
+    ...(d.relevanceFailure?.kind !== 'evidence-binding' && d.relevanceFailure?.assessment?.review?.reviewer?.model ? [d.relevanceFailure.assessment.review.reviewer.model] : []),
   ])));
   const result: EsgDriverResult = {
     ...normalizedInput, workflow: 'excel-sources', workbook: checkpoint.workbook, catalogVersion: checkpoint.catalogVersion,

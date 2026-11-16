@@ -273,6 +273,28 @@ export interface DriverRelevance {
   assessor: { model: string; responseId: string | null };
 }
 
+export interface ReviewRejectedRelevanceFailure {
+  /** Omitted on historical rows written before failure kinds were tagged. */
+  kind?: 'review-rejected';
+  assessment: DriverRelevance;
+  reasons: string[];
+}
+
+export interface EvidenceBindingRelevanceFailure {
+  kind: 'evidence-binding';
+  policyVersion: 'relevance-top15-v1';
+  assessmentVersion: 'driver-specific-v2';
+  evidenceFingerprint: string;
+  attemptedAt: string;
+  assessor: { model: string; responseId: string | null };
+  /** Total scorer calls consumed before the evidence-binding failure (bounded to two). */
+  attempts: number;
+  failedDimensions: DriverRelevanceDimension[];
+  reasons: string[];
+}
+
+export type DriverRelevanceFailure = ReviewRejectedRelevanceFailure | EvidenceBindingRelevanceFailure;
+
 export interface DriverSelection {
   policyVersion: DriverSelectionPolicy;
   requestedCount: 15;
@@ -326,7 +348,7 @@ export interface EsgDriver {
   evidenceDate?: string | null;
   evidenceLimitation?: string;
   relevance?: DriverRelevance;
-  relevanceFailure?: { assessment: DriverRelevance; reasons: string[] };
+  relevanceFailure?: DriverRelevanceFailure;
   statusReason?: string;
   workbookRow?: number;
   workbookSheet?: string;

@@ -109,6 +109,28 @@ describe("ESG driver durable job lifecycle", () => {
     await expect(getEsgDriverJob(id, 7, { includeCheckpoint: true })).resolves.toMatchObject({ candidateAssessedCount: 1, publishedDriverCount: 0 });
     expect(mocks.statements[0].sql).toContain("'relevanceFailure'->'assessment'->>'assessmentVersion'");
   });
+  it('counts an evidence-binding failure as assessed without reading a fabricated score', async () => {
+    const { getEsgDriverJob } = await import('../jobs');
+    const { checkpoint: saved } = rankedWorkbookResultFixture(1);
+    const driver = saved.slots[0].driver;
+    const evidenceFingerprint = relevanceEvidenceFingerprint(driver, saved.input);
+    driver.relevanceFailure = {
+      kind: 'evidence-binding',
+      policyVersion: 'relevance-top15-v1',
+      assessmentVersion: 'driver-specific-v2',
+      evidenceFingerprint,
+      attemptedAt: '2026-09-15T00:00:00.000Z',
+      assessor: { model: 'gpt-5.6-luna', responseId: 'assessment-response' },
+      attempts: 2,
+      failedDimensions: ['urgency'],
+      reasons: ['The urgency relevance rating cited a passage outside the supplied evidence.'],
+    };
+    driver.statusReason = 'Relevance score unavailable: The urgency relevance rating cited a passage outside the supplied evidence.';
+    delete driver.relevance;
+    mocks.state.jobRows = [{ ...jobRow(id, ''), checkpoint_json: saved }];
+    await expect(getEsgDriverJob(id, 7, { includeCheckpoint: true })).resolves.toMatchObject({ candidateAssessedCount: 1, publishedDriverCount: 0 });
+    expect(mocks.statements[0].sql).toContain("'relevanceFailure'->>'kind' = 'evidence-binding'");
+  });
 
   it('allows research-gap retries even when a ranked report already publishes 15', async () => {
     const { isResumableEsgDriverJob, createEsgDriverResumeJob } = await import('../jobs');
@@ -328,7 +350,7 @@ describe("ESG driver durable job lifecycle", () => {
     );
     expect(domainInsert?.values).toContain(id);
     expect(domainInsert?.values.some((value) => typeof value === 'string' && value.includes('"selectionPolicy":"category-balanced15-v1"'))).toBe(true);
-    expect(mocks.statements.some(({ sql, values }) => sql.includes('INSERT INTO background_jobs') && values.includes('esg_driver_excel_v6'))).toBe(true);
+    expect(mocks.statements.some(({ sql, values }) => sql.includes('INSERT INTO background_jobs') && values.includes('esg_driver_excel_v7'))).toBe(true);
     expect(
       domainInsert?.values.some(
         (value) =>

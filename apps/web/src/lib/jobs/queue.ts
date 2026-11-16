@@ -20,6 +20,7 @@ export const BACKGROUND_JOB_TYPES = [
   "esg_driver_excel_v4",
   "esg_driver_excel_v5",
   "esg_driver_excel_v6",
+  "esg_driver_excel_v7",
 ] as const;
 
 export type BackgroundJobType = (typeof BACKGROUND_JOB_TYPES)[number];
@@ -35,14 +36,15 @@ export function isEsgDriverQueueType(
   jobType: BackgroundJobType | string,
 ): jobType is Extract<
   BackgroundJobType,
-  "esg_driver" | "esg_driver_excel_v3" | "esg_driver_excel_v4" | "esg_driver_excel_v5" | "esg_driver_excel_v6"
+  "esg_driver" | "esg_driver_excel_v3" | "esg_driver_excel_v4" | "esg_driver_excel_v5" | "esg_driver_excel_v6" | "esg_driver_excel_v7"
 > {
   return (
     jobType === "esg_driver" ||
     jobType === "esg_driver_excel_v3" ||
     jobType === "esg_driver_excel_v4" ||
     jobType === "esg_driver_excel_v5" ||
-    jobType === "esg_driver_excel_v6"
+    jobType === "esg_driver_excel_v6" ||
+    jobType === "esg_driver_excel_v7"
   );
 }
 
@@ -185,7 +187,7 @@ export async function enqueueBackgroundJob(
       await database.$executeRaw`SELECT pg_advisory_xact_lock(${args.userId}::integer, hashtext('esg_driver'))`;
       const active = await database.$queryRaw<Array<{ id: string }>>`
         SELECT id::text FROM background_jobs
-        WHERE user_id = ${args.userId} AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6')
+        WHERE user_id = ${args.userId} AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6', 'esg_driver_excel_v7')
           AND status IN ('queued', 'processing') LIMIT 1
       `;
       if (active.length) throw new JobConcurrencyLimitError();
@@ -657,7 +659,7 @@ export async function countActiveJobs(
     ? await esgPrisma.$queryRaw<Array<{ count: number }>>`
         SELECT COUNT(*)::int AS count FROM background_jobs
         WHERE user_id = ${userId}
-          AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6')
+          AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6', 'esg_driver_excel_v7')
           AND status IN ('queued', 'processing')
       `
     : jobType
@@ -775,7 +777,7 @@ export async function reconcileEsgDriverDomainJobs(): Promise<void> {
         updated_at = now()
     FROM background_jobs AS queue
     WHERE queue.id = domain.id
-      AND queue.job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6')
+      AND queue.job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6', 'esg_driver_excel_v7')
       AND queue.status IN ('error', 'cancelled')
       AND domain.status IN ('queued', 'processing')
   `;

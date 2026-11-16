@@ -98,9 +98,9 @@ response, leaving existing saved reports readable. New generation is disabled
 until catalog loading succeeds.
 
 Deploy the web application and ESG workers together. New jobs use queue type
-`esg_driver_excel_v6`, which prevents older workers from claiming category-balanced
+`esg_driver_excel_v7`, which prevents older workers from claiming category-balanced
 jobs. The updated workers continue to accept earlier queue versions. Version 5
-and version 6 jobs require their persisted workbook snapshot and fail clearly if it is missing;
+and later jobs require their persisted workbook snapshot and fail clearly if it is missing;
 they must never fall back to a bundled or newly active workbook. No migration or
 worker restart is needed for subsequent uploads or activations.
 
@@ -224,11 +224,20 @@ driver-specific urgency and the absence of borrowed obligations. A background
 mention in another regulation cannot transfer that regulation's duties or
 deadlines to the named framework. Rejected ratings receive bounded repair;
 unreviewed assessments cannot be selected or reused.
-If both evidence reviews reject a score, the verified driver content and cited
+If independent review still rejects a score when the scoring budget is exhausted,
+the verified driver content and cited
 sources remain in the candidate audit with an explicit `relevanceFailure`
 record and rejection reasons. The candidate is excluded as `unscored`, without
-publishing its rejected number or stopping other candidates. Provider failures
-and malformed responses still follow the normal durable job error handling.
+publishing its rejected number or stopping other candidates. A scorer response
+that cites a passage outside the supplied evidence, or gives a positive rating
+without a citation, receives targeted correction using the same canonical input
+and allowed passages when a scoring call remains. Scoring, citation correction,
+provider/schema retries and independent-review feedback share a maximum of two
+scorer requests per candidate assessment. If evidence binding still fails, the candidate
+remains source-supported but unscored. Its audit records the actual assessor,
+evidence fingerprint, failed dimensions and validation reasons, without a
+numeric fallback or an invented independent review. Provider failures, schema
+errors and missing provider identity still follow durable job error handling.
 
 Only supported candidates scoring at least 50 qualify. Scores of 80 or more are
 labelled High; 50–79 Medium. Ties use workbook row then ID. Clear alternate
@@ -310,8 +319,9 @@ child, rechecks supported rows against their saved source versions and quotation
 unavailable rows and relevance assessment gaps. Results from the older catalog remain readable/exportable, but
 legacy checkpoints cannot resume into this restricted workflow. Start a new run
 for those packs. No database migration is required for the JSON checkpoint format.
-New jobs use `esg_driver_excel_v6`, which older workers do not claim. General
-workers also support older queue versions. Before
+New jobs use `esg_driver_excel_v7`, which fences the evidence-binding failure
+contract from older workers. Updated workers also drain existing v6 and older
+queue versions without rewriting their saved selection policy. Before
 completion, the domain transaction checks the result against the saved workbook
 rows, allowlist, citations, model review records and relevance evidence fingerprints.
 It recomputes the pinned selection policy, including every category quota, and
@@ -328,9 +338,9 @@ for both writing and verification, with low reasoning for the first draft,
 medium for the first repair and reviews, and high for the final repair. The provider's returned model and response ID are
 recorded for both stages of each supported driver. Avoid switching a worker binary while it is actively
 processing a job; allow it to stop gracefully first.
-Refresh every local worker to support `esg_driver_excel_v6`, including a
-general worker started by another terminal. Workers predating version 6 cannot
-claim the new balanced jobs; leaving only older workers running leaves them queued. Worker logs
+Refresh every local worker to support `esg_driver_excel_v7`, including a
+general worker started by another terminal. Workers predating version 7 cannot
+claim new jobs; leaving only older workers running leaves them queued. Worker logs
 record the job ID, claiming process identity and quality policy for new ESG jobs.
 Creating a retry keeps the parent read, checkpoint copy and child queue entry in
 one transaction, with a bounded 30-second timeout for evidence-rich checkpoints.

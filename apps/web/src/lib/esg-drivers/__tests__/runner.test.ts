@@ -152,6 +152,50 @@ describe("ESG driver checkpoint runner", () => {
     } as any)).rejects.toThrow("v6 jobs require the category-balanced selection policy");
     expect(mocks.generateEsgDriverResult).not.toHaveBeenCalled();
   });
+
+  it("fails a v7 queue row when its immutable workbook checkpoint is missing", async () => {
+    mocks.getEsgDriverJob.mockResolvedValue({
+      status: "queued",
+      progress: 0,
+      result: null,
+      checkpoint: null,
+    });
+
+    const { runEsgDriverGenerationJob } = await import("../runner");
+    await expect(runEsgDriverGenerationJob({
+      id: "4c4ebf2b-a9e5-4f40-b633-740ee43ea7ec",
+      userId: 7,
+      jobType: "esg_driver_excel_v7",
+      payload: { country: "UAE", sector: "Banking", language: "English" },
+      leaseOwner: "lease-token-a",
+      attempts: 1,
+      maxAttempts: 2,
+      progress: 0,
+    } as any)).rejects.toThrow("v7 jobs require an immutable workbook checkpoint");
+    expect(mocks.generateEsgDriverResult).not.toHaveBeenCalled();
+  });
+
+  it("rejects v7 rows without the category-balanced checkpoint policy", async () => {
+    mocks.getEsgDriverJob.mockResolvedValue({
+      status: "queued",
+      progress: 0,
+      result: null,
+      checkpoint: { ...checkpoint("2026-07-14T00:00:00.000Z"), selectionPolicy: "relevance-top15-v1" },
+    });
+
+    const { runEsgDriverGenerationJob } = await import("../runner");
+    await expect(runEsgDriverGenerationJob({
+      id: "4c4ebf2b-a9e5-4f40-b633-740ee43ea7ec",
+      userId: 7,
+      jobType: "esg_driver_excel_v7",
+      payload: { country: "UAE", sector: "Banking", language: "English" },
+      leaseOwner: "lease-token-a",
+      attempts: 1,
+      maxAttempts: 2,
+      progress: 0,
+    } as any)).rejects.toThrow("v7 jobs require the category-balanced selection policy");
+    expect(mocks.generateEsgDriverResult).not.toHaveBeenCalled();
+  });
 });
 
 function checkpoint(updatedAt: string) {
