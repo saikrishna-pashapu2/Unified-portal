@@ -217,7 +217,7 @@ export default function ArticleAiProvider({
   // tab cannot poll forever. A refresh also lets confirmed human likes update
   // the existing LikeButton count from the server-rendered tree.
   useEffect(() => {
-    if (!isAuthenticated || !preference?.enabled || !pendingSelectionKey) return;
+    if (!isAuthenticated || !pendingSelectionKey) return;
 
     let cancelled = false;
     let attempt = 0;
@@ -332,9 +332,12 @@ export default function ArticleAiProvider({
 
   const submitFeedback = useCallback(
     async (articleId: number, action: FeedbackAction): Promise<FeedbackResponse> => {
-      if (!isAuthenticated) return { ok: false, error: "Sign in to personalize your digest." };
+      if (!isAuthenticated) return { ok: false, error: "Sign in to manage your private digest picks." };
       const selection = selections.get(articleId);
       if (!selection) return { ok: false, error: "This AI pick is no longer available." };
+      if (!selection.sharedSelectionId) {
+        return { ok: false, error: "This AI pick needs a refresh before feedback can be saved." };
+      }
       if (pendingArticleIds.has(articleId) || selection.pendingConfirmation) {
         return { ok: false, error: "This AI pick is still being saved." };
       }
@@ -351,6 +354,7 @@ export default function ArticleAiProvider({
             articleId,
             action,
             expectedVersion: selection.version,
+            sharedSelectionId: selection.sharedSelectionId,
           }),
         });
         const payload = await readJson(response);

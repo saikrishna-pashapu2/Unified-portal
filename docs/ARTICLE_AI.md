@@ -1,15 +1,20 @@
-# Private article picks and weekly email
+# Shared article assessment and opt-in weekly email
 
-The ESG and Credit article pages offer independent, opt-in AI selection for the
-signed-in user's weekly email. AI selections are private application records;
-they do not increment ordinary likes or enter Community rankings/reports. A
-user's explicit **Keep & like** action creates an ordinary human like and can
-then contribute to the existing team selection.
+ESG and Credit each have a shared AI assessment learned from articles human users
+have liked in that domain. Personal like counts, account-team assignments, and
+the recipient's own interests do not determine the assessment. A user with no
+likes can view the same shared picks as everyone else in that domain.
+
+The independent, per-user ESG and Credit switches only control AI inclusion in
+that user's own weekly email and default to off. AI selections do not increment
+ordinary likes or enter Community rankings/reports. An explicit **Keep & like**
+action creates an ordinary human like that can inform later shared assessments.
+Dismissals remain private to the user and are not negative training examples.
 
 ## Delivery contract
 
 The canonical article-email implementation is
-`apps/web/src/lib/alerts/article-weekly.ts`. The generic worker checks it once
+`apps/web/src/lib/alerts/article-weekly.ts`. The standalone worker checks it once
 per minute. Both `/api/cron/process-alerts` and the compatibility
 `/api/cron/weekly-digest` entrypoint call that same service. The latter no longer
 implements a separate all-users digest. The Community report's
@@ -30,10 +35,12 @@ snapshot and records actual delivery status. SMTP itself cannot guarantee
 exactly-once delivery after an ambiguous provider/network failure; queue retries
 retain the existing stable Message-ID.
 
-The email combines human-liked content from the recipient's team with a separate
-**AI picks for you** section. An unassigned user uses their own human likes rather
-than an all-users group. AI items belong only to the recipient, must be in an
-enabled AI domain also selected by the alert, and are capped at five per domain.
+The article section includes articles liked by any user in the relevant domain
+during the weekly window. Recipients need neither personal likes nor a team
+assignment. Existing event/publication sections retain their team-scoped rules.
+Opted-in users also receive a separate **AI picks for you** section drawn from the
+shared domain assessment, with their private dismissals applied. AI items must be
+in an enabled AI domain also selected by the alert and are capped at five per domain.
 An override address or distribution list receives human selections only. Private
 picks are eligible only when the destination is the owner's single account email.
 The AI switch never creates an email subscription or changes a destination.
@@ -52,47 +59,66 @@ email, or an otherwise empty partial digest, stays due for retry.
 
 ## Selection and feedback
 
-Application-owned AI preferences, versioned profiles, cached article features,
-bounded run/budget records, selections, and feedback are stored in ESG. The ESG
+Application-owned AI preferences, shared domain assessments, cached article features,
+bounded run/budget records, shared selections, and private feedback are stored in ESG. The ESG
 user directory supplies identity for both domains. Article reads and confirmed
 human likes use the corresponding ESG/Credit client. The Credit migration also
 records the previously untracked `likes` table contract; it does not replace
 production likes or add a foreign key to Credit's separate user directory.
 
-Only historical human likes and explicit feedback are evidence. Absence of a
-like is unknown. AI choices never become positive training examples on their
-own. At least 20 usable individual examples are needed for a personal profile;
-otherwise, at least five usable, distinct articles from same-team, same-domain
-human history are needed. With insufficient evidence, the system abstains.
-Existing older examples seed the initial profiles
-because the current history is sparse.
+All recorded human article likes in the domain contribute to the learning pool,
+including likes from users with blank/different team assignments or inactive
+accounts. Each distinct, resolvable article is counted once. The bounded profile
+uses up to 200 representative examples by default; ESG and Credit never share
+their history or assessment. Historical examples have no recency cutoff.
 
-The worker processes separate `article_ai_esg_v1` and `article_ai_credit_v1`
-queues. Credit work remains unclaimed when Credit is unavailable; ESG work can
-continue. Expired daily jobs are skipped on recovery, so old budget dates cannot
-fund a burst of provider calls. Daily work is idempotent, bounded, and checks opt-in/settings versions
-and the worker lease before provider requests and before publishing selections.
-New candidates are limited to the last 14 days. Existing selections and dismissal
-tombstones are excluded from future passes. Article text is untrusted data. The
+There is no personal-like minimum or five-article team gate. At least one usable
+human-liked article is necessary to have any evidence. AI choices never become
+positive examples on their own; absence of a like and private dismissals are not
+negative examples. The model can still abstain when new candidates are weak.
+
+The worker schedules separate `article_ai_esg_v2` and `article_ai_credit_v2`
+domain jobs while AI is enabled. A queue's user identifier is only an accounting
+foreign key to an existing account; it never supplies learning preferences.
+Legacy v1 jobs are drained as retired work without provider requests. Pending
+legacy Credit confirmations still finish through their original outbox.
+
+Each domain/day/policy has one durable assessment shared by all recipients.
+The assessment owns its lease and provider budget; private email switches do not
+create additional assessments. Credit work remains unclaimed when Credit is
+unavailable and ESG work continues. Expired daily jobs are skipped on recovery,
+so old budget dates cannot fund a burst of provider calls. Lease fencing protects
+provider reservations and publishing. New candidates are limited to the last
+14 days. Personal dismissals never alter global ranking. Article text is untrusted data. The
 model gets bounded candidates and history, has no tools, and must return validated
 decisions for known candidate IDs. A conservative UTF-8 input bound plus the
 maximum output allowance is reserved before each request; automatic SDK retries
 are disabled so they cannot bypass the durable daily budget.
 
-Dismissals persist so the same article is not automatically reselected. Feedback
-uses a selection version to prevent contradictory concurrent changes. ESG
+The latest completed ready assessment supplies the shared picks. A new ready
+assessment with no selections is authoritative; it does not resurrect earlier
+picks. While a newer assessment is running or has failed, unexpired picks from
+the previous ready assessment remain available.
+
+Dismissals persist per user/domain/article across assessments. Shared selections
+are stored once; a sparse private overlay is written only when a user gives
+feedback. Feedback includes the exact shared-selection UUID and private overlay
+version to prevent stale or contradictory changes. ESG
 confirmation can commit locally; Credit confirmation uses a durable pending
 operation and retry-safe Credit insertion before the selection is marked
 confirmed. Retrying confirmation does not refresh an existing human like's date.
+Retain historical shared assessments/selections: their foreign keys anchor
+private dismissal and feedback history, so deleting them would erase that state.
 
-Turning selection off prevents subsequent generation/commit and excludes AI from
-emails assembled after the change. Preferences and feedback are checked again
+Turning a user's switch off excludes AI from that user's emails assembled after
+the change. It does not stop the shared assessment or hide shared picks from
+other users. Preferences and private feedback are checked again
 under locks when the email snapshot is committed. Emails already prepared retain
 their contents. Previously confirmed human likes remain ordinary human feedback.
 
 ## Deployment and pilot
 
-Deploy both database migrations and regenerate Prisma clients before restarting
+Apply all pending migrations for both databases and regenerate Prisma clients before restarting
 web and worker. Use `pnpm db:migrate:deploy` with the separate migration credentials
 described in `MIGRATIONS.md` and `DATABASE_ROLES.md`. Never use `db push` on shared
 databases. All feature switches default to off:
@@ -106,7 +132,7 @@ ARTICLE_AI_MAX_CANDIDATES=40
 ARTICLE_AI_DAILY_REQUEST_LIMIT=2
 ARTICLE_AI_DAILY_TOKEN_LIMIT=12000
 ARTICLE_AI_SELECTION_TTL_DAYS=8
-ARTICLE_AI_MAX_HISTORY_EXAMPLES=50
+ARTICLE_AI_MAX_HISTORY_EXAMPLES=200
 ```
 
 Use the existing `OPENAI_API_KEY` and optional `OPENAI_ORG_ID`. Model requests run
@@ -114,7 +140,7 @@ only in the background worker, never on a settings read or page render.
 
 1. Apply the additive migrations and verify both schemas on disposable databases.
 2. Restart web/worker with AI generation enabled but AI email inclusion disabled.
-   Selected users can opt in and review private badges on the articles page.
+   Everyone can review shared picks on the articles page; users opt in only for email inclusion.
 3. Have the historical curators label a sample of selected and unselected articles
    in each domain. Measure useful selections, repeated stories, and important
    omissions; untouched articles are not negative examples. Review ESG's profile

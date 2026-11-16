@@ -32,7 +32,7 @@ export function getArticleAiConfig(): ArticleAiConfig {
     dailyRequestLimit: positiveInt(process.env.ARTICLE_AI_DAILY_REQUEST_LIMIT, 2, 10),
     dailyTokenLimit: positiveInt(process.env.ARTICLE_AI_DAILY_TOKEN_LIMIT, 12_000, 100_000),
     selectionTtlDays: positiveInt(process.env.ARTICLE_AI_SELECTION_TTL_DAYS, 8, 31),
-    maxHistoryExamples: Math.max(20, positiveInt(process.env.ARTICLE_AI_MAX_HISTORY_EXAMPLES, 50, 200)),
+    maxHistoryExamples: Math.max(1, positiveInt(process.env.ARTICLE_AI_MAX_HISTORY_EXAMPLES, 200, 200)),
   };
 }
 

@@ -56,23 +56,26 @@ export async function getHumanWeeklyItems(
   domains: ArticleAiDomain[],
   window: { since: Date; until: Date },
 ): Promise<{ items: WeeklyArticleItem[]; unavailableDomains: ArticleAiDomain[] }> {
-  // No inferred all-users team: unassigned users retain access to their own likes.
-  const team = await esgPrisma.$queryRaw<Array<{ id: number }>>`
-    SELECT id FROM users WHERE is_active_db = true
-      AND (id = ${alert.user_id} OR (${alert.team}::text IS NOT NULL AND team = ${alert.team}))
-  `;
-  const userIds = team.map(user => user.id);
-  if (!userIds.length) return { items: [], unavailableDomains: [] };
   const result: WeeklyArticleItem[] = [];
   const unavailableDomains: ArticleAiDomain[] = [];
   const kinds = (['article', 'event', 'publication'] as const).filter(kind =>
     (kind === 'article' ? alert.alert_articles : kind === 'event' ? alert.alert_events : alert.alert_publications) !== false,
   );
+  // Articles are curated collectively across the domain. Team membership only
+  // applies to the existing event/publication sections of the weekly email.
+  const team = kinds.some(kind => kind !== 'article')
+    ? await esgPrisma.$queryRaw<Array<{ id: number }>>`
+        SELECT id FROM users WHERE is_active_db = true
+          AND (id = ${alert.user_id} OR (${alert.team}::text IS NOT NULL AND team = ${alert.team}))
+      `
+    : [];
+  const userIds = team.map(user => user.id);
   for (const domain of domains) {
     const database = domain === 'esg' ? esgPrisma : creditPrisma;
     const domainItems: WeeklyArticleItem[] = [];
     try {
     for (const kind of kinds) {
+      if (kind !== 'article' && !userIds.length) continue;
       const spec = SOURCES[domain][kind];
       const url = spec.url.startsWith('COALESCE') ? spec.url : `a.${spec.url}`;
       const rows = await database.$queryRawUnsafe<Array<{
@@ -81,10 +84,11 @@ export async function getHumanWeeklyItems(
         SELECT a.id, a.${spec.title} AS title, ${url} AS url, a.source, ${spec.date} AS published_at
         FROM ${spec.table} a
         JOIN likes l ON l.content_id = a.id AND COALESCE(l.content_type, 'article') = $1
-        WHERE l.user_id = ANY($2::integer[]) AND l.created_at >= $3 AND l.created_at < $4
+        WHERE l.created_at >= $2 AND l.created_at < $3
+          ${kind === 'article' ? '' : 'AND l.user_id = ANY($4::integer[])'}
         GROUP BY a.id
         ORDER BY MAX(l.created_at) DESC, a.id DESC LIMIT 50
-      `, kind, userIds, window.since, window.until);
+      `, kind, window.since, window.until, ...(kind === 'article' ? [] : [userIds]));
       domainItems.push(...rows.map(row => ({
         id: row.id, domain, kind, origin: 'human' as const,
         title: row.title || 'Untitled', url: row.url || '', source: row.source || 'Unknown source',

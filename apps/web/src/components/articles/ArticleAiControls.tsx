@@ -1,20 +1,17 @@
 "use client";
 
 import { AlertCircle, Check, Loader2, Mail, Sparkles } from "lucide-react";
-import {
-  ARTICLE_AI_PERSONAL_HISTORY_MINIMUM,
-  type ArticleAiDomain,
-} from "@/lib/article-ai/types";
+import type { ArticleAiDomain } from "@/lib/article-ai/types";
 import { useArticleAi } from "./ArticleAiProvider";
 
 function statusCopy(status: string | undefined) {
   switch (status) {
     case "queued":
-      return "Your profile is queued for its next article pass.";
+      return "The shared domain assessment is queued for its next article pass.";
     case "ready":
-      return "Your profile is ready and will be refreshed as new articles arrive.";
+      return "The shared domain assessment is ready and will be refreshed as new articles arrive.";
     case "insufficient_history":
-      return "We are still collecting enough history to make personal picks.";
+      return "We are still collecting usable human-liked articles for the shared domain assessment.";
     case "preview":
       return "Preview mode is on for this deployment.";
     case "error":
@@ -71,13 +68,13 @@ export default function ArticleAiControls({
           <div>
             <h3 className="text-sm font-semibold text-slate-900">AI article selection</h3>
             <p className="mt-1 text-xs leading-5 text-slate-600">
-              Sign in to create a private ESG/Credit profile for your weekly email digest.
+              Sign in to choose whether shared AI picks appear in your private weekly email digest.
             </p>
             <a
               href="/signin"
               className="mt-2 inline-flex text-xs font-semibold text-slate-800 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-700"
             >
-              Sign in to personalize
+              Sign in to manage digest picks
             </a>
           </div>
         </div>
@@ -126,12 +123,11 @@ export default function ArticleAiControls({
   }
 
   const statusMessage = statusCopy(preference.status);
-  const profileMessage =
-    preference.profileSource === "personal"
-      ? `Learning from ${preference.historyCount} human likes in ${domain.toUpperCase()}.`
-      : preference.profileSource === "team"
-        ? "Using the curated team history until your personal profile has enough examples."
-        : `Not enough personal or team history yet (${preference.historyCount}/${ARTICLE_AI_PERSONAL_HISTORY_MINIMUM} personal likes). AI picks will wait for more human examples.`;
+  const profileMessage = preference.status === "insufficient_history"
+    ? preference.historyCount > 0
+      ? `The shared ${domain.toUpperCase()} assessment is building from ${preference.historyCount} human-liked articles. AI picks will appear when usable domain history is available.`
+      : `No shared ${domain.toUpperCase()} liked-article history is available yet. AI picks will start after users have liked useful articles.`
+    : `The shared ${domain.toUpperCase()} assessment learns from human-liked articles across the domain. Your switch controls only whether those picks appear in your private weekly email.`;
   const emailReady = preference.emailInclusionEnabled && preference.weeklyDigestConfigured;
 
   return (
@@ -153,7 +149,7 @@ export default function ArticleAiControls({
               </span>
             </div>
             <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-600">
-              Selects useful articles for your private weekly email using your human likes and the {domain.toUpperCase()} team history.
+              Selects useful {domain.toUpperCase()} articles from the shared history of human-liked articles. This switch controls only your private weekly email.
             </p>
           </div>
         </div>
@@ -215,7 +211,7 @@ export default function ArticleAiControls({
 
       {!preference.enabled ? (
         <p className="mt-3 text-[11px] leading-5 text-slate-500">
-          Turning off stops new picks. Emails already prepared may still contain them.
+          Shared AI picks remain visible here, but they will not be added to your private weekly email while this switch is off.
         </p>
       ) : null}
 

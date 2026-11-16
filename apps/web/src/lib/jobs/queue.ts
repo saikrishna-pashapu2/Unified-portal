@@ -4,6 +4,8 @@ import { esgPrisma } from "@esgcredit/db-esg";
 export const BACKGROUND_JOB_TYPES = [
   "article_ai_esg_v1",
   "article_ai_credit_v1",
+  "article_ai_esg_v2",
+  "article_ai_credit_v2",
   "xlsx_translation_v1",
   "pdf_translation_v2",
   "pdf_translation_v3",

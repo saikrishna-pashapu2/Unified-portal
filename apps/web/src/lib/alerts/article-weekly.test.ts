@@ -19,7 +19,7 @@ function alert(overrides: Partial<WeeklyArticleAlert> = {}): WeeklyArticleAlert 
     alert_articles: true, alert_events: false, alert_publications: false, sources: [], keywords: [], ...overrides,
   };
 }
-const pick = { articleId: 21, domain: 'credit', title: 'Bank ratings', url: 'https://example.org/bank', source: 'Ratings', publishedAt: null, reason: 'Matches your banking interests.', contentHash: 'hash' };
+const pick = { articleId: 21, domain: 'credit', title: 'Bank ratings', url: 'https://example.org/bank', source: 'Ratings', publishedAt: null, reason: 'Matches the shared credit-risk history.', contentHash: 'hash' };
 
 beforeEach(() => {
   vi.clearAllMocks();

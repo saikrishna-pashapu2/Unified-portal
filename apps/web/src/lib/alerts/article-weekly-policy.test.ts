@@ -43,7 +43,8 @@ describe('private weekly email policy', () => {
       item({ id: 2, origin: 'ai', url: 'javascript:alert(1)', reason: '<b>Injected</b>' }),
     ] });
     expect(email.html).toContain('AI picks for you');
-    expect(email.html).toContain('Selected by your team');
+    expect(email.html).toContain('Articles liked by users');
+    expect(email.html).toContain('Shared AI selections based on articles liked by users across each domain.');
     expect(email.html).toContain('&lt;script&gt;');
     expect(email.html).toContain('&lt;b&gt;Injected&lt;/b&gt;');
     expect(email.html).not.toContain('<script>');

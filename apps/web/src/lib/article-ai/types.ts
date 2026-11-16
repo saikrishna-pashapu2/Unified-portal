@@ -1,7 +1,9 @@
 /** Shared wire contracts. This module must remain safe to import in the browser. */
 export type ArticleAiDomain = "esg" | "credit";
 
-export const ARTICLE_AI_PERSONAL_HISTORY_MINIMUM = 20;
+export const ARTICLE_AI_POLICY_VERSION = 2;
+export const ARTICLE_AI_DOMAIN_HISTORY_MINIMUM = 1;
+export const ARTICLE_AI_MAX_SHARED_SELECTIONS = 20;
 export const ARTICLE_AI_MAX_WEEKLY_PICKS = 5;
 
 export interface ArticleAiPreference {
@@ -9,7 +11,7 @@ export interface ArticleAiPreference {
   enabled: boolean;
   settingsVersion: number;
   historyCount: number;
-  profileSource: "personal" | "team" | "insufficient";
+  profileSource: "domain" | "insufficient";
   weeklyDigestConfigured: boolean;
   status: "off" | "queued" | "ready" | "insufficient_history" | "error" | "preview";
   lastRunAt: string | null;
@@ -26,6 +28,8 @@ export interface ArticleAiSelection {
   selectedAt: string;
   expiresAt: string;
   pendingConfirmation: boolean;
+  sharedSelectionId: string | null;
+  assessmentDate: string | null;
 }
 
 export interface ArticleAiFeedbackResult {
@@ -44,13 +48,24 @@ export interface ArticleAiDigestPick {
   publishedAt: string | null;
   reason: string;
   contentHash: string;
+  sharedSelectionId: string;
+  assessmentDate: string;
 }
 
+/** Retained only so retired v1 rows can be parsed and fenced safely. */
 export interface ArticleAiJobPayload {
   domain: ArticleAiDomain;
   settingsVersion: number;
   /** UTC date for the bounded daily run and its idempotency key. */
   runDate: string;
+  policyVersion?: number;
+}
+
+export interface ArticleAiDomainJobPayload {
+  domain: ArticleAiDomain;
+  /** UTC date for the single shared domain assessment. */
+  runDate: string;
+  policyVersion: typeof ARTICLE_AI_POLICY_VERSION;
 }
 
 export function isArticleAiDomain(value: unknown): value is ArticleAiDomain {

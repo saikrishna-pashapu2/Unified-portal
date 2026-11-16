@@ -1,6 +1,7 @@
 import { creditPrisma } from "@esgcredit/db-credit";
 import { queueDueArticleWeeklyDigests } from "@/lib/alerts/article-weekly";
 import { queueDueArticleAiJobs, reconcileArticleAiFeedback, runArticleAiJob } from "@/lib/article-ai/jobs";
+import { reconcileDomainArticleAiFeedback } from "@/lib/article-ai/service";
 import os from "node:os";
 import { randomUUID } from "node:crypto";
 import {
@@ -71,7 +72,7 @@ const baseJobTypes: readonly BackgroundJobType[] = esgDriversOnly
       ...esgDriverJobTypes,
       "xlsx_translation_v1",
       ...PDFX_V2_QUEUE_JOB_TYPES,
-      ...(process.env.ARTICLE_AI_ENABLED === "true" ? ["article_ai_esg_v1" as const] : []),
+      ...(process.env.ARTICLE_AI_ENABLED === "true" ? ["article_ai_esg_v1" as const, "article_ai_esg_v2" as const] : []),
     ];
 let enabledJobTypes: BackgroundJobType[] = [...baseJobTypes];
 let creditReady = false;
@@ -156,7 +157,7 @@ async function main(): Promise<void> {
       lastArticlePoll = Date.now();
       articleWork = Promise.allSettled([
         queueDueArticleAiJobs(), queueDueArticleWeeklyDigests(),
-        ...(creditReady ? [reconcileArticleAiFeedback()] : []),
+        ...(creditReady ? [reconcileArticleAiFeedback(), reconcileDomainArticleAiFeedback()] : []),
       ]).then(results => {
         for (const result of results) {
           if (result.status === 'rejected') console.error('[esg-driver-worker] Article selection/digest check failed; will retry');
@@ -217,7 +218,7 @@ async function refreshCreditCapability(): Promise<void> {
     await creditPrisma.$queryRaw`SELECT user_id, content_id, content_type, created_at FROM likes LIMIT 0`;
     const restored = !creditReady;
     creditReady = true;
-    enabledJobTypes = [...baseJobTypes, 'article_ai_credit_v1'];
+    enabledJobTypes = [...baseJobTypes, 'article_ai_credit_v1', 'article_ai_credit_v2'];
     if (restored) console.log('[esg-driver-worker] Credit article AI ready');
   } catch {
     creditReady = false;
@@ -248,6 +249,7 @@ async function executeJob(job: ClaimedBackgroundJob): Promise<void> {
     const output = isEsgDriverJobType(job.jobType)
       ? await runEsgDriverGenerationJob(job as any)
       : job.jobType === "article_ai_esg_v1" || job.jobType === "article_ai_credit_v1"
+        || job.jobType === "article_ai_esg_v2" || job.jobType === "article_ai_credit_v2"
         ? await runArticleAiJob(job)
       : job.jobType === "xlsx_translation_v1"
         ? await processExcelTranslation(job)
@@ -266,7 +268,7 @@ async function executeJob(job: ClaimedBackgroundJob): Promise<void> {
       throw new JobLeaseLostError();
     }
   } catch (error) {
-    if (job.jobType === 'article_ai_credit_v1' && isTransientPrismaConnectivityError(error)) {
+    if ((job.jobType === 'article_ai_credit_v1' || job.jobType === 'article_ai_credit_v2') && isTransientPrismaConnectivityError(error)) {
       creditReady = false;
       enabledJobTypes = [...baseJobTypes];
       await creditPrisma.$disconnect().catch(() => undefined);
@@ -332,6 +334,8 @@ async function verifyWorkerSchema(): Promise<void> {
     ...(process.env.ARTICLE_AI_ENABLED === "true" ? [
       "article_ai_preferences", "article_ai_profiles", "article_ai_article_features",
       "article_ai_runs", "article_ai_budgets", "article_ai_selections", "article_ai_feedback",
+      "article_ai_domain_assessments", "article_ai_domain_selections",
+      "article_ai_user_selections", "article_ai_domain_feedback",
     ] : []),
     "background_jobs",
     "esg_driver_jobs",

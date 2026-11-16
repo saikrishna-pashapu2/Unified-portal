@@ -7,11 +7,13 @@ const selectionFor = (domain: Domain, articleId: number, overrides: Record<strin
   articleId,
   domain,
   state: "selected" as SelectionState,
-  reason: domain === "esg" ? "Matches your climate disclosure history." : "Matches your sovereign rating history.",
+  reason: domain === "esg" ? "Matches shared ESG liked-article history." : "Matches shared Credit liked-article history.",
   version: 1,
   selectedAt: "2026-11-16T08:00:00.000Z",
   expiresAt: "2026-11-23T08:00:00.000Z",
   pendingConfirmation: false,
+  sharedSelectionId: `00000000-0000-4000-8000-${String(articleId).padStart(12, "0")}`,
+  assessmentDate: "2026-11-16",
   ...overrides,
 });
 
@@ -21,7 +23,7 @@ function preference(domain: Domain, overrides: Record<string, unknown> = {}) {
     enabled: true,
     settingsVersion: 1,
     historyCount: domain === "esg" ? 20 : 8,
-    profileSource: domain === "esg" ? "personal" : "team",
+    profileSource: "domain",
     weeklyDigestConfigured: domain === "credit",
     status: "ready",
     lastRunAt: "2026-11-16T08:00:00.000Z",
@@ -40,10 +42,23 @@ async function mockArticleAiApis(
     delayedFeedbackArticleId?: number;
     resolveCreditPending?: boolean;
     includePendingEsg?: boolean;
+    sharedHistoryCount?: number;
+    sharedHistoryReady?: boolean;
+    esgEnabled?: boolean;
   } = {},
 ) {
   const prefs: Record<Domain, any> = {
-    esg: preference("esg"),
+    esg: preference("esg", {
+      ...(options.sharedHistoryCount === undefined ? {} : {
+        historyCount: options.sharedHistoryCount,
+        profileSource: "domain",
+        status: options.sharedHistoryReady === false ? "insufficient_history" : "ready",
+      }),
+      ...(options.esgEnabled === undefined ? {} : {
+        enabled: options.esgEnabled,
+        status: options.esgEnabled ? "ready" : "off",
+      }),
+    }),
     credit: preference("credit", { weeklyDigestConfigured: true, emailInclusionEnabled: false }),
   };
   const selections: Record<Domain, any[]> = {
@@ -103,7 +118,12 @@ async function mockArticleAiApis(
       articleId: number;
       action: "confirm" | "dismiss";
       expectedVersion: number;
+      sharedSelectionId: string;
     };
+    if (!body.sharedSelectionId) {
+      await route.fulfill({ status: 400, json: { error: "Shared selection identity is required." } });
+      return;
+    }
     if (
       options.delayFeedbackMs &&
       body.articleId === (options.delayedFeedbackArticleId ?? 101)
@@ -158,6 +178,28 @@ test("keeps ESG and Credit switches independent, batches selections, and preserv
   await page.screenshot({ path: "test-results/article-ai-ui-esg-credit.png", fullPage: true });
 });
 
+test("describes shared domain history without requiring personal likes", async ({ page }) => {
+  await mockArticleAiApis(page, { sharedHistoryCount: 7 });
+  await page.goto("/articles");
+
+  const esgControls = page.getByTestId("article-ai-controls-esg");
+  await expect(esgControls.getByText("The shared ESG assessment learns from human-liked articles across the domain. Your switch controls only whether those picks appear in your private weekly email.")).toBeVisible();
+  await expect(esgControls.getByText(/personal likes/)).toHaveCount(0);
+});
+
+test("keeps shared picks visible when private email inclusion is off", async ({ page }) => {
+  await mockArticleAiApis(page, { esgEnabled: false });
+  await page.goto("/articles");
+
+  const esgControls = page.getByTestId("article-ai-controls-esg");
+  await expect(esgControls.getByTestId("article-ai-toggle-esg")).toHaveAttribute("aria-checked", "false");
+  await expect(esgControls).toContainText("Shared AI picks remain visible here");
+  const sharedPick = page.getByTestId("article-ai-selection-101");
+  await expect(sharedPick).toBeVisible();
+  await expect(sharedPick.getByRole("button", { name: "Keep & like" })).toBeVisible();
+  await expect(sharedPick.getByRole("button", { name: "Dismiss" })).toBeVisible();
+});
+
 test("handles dismiss, confirmation, pending state, and a stale feedback version", async ({ page }) => {
   await mockArticleAiApis(page, { conflictFirst: true, includePendingEsg: true });
   await page.goto("/articles");
@@ -175,7 +217,7 @@ test("handles dismiss, confirmation, pending state, and a stale feedback version
   const creditPick = page.getByTestId("article-ai-selection-201");
   await creditPick.getByRole("button", { name: "Keep & like" }).click();
   await expect(creditPick).toContainText("AI pick confirmed for your digest");
-  await expect(creditPick).toContainText("human signal");
+  await expect(creditPick).toContainText("shared picks");
 });
 
 test("recovers from selection loading errors and shows signed-out guidance", async ({ page }) => {
@@ -185,8 +227,8 @@ test("recovers from selection loading errors and shows signed-out guidance", asy
   await expect(page.getByText("Selection service unavailable.")).toBeVisible();
   await page.getByRole("button", { name: "Try again" }).first().click();
   await expect(page.getByTestId("article-ai-selection-101")).toBeVisible();
-  await expect(page.getByText("Sign in to create a private ESG/Credit profile for your weekly email digest.")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Sign in to personalize" })).toHaveAttribute("href", "/signin");
+  await expect(page.getByText("Sign in to choose whether shared AI picks appear in your private weekly email digest.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Sign in to manage digest picks" })).toHaveAttribute("href", "/signin");
 });
 
 test("polls pending confirmations and refreshes the server like count", async ({ page }) => {

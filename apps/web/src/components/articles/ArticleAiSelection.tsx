@@ -17,11 +17,12 @@ export default function ArticleAiSelection({ articleId }: { articleId: number })
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const selection = selectionFor(articleId);
 
-  if (!isAuthenticated || !preference?.enabled || !selection || selection.state === "dismissed") {
+  if (!isAuthenticated || !preference || !selection || selection.state === "dismissed") {
     return null;
   }
 
   const isPending = pendingArticleIds.has(articleId) || selection.pendingConfirmation;
+  const feedbackUnavailable = !selection.sharedSelectionId;
   const canCheckAgain =
     selection.pendingConfirmation &&
     pendingPollingExhausted.has(articleId) &&
@@ -29,7 +30,7 @@ export default function ArticleAiSelection({ articleId }: { articleId: number })
   const isConfirmed = selection.state === "confirmed" && !selection.pendingConfirmation;
 
   const handleFeedback = async (action: "confirm" | "dismiss") => {
-    if (isPending) return;
+    if (isPending || feedbackUnavailable) return;
     setFeedbackError(null);
     const result = await submitFeedback(articleId, action);
     if (!result.ok) setFeedbackError(result.error);
@@ -59,9 +60,15 @@ export default function ArticleAiSelection({ articleId }: { articleId: number })
                 ? "AI pick is still processing"
                 : isPending
                 ? "Saving your AI pick…"
+                : feedbackUnavailable
+                  ? "Shared AI pick needs a refresh"
                 : isConfirmed
-                  ? "AI pick confirmed for your digest"
-                  : "AI pick for your digest"}
+                  ? preference.enabled
+                    ? "AI pick confirmed for your digest"
+                    : "Shared AI pick confirmed"
+                  : preference.enabled
+                    ? "AI pick for your digest"
+                    : "Shared AI pick"}
             </p>
             {!isConfirmed ? (
               <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-amber-800">
@@ -73,7 +80,20 @@ export default function ArticleAiSelection({ articleId }: { articleId: number })
 
           {!isConfirmed ? (
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              {canCheckAgain ? (
+              {feedbackUnavailable ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => void refresh()}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-2.5 py-1.5 text-[11px] font-semibold text-white transition hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2"
+                  >
+                    Refresh pick
+                  </button>
+                  <span className="text-[10px] text-slate-500">
+                    Refresh before sending feedback for this shared assessment.
+                  </span>
+                </>
+              ) : canCheckAgain ? (
                 <>
                   <button
                     type="button"
@@ -90,7 +110,7 @@ export default function ArticleAiSelection({ articleId }: { articleId: number })
                 <>
                   <button
                     type="button"
-                    disabled={isPending}
+                    disabled={isPending || feedbackUnavailable}
                     onClick={() => void handleFeedback("confirm")}
                     className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-2.5 py-1.5 text-[11px] font-semibold text-white transition hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
                   >
@@ -99,7 +119,7 @@ export default function ArticleAiSelection({ articleId }: { articleId: number })
                   </button>
                   <button
                     type="button"
-                    disabled={isPending}
+                    disabled={isPending || feedbackUnavailable}
                     onClick={() => void handleFeedback("dismiss")}
                     className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white/80 px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 transition hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
                   >
@@ -108,15 +128,15 @@ export default function ArticleAiSelection({ articleId }: { articleId: number })
                   </button>
                 </>
               )}
-              {!canCheckAgain ? (
+              {!canCheckAgain && !feedbackUnavailable ? (
                 <span className="text-[10px] text-slate-500">
-                  Confirming also adds your human like.
+                  Confirming adds your human like to the shared domain history.
                 </span>
               ) : null}
             </div>
           ) : (
             <p className="mt-2 text-[11px] font-medium text-emerald-800">
-              Your confirmation is included as a human signal for future picks.
+              Your confirmation is included as a human signal for future shared picks.
             </p>
           )}
 

@@ -25,7 +25,7 @@ function request(path: string, body?: unknown, origin = "https://portal.test") {
     body: JSON.stringify(body),
   });
 }
-const feedback = { domain: "credit", articleId: 19, action: "confirm", expectedVersion: 3 };
+const feedback = { domain: "credit", articleId: 19, action: "confirm", expectedVersion: 3, sharedSelectionId: "11111111-1111-4111-8111-111111111111" };
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -77,6 +77,7 @@ describe("private article AI routes", () => {
   it("rejects recipient/user overrides and malformed action/version", async () => {
     expect((await PATCH(request("preferences", { domain: "credit", enabled: true, userId: 88 }))).status).toBe(400);
     expect((await POST(request("feedback", { ...feedback, to: "someone@else.test" }))).status).toBe(400);
+    expect((await POST(request("feedback", { ...feedback, sharedSelectionId: undefined }))).status).toBe(400);
     expect((await POST(request("feedback", { ...feedback, expectedVersion: 0 }))).status).toBe(400);
     expect((await POST(request("feedback", { ...feedback, action: "likeAll" }))).status).toBe(400);
     expect(mocks.feedback).not.toHaveBeenCalled();
@@ -104,7 +105,7 @@ describe("private article AI routes", () => {
     const pending = await POST(request("feedback", feedback));
     expect(pending.status).toBe(202);
     expect(await pending.json()).toEqual({ pending: true, humanLiked: false });
-    expect(mocks.feedback).toHaveBeenCalledWith(7, "credit", 19, "confirm", 3);
+    expect(mocks.feedback).toHaveBeenCalledWith(7, "credit", 19, "confirm", 3, feedback.sharedSelectionId);
     mocks.feedback.mockRejectedValueOnce(new ArticleAiConflictError());
     expect((await POST(request("feedback", feedback))).status).toBe(409);
   });

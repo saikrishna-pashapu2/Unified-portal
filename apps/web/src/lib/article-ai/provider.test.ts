@@ -25,7 +25,7 @@ describe("article AI provider request bounds", () => {
       url: "https://example.test/2",
       publishedAt: new Date("2026-11-16T00:00:00Z"),
     });
-    const profile = buildProfile("esg", "personal", [liked], 20, 50);
+    const profile = buildProfile("esg", "domain", [liked], 20, 50);
     const request = buildArticleAiProviderRequest(profile, [candidate]);
     expect(request.prompt).toContain('"domain":"esg"');
     expect(request.prompt).toContain('"id":2');
@@ -42,7 +42,7 @@ describe("article AI provider request bounds", () => {
       url: "https://example.test/3",
       publishedAt: null,
     });
-    const profile = buildProfile("credit", "team", [huge], 4, 50);
+    const profile = buildProfile("credit", "domain", [huge], 4, 50);
     const request = buildArticleAiProviderRequest(profile, [huge]);
     expect(request.prompt.length).toBeLessThan(10_000);
     expect(request.inputBytes).toBeGreaterThan(4_000);

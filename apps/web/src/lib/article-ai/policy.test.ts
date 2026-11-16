@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildProfile,
-  classifyHistory,
+  classifyDomainHistory,
   deterministicDecisions,
   hashContent,
   normalizeArticle,
@@ -35,7 +35,7 @@ describe("article AI deterministic policy", () => {
       article(10, "Climate transition risk disclosure carbon accounting", "Wire"),
       article(11, "Climate scenario analysis and financed emissions", "Wire"),
     ];
-    const profile = buildProfile("esg", "personal", liked, 22, 50);
+    const profile = buildProfile("esg", "domain", liked, 22, 50);
     const candidates = [
       article(20, "Climate transition risk and carbon accounting update", "Wire"),
       article(21, "Climate scenario analysis for banks", "Daily"),
@@ -47,7 +47,7 @@ describe("article AI deterministic policy", () => {
   });
 
   it("never returns a previously liked or low-confidence article", () => {
-    const profile = buildProfile("credit", "team", [article(1, "Credit rating methodology risk disclosure")], 4, 50);
+    const profile = buildProfile("credit", "domain", [article(1, "Credit rating methodology risk disclosure")], 1, 50);
     const ranked = rankCandidates(
       profile,
       [article(1, "Credit rating methodology risk disclosure"), article(2, "Short", "Other")],
@@ -58,9 +58,9 @@ describe("article AI deterministic policy", () => {
     expect(deterministicDecisions(ranked)).toEqual([]);
   });
 
-  it("requires enough team history before switching away from insufficient", () => {
-    expect(classifyHistory(4, 1)).toEqual({ count: 4, source: "insufficient" });
-    expect(classifyHistory(4, 5)).toEqual({ count: 5, source: "team" });
-    expect(classifyHistory(20, 1)).toEqual({ count: 20, source: "personal" });
+  it("accepts one usable shared domain example and abstains only on zero", () => {
+    expect(classifyDomainHistory(0)).toEqual({ count: 0, source: "insufficient" });
+    expect(classifyDomainHistory(1)).toEqual({ count: 1, source: "domain" });
+    expect(classifyDomainHistory(102)).toEqual({ count: 102, source: "domain" });
   });
 });

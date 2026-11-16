@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 import {
-  ARTICLE_AI_PERSONAL_HISTORY_MINIMUM,
+  ARTICLE_AI_DOMAIN_HISTORY_MINIMUM,
   ARTICLE_AI_MAX_WEEKLY_PICKS,
   type ArticleAiDomain,
 } from "./types";
@@ -24,7 +24,7 @@ export interface NormalizedArticle extends ArticleAiArticle {
 
 export interface ArticleAiProfile {
   domain: ArticleAiDomain;
-  profileSource: "personal" | "team" | "insufficient";
+  profileSource: "domain" | "insufficient";
   humanLikeCount: number;
   tokens: string[];
   sources: string[];
@@ -33,20 +33,11 @@ export interface ArticleAiProfile {
   contentHash: string;
 }
 
-/** Avoid generating from one noisy team seed when personal history is sparse. */
-export const ARTICLE_AI_TEAM_HISTORY_MINIMUM = 5;
-
-export function classifyHistory(
-  personalCount: number,
-  teamCount: number,
-): { count: number; source: "personal" | "team" | "insufficient" } {
-  if (personalCount >= ARTICLE_AI_PERSONAL_HISTORY_MINIMUM) {
-    return { count: personalCount, source: "personal" };
-  }
-  if (teamCount >= ARTICLE_AI_TEAM_HISTORY_MINIMUM) {
-    return { count: teamCount, source: "team" };
-  }
-  return { count: Math.max(personalCount, teamCount), source: "insufficient" };
+export function classifyDomainHistory(usableCount: number): { count: number; source: "domain" | "insufficient" } {
+  const count = Math.max(0, Math.floor(usableCount));
+  return count >= ARTICLE_AI_DOMAIN_HISTORY_MINIMUM
+    ? { count, source: "domain" }
+    : { count, source: "insufficient" };
 }
 
 export interface RankedArticle extends NormalizedArticle {
@@ -117,7 +108,7 @@ function overlapScore(left: Set<string>, right: Set<string>): number {
 
 export function buildProfile(
   domain: ArticleAiDomain,
-  source: "personal" | "team" | "insufficient",
+  source: "domain" | "insufficient",
   likedArticles: NormalizedArticle[],
   humanLikeCount: number,
   maxExamples: number,
@@ -189,7 +180,7 @@ export function deterministicDecisions(
       articleId: candidate.id,
       action: "select",
       confidence: Number(Math.min(0.96, 0.5 + candidate.score / 2).toFixed(3)),
-      reason: `Matches your ${candidate.overlap >= 0.55 ? "strong" : "recurring"} human-like topics${candidate.source ? ` and source ${candidate.source}` : ""}.`,
+      reason: `Matches the domain's ${candidate.overlap >= 0.55 ? "strong" : "recurring"} human-liked topics${candidate.source ? ` and source ${candidate.source}` : ""}.`,
     });
   }
   return selected;

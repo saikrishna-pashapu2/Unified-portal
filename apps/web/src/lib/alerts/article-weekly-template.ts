@@ -18,7 +18,7 @@ export function renderArticleWeeklyEmail(input: {
   const unavailable = input.unavailableDomains?.length
     ? `${input.unavailableDomains.map(domain => domain === 'esg' ? 'ESG' : 'Credit').join(' and ')} content was temporarily unavailable when this digest was prepared.` : '';
   if (unavailable) text.push(unavailable, '');
-  for (const [label, items] of [["Selected by your team", human], ["AI picks for you", ai]] as const) {
+  for (const [label, items] of [["Articles liked by users", human], ["AI picks for you", ai]] as const) {
     if (!items.length) continue;
     text.push(label, '');
     const cards = items.map(item => {
@@ -32,7 +32,7 @@ export function renderArticleWeeklyEmail(input: {
 ${item.origin === 'ai' && item.reason ? `<p style="margin:0;color:#475569">${escape(item.reason)}</p>` : ''}
 </article>`;
     }).join('');
-    sections.push(`<section><h2 style="font-size:20px;margin:28px 0 12px">${label}</h2>${label === 'AI picks for you' ? '<p style="color:#475569">Personal selections based on previous human likes. These are not endorsements from your teammates.</p>' : ''}${cards}</section>`);
+    sections.push(`<section><h2 style="font-size:20px;margin:28px 0 12px">${label}</h2>${label === 'AI picks for you' ? '<p style="color:#475569">Shared AI selections based on articles liked by users across each domain.</p>' : ''}${cards}</section>`);
   }
   const empty = input.items.length ? '' : '<p>No articles met your digest criteria this week.</p>';
   if (!input.items.length) text.push('No articles met your digest criteria this week.');
