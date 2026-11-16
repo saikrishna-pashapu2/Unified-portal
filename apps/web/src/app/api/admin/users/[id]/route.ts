@@ -202,7 +202,7 @@ export async function GET(
     const esgArticleMap = new Map<number, { title: string; url: string | null; domain: "esg" }>();
     esgArticles.forEach((article) => {
       esgArticleMap.set(article.id, {
-        title: article.title,
+        title: article.title || "Untitled",
         url: article.link || null,
         domain: "esg",
       });
@@ -247,7 +247,7 @@ export async function GET(
     const publicationMap = new Map<number, { title: string; url: string | null; domain: "esg" }>();
     esgPublications.forEach((pub) => {
       publicationMap.set(pub.id, {
-        title: pub.title,
+        title: pub.title || "Untitled",
         url: pub.link || null,
         domain: "esg",
       });

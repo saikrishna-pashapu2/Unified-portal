@@ -15,19 +15,19 @@ model alembic_version {
 
 model esg_articles {
   id               Int       @id @default(autoincrement())
-  title            String
-  published        DateTime? @db.Timestamptz(6)
+  title            String?
+  published        DateTime? @db.Date
   summary          String?
-  link             String    @unique(map: "esg_articles_link_unique")
+  link             String?   @unique(map: "esg_articles_link_key")
   source           String?
   matched_keywords String?
-  save_time        DateTime? @db.Timestamptz(6)
+  save_time        DateTime? @default(now()) @db.Timestamp(6)
 }
 
 model events {
-  id              Int       @id @default(autoincrement())
+  id              Int       @id(map: "esg_events_pkey") @default(autoincrement())
   event_name      String?
-  event_id        String?   @unique
+  event_id        String?   @unique(map: "esg_events_event_id_key")
   event_url       String?
   start_date      DateTime? @db.Date
   end_date        DateTime? @db.Date
@@ -50,8 +50,13 @@ model events {
   source          String?
   month           String?
   created_at      DateTime? @default(now()) @db.Timestamp(6)
+  event_data      Json?
+  detail_scrape_status String?
+  original_language String?
+  translation_status String?
+  translation_model String?
+  updated_at      DateTime? @default(now()) @db.Timestamp(6)
 
-  @@unique([event_name, start_date, source], map: "unique_event_composite")
   @@index([start_date, end_date], map: "idx_events_start_end_date")
   @@index([end_date], map: "idx_events_end_date")
   @@index([source, start_date, end_date], map: "idx_events_source_date")
@@ -161,21 +166,21 @@ model pdf_translation_v2_usage_events {
 }
 
 model publications {
-  id        Int       @id @default(autoincrement())
-  title     String
-  published DateTime? @db.Timestamptz(6)
+  id        Int       @id(map: "esg_publications_pkey") @default(autoincrement())
+  title     String?
+  published DateTime? @db.Timestamp(6)
   summary   String?
-  link      String    @unique(map: "publications_link_unique")
+  link      String?   @unique(map: "esg_publications_link_key")
   source    String?
   image_url String?
-  save_time DateTime? @db.Timestamptz(6)
+  save_time DateTime? @default(now()) @db.Timestamp(6)
 }
 
 model user_preferences {
   id                Int      @id @default(autoincrement())
   user_id           Int?
-  preferred_sources String[]
-  preferred_topics  String[]
+  preferred_sources String[] @default([])
+  preferred_topics  String[] @default([])
   users             users?   @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 }
 
@@ -239,8 +244,8 @@ model alert_preferences {
   alert_articles          Boolean?             @default(true)
   alert_events            Boolean?             @default(true)
   alert_publications      Boolean?             @default(true)
-  sources                 String[]
-  keywords                String[]
+  sources                 String[]             @default([])
+  keywords                String[]             @default([])
   team_likes_only         Boolean?             @default(true)
   email_enabled           Boolean?             @default(true)
   email_address           String?              @db.VarChar(255)
@@ -252,12 +257,12 @@ model alert_preferences {
   alert_name              String?              @default("My Alert") @db.VarChar(255)
   alert_type              String?              @default("weekly_digest") @db.VarChar(50)
   is_active               Boolean?             @default(true)
-  immediate_sources       String[]             @default(dbgenerated("(ARRAY[]::character varying[])::character varying(50)[]")) @db.VarChar(50)
-  immediate_keywords      String[]             @default(dbgenerated("(ARRAY[]::character varying[])::character varying(100)[]")) @db.VarChar(100)
+  immediate_sources       String[]             @default([]) @db.VarChar(50)
+  immediate_keywords      String[]             @default([]) @db.VarChar(100)
   immediate_content_types String[]             @default(["articles"]) @db.VarChar(50)
   last_sent_at            DateTime?            @db.Timestamp(6)
   next_send_at            DateTime?            @db.Timestamp(6)
-  domains                 String[]             @default(dbgenerated("(ARRAY[]::character varying[])::character varying(20)[]")) @db.VarChar(20)
+  domains                 String[]             @default([]) @db.VarChar(20)
   alert_content_sent      alert_content_sent[]
   users                   users                @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
@@ -273,7 +278,7 @@ model alert_history {
   domain           String       @db.VarChar(10)
   alert_type       String       @db.VarChar(20)
   content_type     String?      @db.VarChar(20)
-  content_ids      Int[]
+  content_ids      Int[]        @default([])
   email_to         String       @db.VarChar(255)
   email_subject    String?
   email_status     String?      @default("pending") @db.VarChar(20)
@@ -692,7 +697,7 @@ model article_tool_calls {
 }
 
 model esg_driver_jobs {
-  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id              String            @id @db.Uuid
   user_id         Int?
   country         String            @db.VarChar(120)
   sector          String            @db.VarChar(160)
@@ -926,8 +931,8 @@ model tender_classifications {
   credit_score        Decimal?  @db.Decimal(3, 2)
   primary_domain      String?   @db.VarChar(20)
   reasoning           String?
-  esg_keywords        String[]
-  credit_keywords     String[]
+  esg_keywords        String[]  @default([])
+  credit_keywords     String[]  @default([])
   model_used          String?   @default("gpt-4o-mini") @db.VarChar(50)
   prompt_tokens       Int?
   completion_tokens   Int?
@@ -1107,7 +1112,7 @@ model user_saved_tenders {
   user_id    Int
   tender_id  Int?
   notes      String?
-  tags       String[]
+  tags       String[]  @default([])
   status     String?   @db.VarChar(50)
   created_at DateTime? @default(now()) @db.Timestamp(6)
   updated_at DateTime? @default(now()) @db.Timestamp(6)
@@ -1123,12 +1128,12 @@ model user_tender_alerts {
   id                Int       @id @default(autoincrement())
   user_id           Int
   alert_name        String?   @db.VarChar(255)
-  keywords          String[]
-  excluded_keywords String[]
+  keywords          String[]  @default([])
+  excluded_keywords String[]  @default([])
   min_amount        Decimal?  @db.Decimal(20, 2)
   max_amount        Decimal?  @db.Decimal(20, 2)
-  countries         String[]  @db.VarChar(100)
-  domains           String[]  @db.VarChar(20)
+  countries         String[]  @default([]) @db.VarChar(100)
+  domains           String[]  @default([]) @db.VarChar(20)
   is_active         Boolean?  @default(true)
   frequency         String?   @default("instant") @db.VarChar(20)
   last_sent         DateTime? @db.Timestamp(6)
@@ -1144,7 +1149,7 @@ model weekly_digest {
   week_start DateTime @db.Date
   week_end   DateTime @db.Date
   content    String   @db.Text
-  created_at DateTime @default(now()) @db.Timestamptz(6)
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
 }
 
 model user_activity {
@@ -1244,6 +1249,7 @@ model monitored_tender_candidates {
   @@index([source_name, seen_at(sort: Desc)], map: "idx_monitored_tender_candidates_source_seen")
   @@index([source_name, external_id], map: "idx_monitored_tender_candidates_external")
   @@index([seen_at(sort: Desc)], map: "idx_monitored_tender_candidates_seen_at")
+  @@index([matched_groups], map: "idx_monitored_tender_candidates_matched_groups", type: Gin)
 }
 
 model monitored_tenders {
@@ -1293,6 +1299,9 @@ model monitored_tenders {
   @@index([deadline_at], map: "idx_monitored_tenders_deadline_at")
   @@index([first_seen_at(sort: Desc)], map: "idx_monitored_tenders_first_seen_at")
   @@index([is_active], map: "idx_monitored_tenders_is_active")
+  @@index([match_details], map: "idx_monitored_tenders_match_details", type: Gin)
+  @@index([matched_groups], map: "idx_monitored_tenders_matched_groups", type: Gin)
+  @@index([raw_json], map: "idx_monitored_tenders_raw_json", type: Gin)
 }
 
 model monitored_team_members {

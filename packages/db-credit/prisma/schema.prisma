@@ -213,29 +213,19 @@ model credit_articles {
   title              String?
   date               DateTime?            @db.Date
   content            String?
-  link               String?
+  link               String?              @unique
   source             String?
   matched_keywords   String?
   region             String?
   sector             String?
-  starred            Boolean?             @default(false)
-  starred_at         DateTime?            @db.Timestamp(6)
+  save_time          DateTime?            @default(now()) @db.Timestamp(6)
   summary            String?
   url                String?              @db.VarChar
+  starred            Boolean?             @default(false)
+  starred_at         DateTime?            @db.Timestamp(6)
   created_at         DateTime?            @db.Timestamp(6)
   updated_at         DateTime?            @db.Timestamp(6)
   user_article_stars user_article_stars[]
-
-  @@unique([link, region, sector, source], map: "unique_article_combination")
-  @@index([date(sort: Desc)], map: "idx_articles_date_desc")
-  @@index([region], map: "idx_articles_region")
-  @@index([region, sector], map: "idx_articles_region_sector")
-  @@index([sector], map: "idx_articles_sector")
-  @@index([source], map: "idx_articles_source")
-  @@index([date], map: "idx_credit_articles_date")
-  @@index([region], map: "idx_credit_articles_region")
-  @@index([sector], map: "idx_credit_articles_sector")
-  @@index([source], map: "idx_credit_articles_source")
 }
 
 model email_alerts {
@@ -320,27 +310,27 @@ model eventregistration {
 }
 
 model events {
-  id         Int       @id @default(autoincrement())
-  title      String    @db.VarChar(255)
-  date       DateTime? @db.Timestamp(6)
-  location   String?   @db.VarChar(255)
+  id         Int       @id(map: "credit_events_pkey") @default(autoincrement())
+  title      String?
+  date       DateTime? @db.Date
+  location   String?
   details    String?
-  link       String?   @db.VarChar(500)
-  source     String?   @db.VarChar(50)
+  link       String?
+  source     String?
   created_at DateTime? @default(now()) @db.Timestamp(6)
 }
 
 model methodologies {
-  id             Int       @id @default(autoincrement())
+  id             Int       @id(map: "credit_methodologies_pkey") @default(autoincrement())
   title          String?
   published_date DateTime? @db.Date
   abstract       String?
   description    String?
-  link           String?   @unique
+  link           String?   @unique(map: "credit_methodologies_link_key")
   source         String?
   permalink      String?
   created_at     DateTime? @default(now()) @db.Timestamp(6)
-  report_url     String?   @unique @db.VarChar(255)
+  report_url     String?
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -365,9 +355,9 @@ model newsletter_logs {
 model newsletter_preferences {
   id                       Int                      @id @default(autoincrement())
   subscription_id          Int
-  sources                  String[]
-  regions                  String[]
-  sectors                  String[]
+  sources                  String[]                 @default([])
+  regions                  String[]                 @default([])
+  sectors                  String[]                 @default([])
   include_starred_only     Boolean?                 @default(false)
   frequency                String                   @default("weekly") @db.VarChar(20)
   day_of_week              Int?
@@ -414,11 +404,11 @@ model permission {
 }
 
 model publications {
-  id          Int       @id @default(autoincrement())
+  id          Int       @id(map: "credit_publications_pkey") @default(autoincrement())
   title       String?
   date        DateTime? @db.Date
   description String?
-  link        String?   @unique
+  link        String?   @unique(map: "credit_publications_link_key")
   image_url   String?
   source      String?
   created_at  DateTime? @default(now()) @db.Timestamp(6)
@@ -662,14 +652,14 @@ model fitch_upload_history {
   created_at        DateTime @default(now()) @db.Timestamptz(6)
   job_id             String?  @unique @db.Uuid
 
-  @@index([user_email])
-  @@index([created_at])
+  @@index([user_email], map: "idx_fitch_upload_history_user_email")
+  @@index([created_at], map: "idx_fitch_upload_history_created_at")
 }
 
 model weekly_digest {
   id         Int      @id @default(autoincrement())
   week_start DateTime @db.Date
   week_end   DateTime @db.Date
-  content    String   @db.Text
+  content    String
   created_at DateTime @default(now()) @db.Timestamptz(6)
 }

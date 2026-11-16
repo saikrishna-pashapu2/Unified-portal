@@ -1,21 +1,18 @@
 "use server";
 
-import { getPrisma, Domain } from "@/lib/db";
+import type { Domain } from "@/lib/db";
+import { esgPrisma } from "@esgcredit/db-esg";
+import { creditPrisma } from "@esgcredit/db-credit";
 import { generateWeeklyDigest } from "@/lib/digest-agent";
 import { revalidatePath } from "next/cache";
 
 export async function getDigests(domain: Domain, page = 1, limit = 10) {
-  const prisma = getPrisma(domain);
   const skip = (page - 1) * limit;
-
-  const [digests, total] = await Promise.all([
-    prisma.weekly_digest.findMany({
-      orderBy: { created_at: "desc" },
-      skip,
-      take: limit,
-    }),
-    prisma.weekly_digest.count(),
-  ]);
+  const query = { orderBy: { created_at: "desc" as const }, skip, take: limit };
+  // The two databases have distinct nullable timestamp contracts.
+  const [digests, total] = domain === "esg"
+    ? await Promise.all([esgPrisma.weekly_digest.findMany(query), esgPrisma.weekly_digest.count()])
+    : await Promise.all([creditPrisma.weekly_digest.findMany(query), creditPrisma.weekly_digest.count()]);
 
   return {
     digests,
@@ -24,11 +21,14 @@ export async function getDigests(domain: Domain, page = 1, limit = 10) {
   };
 }
 
+async function deleteDigestRecord(domain: Domain, id: number) {
+  return domain === "esg"
+    ? esgPrisma.weekly_digest.delete({ where: { id } })
+    : creditPrisma.weekly_digest.delete({ where: { id } });
+}
+
 export async function deleteDigest(domain: Domain, id: number) {
-  const prisma = getPrisma(domain);
-  await prisma.weekly_digest.delete({
-    where: { id },
-  });
+  await deleteDigestRecord(domain, id);
   revalidatePath("/admin/weekly-digest");
   revalidatePath(`/${domain}/community`);
 }
@@ -46,8 +46,9 @@ export async function triggerDigestGeneration(domain: Domain) {
 }
 
 export async function regenerateDigest(domain: Domain, id: number) {
-  const prisma = getPrisma(domain);
-  const digest = await prisma.weekly_digest.findUnique({ where: { id } });
+  const digest = domain === "esg"
+    ? await esgPrisma.weekly_digest.findUnique({ where: { id } })
+    : await creditPrisma.weekly_digest.findUnique({ where: { id } });
 
   if (!digest) {
     throw new Error("Digest not found");
@@ -63,7 +64,7 @@ export async function regenerateDigest(domain: Domain, id: number) {
   try {
     await generateWeeklyDigest(domain, referenceDate);
     // Delete the old one to replace it
-    await prisma.weekly_digest.delete({ where: { id } });
+    await deleteDigestRecord(domain, id);
 
     revalidatePath("/admin/weekly-digest");
     revalidatePath(`/${domain}/community`);
