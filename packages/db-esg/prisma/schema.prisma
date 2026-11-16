@@ -230,6 +230,8 @@ model users {
   article_ai_selections                          article_ai_selections[]
   article_ai_feedback                            article_ai_feedback[]
   article_ai_budgets                             article_ai_budgets[]
+  article_ai_user_selections                     article_ai_user_selections[]
+  article_ai_domain_feedback                     article_ai_domain_feedback[]
 
   @@index([team], map: "ix_users_team")
 }
@@ -444,12 +446,93 @@ model article_ai_article_features {
   @@index([domain, article_id, created_at(sort: Desc)], map: "idx_article_ai_features_domain_article_created")
 }
 
+// One provider assessment is shared by every opted-in recipient for a domain
+// and UTC day. It intentionally has no user relation: human history is pooled
+// across the domain and the resulting profile contains no recipient identity.
+model article_ai_domain_assessments {
+  id                String                          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  domain            String                          @db.VarChar(10)
+  assessment_date   DateTime                        @db.Date
+  policy_version    Int                             @default(2)
+  status            String                          @default("queued") @db.VarChar(24)
+  profile_source    String                          @default("insufficient") @db.VarChar(16)
+  history_count     Int                             @default(0)
+  profile_json      Json?
+  content_hash      String?                         @db.VarChar(128)
+  model             String?                         @db.VarChar(80)
+  input_tokens      Int                             @default(0)
+  output_tokens     Int                             @default(0)
+  request_count     Int                             @default(0)
+  request_limit     Int                             @default(1)
+  requests_reserved Int                             @default(0)
+  token_limit       Int                             @default(12000)
+  tokens_reserved   Int                             @default(0)
+  lease_owner       String?                         @db.VarChar(180)
+  lease_token       String?                         @db.Uuid
+  lease_expires_at  DateTime?                       @db.Timestamptz(6)
+  error             String?
+  created_at        DateTime                        @default(now()) @db.Timestamptz(6)
+  started_at        DateTime?                       @db.Timestamptz(6)
+  completed_at      DateTime?                       @db.Timestamptz(6)
+  updated_at        DateTime                        @default(now()) @updatedAt @db.Timestamptz(6)
+  selections        article_ai_domain_selections[]
+
+  @@unique([domain, assessment_date, policy_version], map: "article_ai_domain_assessments_domain_date_policy_key")
+  @@index([domain, status, assessment_date(sort: Desc)], map: "idx_article_ai_domain_assessments_domain_status_date")
+  @@index([status, lease_expires_at], map: "idx_article_ai_domain_assessments_lease")
+}
+
+// Shared provider decisions. Per-user state lives in article_ai_user_selections
+// so a dismissal or confirmation never mutates another recipient's picks.
+model article_ai_domain_selections {
+  id              String                          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  assessment_id   String                          @db.Uuid
+  domain          String                          @db.VarChar(10)
+  article_id      Int
+  reason          String
+  relevance_score Float?                          @db.DoublePrecision
+  selected_at     DateTime                        @default(now()) @db.Timestamptz(6)
+  expires_at      DateTime                        @db.Timestamptz(6)
+  content_hash    String                          @db.VarChar(128)
+  model           String?                         @db.VarChar(80)
+  created_at      DateTime                        @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime                        @default(now()) @updatedAt @db.Timestamptz(6)
+  assessment      article_ai_domain_assessments   @relation(fields: [assessment_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user_selections article_ai_user_selections[]
+  feedback        article_ai_domain_feedback[]
+
+  @@unique([assessment_id, article_id], map: "article_ai_domain_selections_assessment_article_key")
+  @@index([domain, article_id], map: "idx_article_ai_domain_selections_article")
+  @@index([assessment_id, expires_at], map: "idx_article_ai_domain_selections_expiry")
+}
+
+model article_ai_user_selections {
+  id                   String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id              Int
+  domain_selection_id  String                        @db.Uuid
+  state                String                        @default("dismissed") @db.VarChar(16)
+  version              Int                           @default(1)
+  pending_confirmation Boolean                       @default(false)
+  created_at           DateTime                      @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime                      @default(now()) @updatedAt @db.Timestamptz(6)
+  users                users                         @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  domain_selection    article_ai_domain_selections  @relation(fields: [domain_selection_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  feedback             article_ai_domain_feedback[]  @relation("article_ai_domain_feedback_selection")
+
+  domain              String                        @db.VarChar(10)
+  article_id          Int
+
+  @@unique([user_id, domain, article_id], map: "article_ai_user_selections_user_domain_article_key")
+  @@index([user_id, state], map: "idx_article_ai_user_selections_user_state")
+}
+
 model article_ai_runs {
   id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   user_id         Int
   domain          String    @db.VarChar(10)
   run_date        DateTime  @db.Date
   settings_version Int
+  policy_version  Int?
   status          String    @default("queued") @db.VarChar(24)
   model           String?   @db.VarChar(80)
   profile_source  String?   @db.VarChar(16)
@@ -526,6 +609,29 @@ model article_ai_feedback {
   @@unique([user_id, domain, article_id, expected_version, action], map: "article_ai_feedback_version_action_key")
   @@index([status, created_at], map: "idx_article_ai_feedback_status_created")
   @@index([user_id, domain, article_id], map: "idx_article_ai_feedback_user_article")
+}
+
+model article_ai_domain_feedback {
+  id                  String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id             Int
+  domain              String                       @db.VarChar(10)
+  article_id          Int
+  domain_selection_id String                       @db.Uuid
+  user_selection_id   String                       @db.Uuid
+  action              String                       @db.VarChar(16)
+  expected_version    Int
+  status              String                       @default("pending") @db.VarChar(16)
+  idempotency_key     String                       @unique(map: "article_ai_domain_feedback_idempotency_key") @db.VarChar(220)
+  error               String?
+  created_at          DateTime                     @default(now()) @db.Timestamptz(6)
+  applied_at          DateTime?                    @db.Timestamptz(6)
+  users               users                        @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  domain_selection    article_ai_domain_selections @relation(fields: [domain_selection_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user_selection      article_ai_user_selections   @relation("article_ai_domain_feedback_selection", fields: [user_selection_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, domain_selection_id, action], map: "article_ai_domain_feedback_user_selection_action_key")
+  @@index([status, created_at], map: "idx_article_ai_domain_feedback_status_created")
+  @@index([user_id, domain, article_id], map: "idx_article_ai_domain_feedback_user_article")
 }
 
 model api_usage_buckets {
