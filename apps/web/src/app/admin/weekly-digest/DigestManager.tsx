@@ -10,7 +10,7 @@ interface Digest {
   id: number;
   week_start: Date;
   week_end: Date;
-  created_at: Date;
+  created_at: Date | null;
   content: string;
 }
 
@@ -149,7 +149,7 @@ export default function DigestManager({
                   {format(new Date(digest.week_end), "MMM d, yyyy")}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {format(new Date(digest.created_at), "MMM d, HH:mm")}
+                  {digest.created_at ? format(new Date(digest.created_at), "MMM d, HH:mm") : "Unknown"}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {digest.content.length} chars
