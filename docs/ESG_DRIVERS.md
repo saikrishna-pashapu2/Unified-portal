@@ -224,6 +224,10 @@ driver-specific urgency and the absence of borrowed obligations. A background
 mention in another regulation cannot transfer that regulation's duties or
 deadlines to the named framework. Rejected ratings receive bounded repair;
 unreviewed assessments cannot be selected or reused.
+Both scoring and independent review limit urgency to 0–2 when the only support
+is a past forecast with unconfirmed implementation, or an older description of
+a requirement whose status after a newer cited amendment is unresolved. A higher
+rating requires separate cited evidence of current implementation and applicability.
 If independent review still rejects a score when the scoring budget is exhausted,
 the verified driver content and cited
 sources remain in the candidate audit with an explicit `relevanceFailure`
@@ -278,7 +282,10 @@ Missing dates display `Date not provided`; retrieval dates are never substituted
 Source dates use `sourceDate` with the date value,
 kind (published, updated or version-issued), original evidence and location.
 Only the page/document's own publication or version context can establish this
-field; unrelated dates mentioned in the body cannot. Unknown dates stay unknown,
+field; unrelated dates mentioned in the body cannot.
+Explicitly dated opening press-release headers and numbered governmental decree
+headers can establish publication and version-issue dates respectively; a bare
+report edition or citation year remains insufficient. Unknown dates stay unknown,
 and month/year precision is preserved. Source dates remain separate from the
 driver's evidence period, legal effective dates, HTTP metadata and retrieval time.
 Saved ranked reports validate date syntax and reject future document dates. Their

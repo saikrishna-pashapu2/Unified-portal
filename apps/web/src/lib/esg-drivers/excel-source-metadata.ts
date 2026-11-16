@@ -189,18 +189,29 @@ function findLabelledSourceDate(scope: string, location: string): SourceDateEvid
     if (candidates.length !== 1) continue;
     const candidate = candidates[0];
     const context = block;
+    const sourceOwnedPressRelease = location === 'document opening / labelled metadata'
+      && isSourceOwnedPressReleaseHeader(context, candidate.raw);
+    const sourceOwnedDecree = location === 'document opening / labelled metadata'
+      && isSourceOwnedDecreeHeader(context, candidate.raw);
     const kind = /\b(?:last\s+)?updated|revised|amended|modified\b/i.test(context)
       ? 'updated'
       : /\b(?:issued(?:\s+(?:on|date))?|date\s+of\s+issue|issue\s+date)\b/i.test(context)
         ? 'version-issued'
         : /\b(?:publication|published|released|release\s+date|date\s+of\s+publication)\b/i.test(context)
           ? 'published'
-          : /\b(?:version|edition|issue|volume|revision)\b/i.test(context)
-            ? 'version-issued'
-            : null;
+          : sourceOwnedPressRelease
+            ? 'published'
+            : sourceOwnedDecree
+              ? 'version-issued'
+              : /\b(?:version|edition|issue|volume|revision)\b/i.test(context)
+                ? 'version-issued'
+                : null;
     const ambiguous = hasAmbiguousMention(context, candidate.raw);
     if (!kind || !isPlausibleSourceDate(candidate.raw) || (ambiguous && !hasOwnRegulationIssuanceContext(context, candidate.raw))) continue;
-    if (location === 'document opening / labelled metadata' && !isDateHeaderBlock(context, candidate.raw)) continue;
+    if (location === 'document opening / labelled metadata'
+      && !isDateHeaderBlock(context, candidate.raw)
+      && !sourceOwnedPressRelease
+      && !sourceOwnedDecree) continue;
     return {
       value: candidate.raw.trim(),
       kind,
@@ -262,6 +273,33 @@ function isDateHeaderBlock(block: string, date: string): boolean {
   if (!remainder || /^(?:the|this|it|according|our|their)\b/i.test(remainder)) return false;
   const hasDateLabel = /\b(?:publication(?:\s+date)?|date\s+(?:of\s+)?(?:publication|issue|release|modification)|document\s+(?:date|version)|published|issued|released|updated|last\s+updated|modified|revised|amended|version|edition|revision)\b/i.test(remainder);
   return hasDateLabel && remainder.split(/\s+/).length <= 12;
+}
+
+/**
+ * A press-release date is source-owned only when the opening block itself is
+ * headed by "Press Release" (optionally prefixed by "Official" and a short
+ * publisher name). Avoid promoting prose such as "this press release ...".
+ */
+function isSourceOwnedPressReleaseHeader(block: string, date: string): boolean {
+  const dateIndex = block.indexOf(date);
+  if (dateIndex < 0) return false;
+  const beforeDate = block.slice(0, dateIndex).replace(/\s+/g, ' ').trim();
+  const afterDate = block.slice(dateIndex + date.length).replace(/\s+/g, ' ').trim();
+  const hasHeaderLabel = /^(?:official(?:\s+[A-Za-z0-9.&'’/-]+){0,3}\s+)?press\s+release\s*(?:[-:|–—]\s*)?$/i.test(beforeDate);
+  const hasPlaceSuffix = /^(?:,\s*[A-Za-z][A-Za-z.'’&-]*(?:\s+[A-Za-z][A-Za-z.'’&-]*){0,4})?$/.test(afterDate);
+  return hasHeaderLabel && hasPlaceSuffix;
+}
+
+/**
+ * A legal-instrument date is source-owned only for a bounded opening decree
+ * header with an explicit issuer and instrument number. Generic body mentions
+ * of decrees remain ineligible.
+ */
+function isSourceOwnedDecreeHeader(block: string, date: string): boolean {
+  const context = block.replace(date, ' DATE ').replace(/\s+/g, ' ').trim();
+  return /^decree\b[\s\S]*\b(?:of|dated)\s+DATE\b[\s\S]*\bno\.?\s*[A-Z0-9][\w./-]*\b/i.test(context)
+    && /\b(?:president|government|minister|cabinet|authority)\b/i.test(context)
+    && context.split(/\s+/).length <= 32;
 }
 
 function dateMatches(text: string, includeBareYear: boolean): Array<{ raw: string; index: number }> {

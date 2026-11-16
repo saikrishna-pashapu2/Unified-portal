@@ -122,6 +122,71 @@ describe('source metadata and evidence selection', () => {
     const semanticPublished = '<main><p>Issued on <time itemprop="datePublished" datetime="2024-03-01">1 March 2024</time></p></main>';
     expect(extractHtmlSourceDateMetadata(semanticPublished).sourceDates).toMatchObject([{ kind: 'published', value: '2024-03-01' }]);
   });
+  it('extracts source-owned dates from the saved CBD and Kazakhstan opening layouts', () => {
+    const cbdOpening = `TUE // 27.12.2022
+
+The final text of the historic Kunming-Montreal Global Biodiversity Framework, agreed at the 15th meeting of the Conference of Parties to the UN Convention on Biological Diversity is now available as document CBD/COP/15/L25
+
+Official CBD Press Release - 22 December 2022, Montreal
+
+[PDF version - 221 Kb]
+
++++ Photos of the Adoption of the Kunming-Montreal GBF +++`;
+    expect(extractSourceDate({ text: cbdOpening })).toMatchObject({
+      kind: 'published',
+      value: '22 December 2022',
+      location: 'document opening / labelled metadata',
+      evidence: 'Official CBD Press Release - 22 December 2022, Montreal',
+    });
+
+    const kazakhstanOpening = `Page 1:
+Unofficial translation
+Approval of the Strategy of the Republic of Kazakhstan on Achieving Carbon
+Neutrality by 2060
+Decree of the President of the Republic of Kazakhstan of 2 February 2023 No. 121
+To be published in
+Compilation of Acts of the President and
+Government of the Republic of Kazakhstan`;
+    expect(extractSourceDate({ text: kazakhstanOpening })).toMatchObject({
+      kind: 'version-issued',
+      value: '2 February 2023',
+      location: 'document opening / labelled metadata',
+      evidence: 'Decree of the President of the Republic of Kazakhstan of 2 February 2023 No. 121',
+    });
+  });
+  it('does not broaden opening-header extraction to body prose, ambiguous or future dates, or IEA citation years', () => {
+    expect(extractSourceDate({
+      text: 'Page 1:\nClimate disclosure framework\nThis press release referenced 22 December 2022 in a historical summary.',
+    })).toBeNull();
+    expect(extractSourceDate({
+      text: 'Page 1:\nClimate disclosure framework\nPress Release discusses the 22 December 2022 summit.',
+    })).toBeNull();
+    const pressReleaseTimeProse = '<main><p>Press Release discusses summit on <time datetime="2022-12-22">22 December 2022</time></p></main>';
+    expect(extractHtmlSourceDateMetadata(pressReleaseTimeProse).sourceDates).toEqual([]);
+    expect(extractSourceDate({ html: pressReleaseTimeProse })).toBeNull();
+    expect(extractSourceDate({
+      text: 'Page 1:\nOfficial CBD Press Release - 22 December 2022, Montreal; amended 5 January 2023',
+    })).toBeNull();
+    expect(extractSourceDate({
+      text: 'Page 1:\nOfficial CBD Press Release - 22 December 2099, Montreal',
+    })).toBeNull();
+
+    const ieaOpening = `Sign In
+Global Critical Minerals Outlook 2026
+Download PDF
+About this report
+Critical minerals have rapidly moved to the heart of global discussions on energy and economic security.
+Cite report
+IEA (2026), Global Critical Minerals Outlook 2026, IEA, Paris  Licence: CC BY 4.0`;
+    expect(extractSourceDate({
+      title: 'Global Critical Minerals Outlook 2026 - IEA',
+      text: ieaOpening,
+    })).toBeNull();
+
+    // Existing explicit labels and compact cover dates retain their prior behavior.
+    expect(extractSourceDate({ text: 'Page 1:\nPublication date: November 2024.' })).toMatchObject({ kind: 'published', value: 'November 2024' });
+    expect(extractSourceDate({ text: 'Page 1:\nNet-Zero Banking Alliance Progress Report\nDecember 2023' })).toMatchObject({ kind: 'version-issued', value: 'December 2023' });
+  });
  it('does not treat a CBUAE regulation identifier year as a source date without an issuance label', () => {
     const html = '<main><h1>Climate-related Financial Risk Management Regulation<span>C 8/2025</span><span>Status: In-Force</span></h1></main>';
    expect(extractSourceDate({ html })).toBeNull();
