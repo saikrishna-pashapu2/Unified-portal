@@ -6,8 +6,10 @@ initializes the catalog on first use after migration; its five sector worksheets
 contain 685 named rows. A run selects every global row
 and every row for the chosen country, preserving the workbook's order, names,
 section/country labels, and driver types. UAE / Banking assesses 52 candidates.
-New reports publish up to 15 source-supported drivers in relevance order; the
-complete candidate assessment remains available in the audit/export.
+New reports target 15 source-supported drivers: three Global Drivers, three
+Regulatory Requirements, three Capital Markets, three Climate Risks, and three
+Supply Chain drivers. Relevance chooses the strongest qualifying drivers within
+each category. The complete candidate assessment remains available in the audit/export.
 English, Russian, and Arabic are supported for the updated narrative; canonical
 names and original workbook text retain their original spelling and language.
 
@@ -96,9 +98,9 @@ response, leaving existing saved reports readable. New generation is disabled
 until catalog loading succeeds.
 
 Deploy the web application and ESG workers together. New jobs use queue type
-`esg_driver_excel_v5`, which prevents older workers from claiming workbook-catalog
+`esg_driver_excel_v6`, which prevents older workers from claiming category-balanced
 jobs. The updated workers continue to accept earlier queue versions. Version 5
-jobs require their persisted workbook snapshot and fail clearly if it is missing;
+and version 6 jobs require their persisted workbook snapshot and fail clearly if it is missing;
 they must never fall back to a bundled or newly active workbook. No migration or
 worker restart is needed for subsequent uploads or activations.
 
@@ -204,7 +206,9 @@ silently promoted to the source's publication date.
 
 ## Relevance selection and source dates
 
-New checkpoints carry `selectionPolicy: relevance-top15-v1`. Each supported
+New checkpoints carry `selectionPolicy: category-balanced15-v1`. Saved
+`relevance-top15-v1` reports and in-flight jobs retain their original selection
+policy. The relevance assessment rubric remains `relevance-top15-v1`: each supported
 candidate receives four anchored integer ratings from 0 to 5: country fit
 (30 points), sector fit (30), business impact (25), and obligation/urgency (15).
 The application computes each contribution as `rating * weight / 5`. The model
@@ -229,18 +233,40 @@ and malformed responses still follow the normal durable job error handling.
 Only supported candidates scoring at least 50 qualify. Scores of 80 or more are
 labelled High; 50–79 Medium. Ties use workbook row then ID. Clear alternate
 legacy/reference names of the same driver are suppressed; distinct related
-frameworks are not merged. There are no fixed country/global or ESG category
-quotas. Selection returns up to 15 and never fills gaps with unsupported rows.
+frameworks are not merged. New reports reserve exactly three positions for each
+of Global Drivers, Regulatory Requirements, Capital Markets, Climate Risks, and
+Supply Chain, in that report order. A workbook row in a global section belongs
+to Global Drivers; other rows use their original workbook driver type to match
+one of the four remaining categories. Labels are normalized only for matching;
+original names, sections and types are preserved. Unmapped rows remain in the
+candidate audit and cannot be reassigned by the model to fill a category.
+Within each category, selection uses relevance and the existing deterministic
+tie-breakers. A shortage in one category never expands another category above
+three. Selection returns a partial report with explicit per-category gaps when
+there are not three distinct, supported, qualifying drivers in every category.
+It never fills gaps with unsupported rows or lowers the evidence/relevance threshold.
 The full pool stays in workbook order in `candidatePool`; `drivers` contains only
 the saved ranked report. Selection records every exclusion and its reason.
-Completion means 15 published drivers; missing candidate evidence remains visible
-and retryable even when that target is met. Below-threshold and below-cutoff rows
-are not research failures. Existing saved full-workbook results retain their
-original display/export contract; new retry children use the ranked policy.
+Completion means three published drivers in each of the five categories;
+missing candidate evidence remains visible
+and retryable even when that target is met. Below-threshold, below-cutoff,
+category-quota and unmapped-category exclusions are not retryable research
+failures. A structural category shortage needs more qualifying workbook rows
+and a new run; replaying the same snapshot cannot add candidates. Public retries
+remain available for unavailable updates and rejected relevance assessments.
+Existing saved full-workbook results retain their
+original selection contract; new retry children use the category-balanced policy
+with the parent's immutable workbook snapshot.
 
-The UI preserves saved rank across views and shows score, rationale and weighted
-breakdown. The Drivers export follows the same ranked order, with the complete
-pool on a separate audit sheet. Source dates use `sourceDate` with the date value,
+The default UI preserves saved report order across views and shows score,
+rationale and weighted breakdown. An optional A–Z order sorts the published
+driver names for display without changing selected drivers, category quotas,
+scores, or the saved report. Excel export accepts the same optional order;
+saved report positions and the original-order candidate audit remain intact.
+Each cited source is displayed with its own document date next to the source
+link. The Drivers export also lists dates against each exact source URL.
+Missing dates display `Date not provided`; retrieval dates are never substituted.
+Source dates use `sourceDate` with the date value,
 kind (published, updated or version-issued), original evidence and location.
 Only the page/document's own publication or version context can establish this
 field; unrelated dates mentioned in the body cannot. Unknown dates stay unknown,
@@ -284,11 +310,12 @@ child, rechecks supported rows against their saved source versions and quotation
 unavailable rows and relevance assessment gaps. Results from the older catalog remain readable/exportable, but
 legacy checkpoints cannot resume into this restricted workflow. Start a new run
 for those packs. No database migration is required for the JSON checkpoint format.
-New jobs use `esg_driver_excel_v5`, which older workers do not claim. General
+New jobs use `esg_driver_excel_v6`, which older workers do not claim. General
 workers also support older queue versions. Before
 completion, the domain transaction checks the result against the saved workbook
 rows, allowlist, citations, model review records and relevance evidence fingerprints.
-It recomputes selection and requires the exact saved candidate pool and ranked
+It recomputes the pinned selection policy, including every category quota, and
+requires the exact saved candidate pool and published
 drivers. Checkpoint updates cannot replace the pinned workbook selection,
 selection policy or allowlist. JSONB values are compared
 independently of object-key ordering. Invalid saved workbook results are blocked
@@ -301,9 +328,9 @@ for both writing and verification, with low reasoning for the first draft,
 medium for the first repair and reviews, and high for the final repair. The provider's returned model and response ID are
 recorded for both stages of each supported driver. Avoid switching a worker binary while it is actively
 processing a job; allow it to stop gracefully first.
-Refresh every local worker to support `esg_driver_excel_v5`, including a
-general worker started by another terminal. Older workers cannot claim version 5
-jobs; leaving only older workers running leaves new jobs queued. Worker logs
+Refresh every local worker to support `esg_driver_excel_v6`, including a
+general worker started by another terminal. Workers predating version 6 cannot
+claim the new balanced jobs; leaving only older workers running leaves them queued. Worker logs
 record the job ID, claiming process identity and quality policy for new ESG jobs.
 Creating a retry keeps the parent read, checkpoint copy and child queue entry in
 one transaction, with a bounded 30-second timeout for evidence-rich checkpoints.
@@ -320,7 +347,7 @@ maintenance or unrelated document jobs.
 ```powershell
 pnpm -C apps/web exec vitest run src/lib/esg-drivers src/app/api/esg/drivers src/app/esg/tools/__tests__/drivers-client.test.ts
 pnpm -C apps/web exec tsc --noEmit --incremental false
-pnpm -C apps/web exec tsc -p tsconfig.esg-driver-worker.json --noEmit --incremental false
+pnpm -C apps/web worker:type-check
 pnpm -C apps/web exec playwright test --config playwright.esg-drivers.config.ts
 ```
 
@@ -332,4 +359,19 @@ and should run only against a dedicated test database.
 `e2e/esg-driver-workbook.integration.spec.ts` additionally tests authenticated
 upload, activation, dynamic coverage, revision conflicts and rollback through
 the real application routes. It requires the disposable `esg_catalog_test`
-database on loopback, or CI's disposable `portal_esg` database. Run it against the production build to cover Excel module resolution inside the parser worker.
+database on loopback, or CI's disposable `portal_esg` database. CI runs it against
+the production build, covering Excel module resolution inside the parser worker.
+
+Two optional smoke scripts record summaries under `docs/audits/esg-drivers-2026-09-09`:
+
+```powershell
+pnpm -C apps/web exec tsx --tsconfig tsconfig.worker.json scripts/esg-drivers-source-smoke.mts
+pnpm -C apps/web exec tsx --tsconfig tsconfig.worker.json scripts/esg-drivers-generation-smoke.mts
+```
+
+The source check reads three workbook URLs without model calls. The generation
+check uses one actual driver and one of its listed sources, makes at most four
+model calls, and creates no database job. It is a bounded pilot, not a live test
+of every driver or a deployment check.
+The generation script accepts an optional output path as its first argument to
+keep reports from different model pilots separate, and records the configured model.

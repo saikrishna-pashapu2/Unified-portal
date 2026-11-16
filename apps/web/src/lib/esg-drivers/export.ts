@@ -1,7 +1,8 @@
 import { MAX_WORKBOOK_CELL_CHARS, writeWorkbookBuffer } from '@/lib/workbook';
 import type { EsgDriver, EsgDriverResult, EsgDriverSource } from './types';
 import { EVIDENCE_STATUS_LABELS } from './quality-policy';
-import { RELEVANCE_WEIGHTS } from './ranking-policy';
+import { CATEGORY_SELECTION_POLICY, RELEVANCE_WEIGHTS, driverReportCategory, isRankedSelectionPolicy } from './ranking-policy';
+import { driverSourceDateLines, orderDriversForDisplay, type DriverDisplayOrder } from './presentation';
 const DRIVER_HEADERS = [
   "Driver Section/Country",
   "Driver Type",
@@ -48,6 +49,8 @@ const RANKED_DRIVER_HEADERS = [
   "Business Impact (points / rating)",
   "Urgency (points / rating)",
   "Primary Source Document Date",
+  "Source Document Dates (by URL)",
+  "Report Category",
 ];
 
 const RANKED_SOURCE_HEADERS = [
@@ -57,8 +60,14 @@ const RANKED_SOURCE_HEADERS = [
   "Source Date Location",
 ];
 
-export async function buildDriverWorkbook(result: EsgDriverResult): Promise<Buffer> {
+export async function buildDriverWorkbook(result: EsgDriverResult, options: { order?: DriverDisplayOrder } = {}): Promise<Buffer> {
   const ranked = isRankedResult(result);
+  const order = options.order ?? 'report';
+  const displayDrivers = orderDriversForDisplay(result.drivers, order);
+  const reportPositions = new Map(result.drivers.map((driver, index) => [driver.id, index + 1]));
+  const rankedHeaders = result.selection?.policyVersion === CATEGORY_SELECTION_POLICY
+    ? RANKED_DRIVER_HEADERS.map((header) => header === 'Rank' ? 'Report Position' : header)
+    : RANKED_DRIVER_HEADERS;
   const candidatePool = ranked ? result.candidatePool || [] : [];
   // Ranked packs always reserve an audit sheet. The workbook writer has a
   // separate six-output-sheet limit, so source availability and candidate
@@ -67,23 +76,23 @@ export async function buildDriverWorkbook(result: EsgDriverResult): Promise<Buff
   const sheets = [
     {
       name: "Summary",
-      rows: buildSummaryRows(result),
+      rows: buildSummaryRows(result, order),
       columnWidths: [24, 80],
     },
     {
       name: "Drivers",
-      rows: [ranked ? [...DRIVER_HEADERS, ...RANKED_DRIVER_HEADERS] : DRIVER_HEADERS, ...result.drivers.map((driver, index) => driverToRow(driver, ranked ? index + 1 : undefined, result))],
+      rows: [ranked ? [...DRIVER_HEADERS, ...rankedHeaders] : DRIVER_HEADERS, ...displayDrivers.map((driver) => driverToRow(driver, ranked ? reportPositions.get(driver.id) : undefined, result))],
       columnWidths: ranked
-        ? [24, 24, 48, 72, 64, 54, 42, 64, 12, 24, 22, 72, 24, 14, 72, 54, 26, 24, 64, 10, 14, 14, 72, 24, 24, 24, 24, 32]
+        ? [24, 24, 48, 72, 64, 54, 42, 64, 12, 24, 22, 72, 24, 14, 72, 54, 26, 24, 64, 10, 14, 14, 72, 24, 24, 24, 24, 32, 100, 30]
         : [24, 24, 48, 72, 64, 54, 42, 64, 12, 24, 22, 72, 24, 14, 72, 54, 26, 24, 64],
-      autoFilter: `A1:${ranked ? 'AB' : 'S'}${Math.max(result.drivers.length + 1, 1)}`,
+      autoFilter: `A1:${ranked ? 'AD' : 'S'}${Math.max(result.drivers.length + 1, 1)}`,
       freezeRows: 1,
     },
     {
       name: "Citations",
       rows: [
         ranked
-          ? ["Driver ID", "Driver Name", "Source ID", "Source URL", "Verbatim Supporting Quote", "Location", "Passage ID", "Published", "Rank", "Source Document Date", "Source Date Evidence", "Source Date Location"]
+          ? ["Driver ID", "Driver Name", "Source ID", "Source URL", "Verbatim Supporting Quote", "Location", "Passage ID", "Published", result.selection?.policyVersion === CATEGORY_SELECTION_POLICY ? "Report Position" : "Rank", "Source Document Date", "Source Date Evidence", "Source Date Location"]
           : ["Driver ID", "Driver Name", "Source ID", "Source URL", "Verbatim Supporting Quote", "Location"],
         ...buildCitationRows(result, ranked, candidatePool),
       ],
@@ -117,7 +126,7 @@ export async function buildDriverWorkbook(result: EsgDriverResult): Promise<Buff
   return writeWorkbookBuffer(sheets);
 }
 
-function buildSummaryRows(result: EsgDriverResult): Array<Array<string | number>> {
+function buildSummaryRows(result: EsgDriverResult, order: DriverDisplayOrder): Array<Array<string | number>> {
   const averageConfidence =
     result.drivers.reduce((sum, driver) => sum + driver.confidence, 0) /
     Math.max(result.drivers.length, 1);
@@ -133,6 +142,7 @@ function buildSummaryRows(result: EsgDriverResult): Array<Array<string | number>
     ["Generated At", result.generatedAt],
     ["Completion", result.completion === "partial" ? "Partial" : "Complete"],
     ["Driver Count", result.drivers.length],
+    ["Display Order", order === 'alphabetical' ? 'Alphabetical (A–Z)' : 'Saved report order'],
     ["Expected Driver Count", result.expectedDriverCount ?? result.drivers.length],
     [
       "Unavailable Driver Updates",
@@ -160,6 +170,10 @@ function buildSummaryRows(result: EsgDriverResult): Array<Array<string | number>
       ["Selection Gaps", gaps > 0 ? `${gaps} target slot${gaps === 1 ? "" : "s"} unfilled` : "None"],
       ["Excluded Candidate IDs", selection.excluded.map((item) => `${item.driverId}: ${item.reason}${item.duplicateOf ? ` (${item.duplicateOf})` : ''}`).join("\n") || "None"],
     );
+    for (const quota of selection.categoryQuotas || []) {
+      rows.push([`${quota.category} — published / target`, `${quota.publishedDriverIds.length} / ${quota.requestedCount}`]);
+      if (quota.gap) rows.push([`${quota.category} — gap`, `${quota.gap} slot${quota.gap === 1 ? '' : 's'} unfilled; no eligible source-supported replacement`]);
+    }
   }
   return rows;
 }
@@ -262,6 +276,8 @@ function rankedDriverFields(driver: EsgDriver, rank: number, result: EsgDriverRe
     dimensionLabel(relevance?.dimensions.businessImpact, RELEVANCE_WEIGHTS.businessImpact),
     dimensionLabel(relevance?.dimensions.urgency, RELEVANCE_WEIGHTS.urgency),
     formatSourceDate(primarySource),
+    driverSourceDateLines(driver, result.evidence).join('\n'),
+    driverReportCategory(driver) || 'Unmapped category',
   ];
 }
 
@@ -285,7 +301,7 @@ function dimensionAuditLabel(
 }
 
 function formatSourceDate(source: EsgDriverSource | undefined): string {
-  return source?.sourceDate ? `${source.sourceDate.kind}: ${source.sourceDate.value}` : '';
+  return source?.sourceDate ? `${source.sourceDate.kind}: ${source.sourceDate.value}` : 'Date not provided';
 }
 
 function buildCandidateAuditRows(result: EsgDriverResult, candidatePool: EsgDriver[]): Array<Array<string | number>> {
@@ -348,5 +364,5 @@ function buildCitationRows(
 }
 
 function isRankedResult(result: EsgDriverResult): boolean {
-  return result.selection?.policyVersion === 'relevance-top15-v1';
+  return isRankedSelectionPolicy(result.selection?.policyVersion);
 }

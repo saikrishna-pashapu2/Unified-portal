@@ -5,7 +5,7 @@ import { buildWorkbookOptions, isGlobalDriverSection } from './catalog-utils';
 import { canonicalizeEsgDriverCountry, canonicalizeEsgDriverSector } from './coverage';
 import { ESG_EVIDENCE_CONTRACT } from './result-integrity';
 import { ESG_DRIVER_QUALITY_POLICY } from './quality-policy';
-import { DRIVER_SELECTION_POLICY } from './ranking-policy';
+import { CATEGORY_SELECTION_POLICY } from './ranking-policy';
 
 export const ESG_DRIVER_WORKBOOK = catalogJson as DriverWorkbook;
 
@@ -35,7 +35,7 @@ export function createWorkbookCheckpoint(
 ): EsgWorkbookCheckpoint {
   const selection = selectWorkbookDrivers(input, catalog);
   return structuredClone({
-    version: 2, workflow: 'excel-sources', evidenceContract: ESG_EVIDENCE_CONTRACT, qualityPolicy: ESG_DRIVER_QUALITY_POLICY, selectionPolicy: DRIVER_SELECTION_POLICY,
+    version: 2, workflow: 'excel-sources', evidenceContract: ESG_EVIDENCE_CONTRACT, qualityPolicy: ESG_DRIVER_QUALITY_POLICY, selectionPolicy: CATEGORY_SELECTION_POLICY,
     ...(catalogVersionId ? { catalogVersionId } : {}),
     catalogVersion: catalog.version,
     workbook: catalog.workbook, workbookSha256: catalog.sha256,

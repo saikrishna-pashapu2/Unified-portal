@@ -11,7 +11,7 @@ import { createExcelSourceSearch, type ExcelSearchResult } from './excel-source-
 import { assertWorkbookResult, ESG_EVIDENCE_CONTRACT, EsgDriverQualityGateError } from './result-integrity';
 import { ESG_DRIVER_QUALITY_POLICY, hasSuggestedEvidenceKpi, hasUnverifiedPriMapping, hasCurrentNzbaClaimFromOldReport } from './quality-policy';
 import { sourceDateOptions } from './excel-source-metadata';
-import { DRIVER_SELECTION_POLICY, MAX_PUBLISHED_DRIVERS, selectRankedDrivers } from './ranking-policy';
+import { MAX_PUBLISHED_DRIVERS, isRankedSelectionPolicy, selectDriversForPolicy } from './ranking-policy';
 import { ensureDriverRelevance, needsRelevanceAssessment, RelevanceAssessmentRejectedError } from './relevance-assessment';
 import type { DriverSelection, EsgDriver, EsgDriverResult, EsgDriverSource, GenerateEsgDriverOptions, GenerateEsgDriversInput } from './types';
 
@@ -117,11 +117,18 @@ function rankedSelectionWarnings(selection: DriverSelection, publishedCount: num
   const unavailable = selection.excluded.filter((item) => item.reason === 'unavailable').length;
   const unscored = selection.excluded.filter((item) => item.reason === 'unscored').length;
   const belowThreshold = selection.excluded.filter((item) => item.reason === 'below-threshold').length;
+  const unmapped = selection.excluded.filter((item) => item.reason === 'unmapped-category').length;
   const warnings: string[] = [];
   if (unavailable) warnings.push(`${unavailable} workbook drivers have no verified source update and remain outside the ranked report.`);
   if (unscored) warnings.push(`${unscored} supported workbook drivers have no valid relevance assessment and remain outside the ranked report.`);
   if (belowThreshold) warnings.push(`${belowThreshold} supported workbook drivers scored below the relevance threshold and remain outside the ranked report.`);
-  if (publishedCount < MAX_PUBLISHED_DRIVERS) warnings.push(`Only ${publishedCount} relevance-qualified drivers were available; the ranked report requested ${MAX_PUBLISHED_DRIVERS}.`);
+  if (unmapped) warnings.push(`${unmapped} relevance-qualified workbook drivers could not be mapped to a report category and remain outside the ranked report.`);
+  if (selection.categoryQuotas?.some((quota) => quota.gap > 0)) {
+    for (const quota of selection.categoryQuotas.filter((item) => item.gap > 0)) {
+      warnings.push(`${quota.category} has ${quota.publishedDriverIds.length} of ${quota.requestedCount} requested drivers; the category is short by ${quota.gap}.`);
+    }
+  }
+  if (publishedCount < MAX_PUBLISHED_DRIVERS) warnings.push(`Only ${publishedCount} supported category-qualified drivers were available; the ranked report requested ${MAX_PUBLISHED_DRIVERS}.`);
   return warnings;
 }
 
@@ -154,7 +161,10 @@ export async function generateEsgDriverResult(input: GenerateEsgDriversInput, op
   const retainedSearch = search as typeof search & {
     refreshRetainedSources?: (driver: EsgDriver) => Promise<EsgDriverSource[]>;
   };
-  const rankedRun = checkpoint.selectionPolicy === DRIVER_SELECTION_POLICY;
+  if (checkpoint.selectionPolicy && !isRankedSelectionPolicy(checkpoint.selectionPolicy)) {
+    throw new Error(`Unsupported driver selection policy: ${String(checkpoint.selectionPolicy)}`);
+  }
+  const rankedRun = isRankedSelectionPolicy(checkpoint.selectionPolicy);
   const relevanceInput = {
     country: checkpoint.input.country,
     sector: checkpoint.input.sector,
@@ -371,7 +381,9 @@ export async function generateEsgDriverResult(input: GenerateEsgDriversInput, op
     const passages = Array.from(new Map([...(previous?.passages || []), ...(source.passages || [])].map((p) => [p.id, p])).values());
     sources.set(source.id, { ...source, passages, contentSnippet: passages.map((p) => p.text).join('\n\n') });
   }
-  const selectionResult = rankedRun ? selectRankedDrivers(candidatePool, new Date().toISOString()) : null;
+  const selectionResult = rankedRun
+    ? selectDriversForPolicy(candidatePool, checkpoint.selectionPolicy!, new Date().toISOString())
+    : null;
   const drivers = selectionResult?.drivers || candidatePool;
   const selection = selectionResult?.selection;
   const verifiedCandidateCount = candidatePool.filter((d) => d.generationStatus === 'verified').length;

@@ -140,7 +140,7 @@ describe("dynamic catalog job creation", () => {
       workbook: "Custom ESG Drivers.xlsx",
       input,
     });
-    expect(queueInsert?.values).toContain("esg_driver_excel_v5");
+    expect(queueInsert?.values).toContain("esg_driver_excel_v6");
     expect(queueInsert?.values).toContain(JSON.stringify(input));
   });
 
@@ -170,6 +170,6 @@ describe("dynamic catalog job creation", () => {
     await createEsgDriverJob(7, input, { checkpoint });
 
     expect(mocks.activeCatalog).not.toHaveBeenCalled();
-    expect(mocks.transactionStatements.find(({ sql }) => sql.includes("INSERT INTO background_jobs"))?.values).toContain("esg_driver_excel_v5");
+    expect(mocks.transactionStatements.find(({ sql }) => sql.includes("INSERT INTO background_jobs"))?.values).toContain("esg_driver_excel_v6");
   });
 });

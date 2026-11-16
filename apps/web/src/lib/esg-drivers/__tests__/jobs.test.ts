@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { rankedWorkbookResultFixture, workbookResultFixture } from "./workbook-result.fixture";
-import { selectRankedDrivers } from '../ranking-policy';
+import { CATEGORY_SELECTION_POLICY, DRIVER_REPORT_CATEGORIES, relevanceBand, selectCategoryBalancedDrivers, selectRankedDrivers } from '../ranking-policy';
+import { relevanceEvidenceFingerprint } from '../relevance-evidence';
 
 const mocks = vi.hoisted(() => {
   const statements: Array<{ sql: string; values: unknown[] }> = [];
@@ -123,6 +124,51 @@ describe("ESG driver durable job lifecycle", () => {
     mocks.state.jobRows = [jobRow('9320f9d0-1091-4484-9b56-e6e695bcf653', id)];
     await expect(createEsgDriverResumeJob(7, parent)).resolves.toBeDefined();
     expect(isResumableEsgDriverJob({ ...parent, result: rankedWorkbookResultFixture(52).result })).toBe(false);
+  });
+
+  it('does not expose a retry for a ranked structural shortage without evidence gaps', async () => {
+    const { isResumableEsgDriverJob } = await import('../jobs');
+    const { checkpoint, result } = rankedWorkbookResultFixture(4);
+    expect(result.completion).toBe('partial');
+    expect(isResumableEsgDriverJob({ ...mappedJob(id), checkpoint, result })).toBe(false);
+  });
+
+  it('keeps a complete category report non-resumable despite ordinary category-quota exclusions', async () => {
+    const { isResumableEsgDriverJob } = await import('../jobs');
+    const fixture = categoryJobFixture(20);
+    expect(fixture.result.selection!.excluded.some((item) => item.reason === 'category-quota')).toBe(true);
+    expect(fixture.result.completion).toBe('complete');
+    expect(isResumableEsgDriverJob({ ...mappedJob(id), checkpoint: fixture.checkpoint, result: fixture.result })).toBe(false);
+  });
+
+  it('keeps an unavailable category candidate resumable even when fifteen rows publish', async () => {
+    const { isResumableEsgDriverJob } = await import('../jobs');
+    const fixture = categoryJobFixture(20);
+    fixture.result.candidatePool![0].generationStatus = 'unavailable';
+    fixture.result.candidatePool![0].statusReason = 'Source unavailable.';
+    fixture.result.candidatePool![0].citations = [];
+    fixture.result.candidatePool![0].sourceRefs = [];
+    fixture.result.candidatePool![0].sourceLinks = [];
+    const selected = selectCategoryBalancedDrivers(fixture.result.candidatePool!, fixture.result.generatedAt);
+    fixture.result = { ...fixture.result, ...selected, completion: selected.drivers.length === 15 ? 'complete' : 'partial' };
+    expect(selected.drivers).toHaveLength(15);
+    expect(isResumableEsgDriverJob({ ...mappedJob(id), checkpoint: fixture.checkpoint, result: fixture.result })).toBe(true);
+  });
+
+  it('labels a structural category shortage separately from unavailable evidence', async () => {
+    const { completeEsgDriverJob } = await import('../jobs');
+    const fixture = categoryJobFixture(15);
+    const short = fixture.result.candidatePool![0];
+    for (const dimension of Object.values(short.relevance!.dimensions)) dimension.rating = 2;
+    short.relevance!.score = 40;
+    short.relevance!.band = relevanceBand(40);
+    const selected = selectCategoryBalancedDrivers(fixture.result.candidatePool!, fixture.result.generatedAt);
+    fixture.result = { ...fixture.result, ...selected, expectedDriverCount: 15, verifiedDriverCount: selected.drivers.length, completion: 'partial', warnings: ['A category is short of its requested quota.'] };
+    fixture.checkpoint.slots = fixture.result.candidatePool!.map((driver) => ({ driver: structuredClone(driver), sources: [fixture.source] }));
+    mocks.state.queueRows = [lockedQueueRow()];
+    mocks.state.domainRows = [{ status: 'processing', checkpoint_json: fixture.checkpoint }];
+    await expect(completeEsgDriverJob(id, 'lease-token-a', fixture.result)).resolves.toBe(true);
+    expect(mocks.statements.some(({ values }) => values.includes('complete with category gaps'))).toBe(true);
   });
 
   it("rejects malformed and oversized pagination cursors before querying", async () => {
@@ -281,8 +327,8 @@ describe("ESG driver durable job lifecycle", () => {
       sql.includes("INSERT INTO esg_driver_jobs"),
     );
     expect(domainInsert?.values).toContain(id);
-    expect(domainInsert?.values.some((value) => typeof value === 'string' && value.includes('"selectionPolicy":"relevance-top15-v1"'))).toBe(true);
-    expect(mocks.statements.some(({ sql, values }) => sql.includes('INSERT INTO background_jobs') && values.includes('esg_driver_excel_v4'))).toBe(true);
+    expect(domainInsert?.values.some((value) => typeof value === 'string' && value.includes('"selectionPolicy":"category-balanced15-v1"'))).toBe(true);
+    expect(mocks.statements.some(({ sql, values }) => sql.includes('INSERT INTO background_jobs') && values.includes('esg_driver_excel_v6'))).toBe(true);
     expect(
       domainInsert?.values.some(
         (value) =>
@@ -487,6 +533,30 @@ function lockedQueueRow() {
     status: "processing",
     user_id: 7,
   };
+}
+
+function categoryJobFixture(count: number) {
+  const fixture = rankedWorkbookResultFixture(count);
+  fixture.checkpoint.selectionPolicy = CATEGORY_SELECTION_POLICY;
+  fixture.checkpoint.definitions.forEach((definition, index) => {
+    const category = DRIVER_REPORT_CATEGORIES[index % DRIVER_REPORT_CATEGORIES.length];
+    definition.section = category === 'Global Drivers' ? 'Global Drivers' : 'UAE';
+    definition.type = category === 'Global Drivers' ? 'International Agreements' : category;
+    const driver = fixture.result.candidatePool![index];
+    driver.driverSection = definition.section;
+    driver.driverType = definition.type;
+    driver.relevance!.evidenceFingerprint = relevanceEvidenceFingerprint(driver, fixture.checkpoint.input);
+  });
+  const selected = selectCategoryBalancedDrivers(fixture.result.candidatePool!, fixture.result.generatedAt);
+  fixture.result = {
+    ...fixture.result,
+    ...selected,
+    expectedDriverCount: 15,
+    verifiedDriverCount: selected.drivers.length,
+    completion: selected.drivers.length === 15 ? 'complete' : 'partial',
+  };
+  fixture.checkpoint.slots = fixture.result.candidatePool!.map((driver) => ({ driver: structuredClone(driver), sources: [fixture.source] }));
+  return fixture;
 }
 
 function claimedJob() {

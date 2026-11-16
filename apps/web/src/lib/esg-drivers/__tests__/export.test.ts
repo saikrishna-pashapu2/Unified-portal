@@ -4,6 +4,7 @@ vi.mock('server-only', () => ({}));
 
 import { buildDriverWorkbook } from '../export';
 import { rankedWorkbookResultFixture, workbookResultFixture } from './workbook-result.fixture';
+import { CATEGORY_SELECTION_POLICY, selectDriversForPolicy } from '../ranking-policy';
 
 function rowsBySheet(buffer: Buffer): Map<string, Array<Array<unknown>>> {
   const workbook = XLSX.read(buffer, { type: 'buffer' });
@@ -125,5 +126,49 @@ describe('ESG driver workbook export', () => {
     expect(sheets.get('Drivers')![0]).not.toContain('Rank');
     expect(sheets.get('Candidate Audit')).toBeUndefined();
     expect(sheets.get('Drivers')![0]).toHaveLength(19);
+  });
+
+  it('exports A–Z on request while retaining saved positions and the original candidate audit', async () => {
+    const { result } = rankedWorkbookResultFixture(3);
+    result.drivers = [...result.drivers].sort((a, b) => b.driverTitle.localeCompare(a.driverTitle, 'en'));
+    const saved = structuredClone(result);
+    const sheets = rowsBySheet(await buildDriverWorkbook(result, { order: 'alphabetical' }));
+    const drivers = sheets.get('Drivers')!;
+    const headers = drivers[0]!;
+    const ordered = [...saved.drivers].sort((a, b) => a.driverTitle.localeCompare(b.driverTitle, 'en'));
+    expect(drivers.slice(1).map((row) => row[headers.indexOf('Driver Name')])).toEqual(ordered.map((driver) => driver.driverTitle));
+    expect(drivers.slice(1).map((row) => row[headers.indexOf('Rank')])).toEqual(ordered.map((driver) => saved.drivers.findIndex((candidate) => candidate.id === driver.id) + 1));
+    const audit = sheets.get('Candidate Audit')!;
+    expect(audit.slice(1).map((row) => row[audit[0]!.indexOf('Candidate ID')])).toEqual(saved.candidatePool!.map((driver) => driver.id));
+    expect(result).toEqual(saved);
+    expect(sheets.get('Summary')).toContainEqual(['Display Order', 'Alphabetical (A–Z)']);
+  });
+
+  it('lists every cited URL with its own date or explicit unknown label on the Drivers sheet', async () => {
+    const result = rankedFixture();
+    const undated = { ...result.evidence[0], id: 'undated', url: 'https://example.org/undated', sourceDate: null, publishedDate: null, updatedDate: null, lastModified: '2026-01-01', retrievedAt: '2026-11-16T00:00:00Z' };
+    result.evidence.push(undated);
+    result.drivers[0].sourceRefs.push(undated.id);
+    result.drivers[0].sourceLinks.push(undated.url);
+    const sheets = rowsBySheet(await buildDriverWorkbook(result));
+    const drivers = sheets.get('Drivers')!;
+    const cell = drivers[1]![drivers[0]!.indexOf('Source Document Dates (by URL)')];
+    expect(cell).toBe(`${result.evidence[0].url} — Version issued: November 2024\n${undated.url} — Date not provided`);
+    const sources = sheets.get('Sources')!;
+    expect(sources[2]![sources[0]!.indexOf('Source Document Date')]).toBe('Date not provided');
+  });
+
+  it('exports balanced selection, category totals and explicit gaps while preserving the candidate audit', async () => {
+    const { result } = rankedWorkbookResultFixture(52);
+    const selected = selectDriversForPolicy(result.candidatePool!, CATEGORY_SELECTION_POLICY, result.generatedAt);
+    Object.assign(result, selected, { verifiedDriverCount: selected.drivers.length, completion: selected.drivers.length === 15 ? 'complete' : 'partial' });
+    const sheets = rowsBySheet(await buildDriverWorkbook(result));
+    expect(sheets.get('Drivers')![0]).toContain('Report Position');
+    expect(sheets.get('Drivers')![0]).toContain('Report Category');
+    expect(sheets.get('Candidate Audit')).toHaveLength(result.candidatePool!.length + 1);
+    for (const quota of selected.selection.categoryQuotas!) {
+      expect(sheets.get('Summary')).toContainEqual([`${quota.category} — published / target`, `${quota.publishedDriverIds.length} / 3`]);
+      if (quota.gap) expect(sheets.get('Summary')!.some((row) => row[0] === `${quota.category} — gap`)).toBe(true);
+    }
   });
 });

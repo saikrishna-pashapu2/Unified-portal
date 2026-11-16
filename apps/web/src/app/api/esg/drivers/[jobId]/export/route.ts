@@ -29,6 +29,11 @@ export async function GET(request: Request, context: any) {
     return NextResponse.json({ error: "Invalid jobId" }, { status: 400 });
   }
 
+  const order = new URL(request.url).searchParams.get('order') ?? 'report';
+  if (order !== 'report' && order !== 'alphabetical') {
+    return NextResponse.json({ error: 'Choose report or alphabetical export order.' }, { status: 400 });
+  }
+
   const limited = await enforceApiUsage(request, {
     feature: "esg_driver_export",
     userId,
@@ -63,7 +68,7 @@ export async function GET(request: Request, context: any) {
 
   let buffer: Buffer;
   try {
-    buffer = await buildDriverWorkbook(job.result);
+    buffer = await buildDriverWorkbook(job.result, { order });
   } catch (error) {
     const response = workbookErrorResponse(error);
     return NextResponse.json({ error: response.message }, { status: response.status });

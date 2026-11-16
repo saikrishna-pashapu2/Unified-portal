@@ -9,6 +9,11 @@ import {
   shouldPollDriverJob,
   trackedDriverJobForScreen,
 } from "../drivers-client";
+import type { EsgDriver } from "@/lib/esg-drivers/types";
+import {
+  orderDriversForDisplay,
+  sourceDateLabel,
+} from "@/lib/esg-drivers/presentation";
 
 describe("ESG drivers client lifecycle", () => {
   it("rejects a stale result after the user switches jobs", () => {
@@ -179,5 +184,30 @@ describe("ESG drivers client lifecycle", () => {
       { id: "b", stage: "updated" },
       { id: "c", stage: "done" },
     ]);
+  });
+
+  it("keeps report order by default and sorts a cloned list in stable English A-Z order", () => {
+    const first = { id: "1", driverTitle: "Zulu", driverSection: "Global Drivers" } as EsgDriver;
+    const second = { id: "2", driverTitle: "alpha", driverSection: "Regulatory Requirements" } as EsgDriver;
+    const third = { id: "3", driverTitle: "Alpha", driverSection: "Capital Markets" } as EsgDriver;
+    const saved = [first, second, third];
+
+    expect(orderDriversForDisplay(saved, "report")).toEqual(saved);
+    expect(orderDriversForDisplay(saved, "report")).not.toBe(saved);
+    expect(orderDriversForDisplay(saved, "alphabetical").map((driver) => driver.id)).toEqual([
+      "2",
+      "3",
+      "1",
+    ]);
+    expect(saved.map((driver) => driver.id)).toEqual(["1", "2", "3"]);
+  });
+
+  it.each([
+    [{ sourceDate: { value: "June 2026", kind: "published", evidence: "Published June 2026", location: "cover" } }, "Published: June 2026"],
+    [{ sourceDate: { value: "Q2 2026", kind: "updated", evidence: "Updated Q2 2026", location: "revision" } }, "Updated: Q2 2026"],
+    [{ sourceDate: { value: "v3", kind: "version-issued", evidence: "Version 3", location: "masthead" } }, "Version issued: v3"],
+    [{ sourceDate: null }, "Date not provided"],
+  ] as const)("labels source document dates without using retrieval metadata", (source, expected) => {
+    expect(sourceDateLabel(source)).toBe(expected);
   });
 });

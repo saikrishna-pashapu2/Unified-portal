@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { assertWorkbookResult, savedResultError, workbookResultIssues } from '../result-integrity';
 import { workbookResultFixture, rankedWorkbookResultFixture } from './workbook-result.fixture';
-import { selectRankedDrivers } from '../ranking-policy';
+import { CATEGORY_SELECTION_POLICY, DRIVER_REPORT_CATEGORIES, selectCategoryBalancedDrivers, selectRankedDrivers } from '../ranking-policy';
+import { relevanceEvidenceFingerprint } from '../relevance-evidence';
 
 function rejectedRelevanceFixture() {
   const fixture = rankedWorkbookResultFixture(20);
@@ -14,6 +15,30 @@ function rejectedRelevanceFixture() {
   fixture.checkpoint.slots[0].driver = structuredClone(driver);
   Object.assign(fixture.result, selectRankedDrivers(fixture.result.candidatePool!, fixture.result.generatedAt));
   fixture.result.warnings = ['One supported candidate has no approved relevance score.'];
+  return fixture;
+}
+
+function categoryBalancedFixture() {
+  const fixture = rankedWorkbookResultFixture(15);
+  fixture.checkpoint.selectionPolicy = CATEGORY_SELECTION_POLICY;
+  fixture.checkpoint.definitions.forEach((definition, index) => {
+    const category = DRIVER_REPORT_CATEGORIES[Math.floor(index / 3)];
+    definition.section = category === 'Global Drivers' ? 'Global Drivers' : 'UAE';
+    definition.type = category === 'Global Drivers' ? 'International Agreements' : category;
+    const driver = fixture.result.candidatePool![index];
+    driver.driverSection = definition.section;
+    driver.driverType = definition.type;
+    driver.relevance!.evidenceFingerprint = relevanceEvidenceFingerprint(driver, fixture.checkpoint.input);
+  });
+  const selected = selectCategoryBalancedDrivers(fixture.result.candidatePool!, fixture.result.generatedAt);
+  fixture.result = {
+    ...fixture.result,
+    ...selected,
+    expectedDriverCount: 15,
+    verifiedDriverCount: selected.drivers.length,
+    completion: selected.drivers.length === 15 ? 'complete' : 'partial',
+  };
+  fixture.checkpoint.slots = fixture.result.candidatePool!.map((driver) => ({ driver: structuredClone(driver), sources: [fixture.source] }));
   return fixture;
 }
 
@@ -142,6 +167,15 @@ describe('ranked workbook integrity', () => {
       expect(result.completion).toBe('partial');
       expect(() => assertWorkbookResult(result, checkpoint, true)).not.toThrow();
     }
+  });
+  it('recomputes category quota metadata and published category order on saved reads', () => {
+    const fixture = categoryBalancedFixture();
+    expect(() => assertWorkbookResult(fixture.result, fixture.checkpoint, true)).not.toThrow();
+    fixture.result.selection!.categoryQuotas![0].gap = 1;
+    expect(() => assertWorkbookResult(fixture.result, fixture.checkpoint, true)).toThrow();
+    const reordered = categoryBalancedFixture();
+    reordered.result.drivers.reverse();
+    expect(() => assertWorkbookResult(reordered.result, reordered.checkpoint, true)).toThrow();
   });
   it.each(['order', 'score', 'scope', 'citation', 'pool', 'baseline', 'count', 'policy', 'saved-score', 'date-proof', 'score-review', 'score-version'] as const)('rejects a tampered %s', (defect) => {
     const { result, checkpoint } = rankedWorkbookResultFixture();

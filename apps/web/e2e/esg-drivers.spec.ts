@@ -1,11 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
 import { authenticateE2eUser } from "./auth";
 import workbook from "../src/lib/esg-drivers/workbook.generated.json";
+import type { EsgDriver, EsgDriverResult, EsgDriverSource } from "../src/lib/esg-drivers/types";
 
 const NOW = "2026-09-09T10:00:00.000Z";
 const SOURCE_URL = "https://www.unep.org/resources/report/example-esg-guidance";
 
-function makeDrivers(count: number) {
+function makeDrivers(count: number): EsgDriver[] {
   const rows = workbook.sheets.find((sheet) => sheet.name === 'Banking')!.drivers.filter((d) => d.section === 'Global Drivers' || d.section === 'UAE');
   return rows.slice(0, count).map((row, index) => ({
     id: row.id, driverSection: row.section, driverType: row.type,
@@ -26,7 +27,7 @@ function makeDrivers(count: number) {
   }));
 }
 
-function makeResult(completion: "complete" | "partial") {
+function makeResult(completion: "complete" | "partial"): EsgDriverResult {
   const driverCount = 52;
   return {
     country: "UAE",
@@ -117,7 +118,7 @@ function makeRankedResult(
   publishedCount: number,
   unavailableCount: number,
   withOwnSourceDate = false,
-) {
+): EsgDriverResult {
   const allCandidates = makeDrivers(52).map((driver, index) => {
     const unavailable =
       index >= publishedCount && index < publishedCount + unavailableCount;
@@ -147,7 +148,7 @@ function makeRankedResult(
         location: "cover page",
       }
     : null;
-  const evidence = [
+  const evidence: EsgDriverSource[] = [
     {
       id: "S1",
       title: "Official ESG guidance",
@@ -226,6 +227,87 @@ function makeRankedResult(
   };
 }
 
+function makeCategoryBalancedResult() {
+  const result = makeRankedResult(15, 0, true);
+  const categories = [
+    "Global Drivers",
+    "Regulatory Requirements",
+    "Capital Markets",
+    "Climate Risks",
+    "Supply Chain",
+  ] as const;
+  const titles = [
+    "Zulu global signal",
+    "Alpha global signal",
+    "Mango global signal",
+    "Zulu regulatory duty",
+    "Alpha regulatory duty",
+    "Mango regulatory duty",
+    "Zulu capital signal",
+    "Alpha capital signal",
+    "Mango capital signal",
+    "Zulu climate exposure",
+    "Alpha climate exposure",
+    "Mango climate exposure",
+    "Zulu supply exposure",
+    "Alpha supply exposure",
+    "Mango supply exposure",
+  ];
+
+  result.drivers = result.drivers.map((driver, index) => ({
+    ...driver,
+    driverSection: categories[Math.floor(index / 3)],
+    driverType: categories[Math.floor(index / 3)],
+    driverTitle: titles[index],
+    sourceLinks: [SOURCE_URL, "https://www.unep.org/resources/report/example-banking-context"],
+    sourceRefs: ["S1", "S2"],
+  }));
+  result.candidatePool = result.candidatePool!.map((driver, index) =>
+    index < result.drivers.length ? result.drivers[index] : driver,
+  );
+  result.selection = {
+    ...result.selection!,
+    policyVersion: "category-balanced15-v1" as const,
+    categoryQuotas: categories.map((category) => ({
+      category,
+      requestedCount: 3 as const,
+      candidateCount: 3,
+      eligibleCandidateCount: 3,
+      publishedDriverIds: result.drivers
+        .filter((driver) => driver.driverSection === category)
+        .map((driver) => driver.id),
+      gap: 0,
+    })),
+  };
+  return result;
+}
+
+function makeCategoryGapResult() {
+  const result = makeCategoryBalancedResult();
+  const lastDriver = result.drivers[14];
+  const replacement = result.drivers[12];
+  result.drivers = result.drivers.slice(0, 14);
+  result.verifiedDriverCount = result.drivers.length;
+  const selection = result.selection!;
+  result.selection = {
+    ...selection,
+    excluded: [
+      ...selection.excluded,
+      { driverId: lastDriver.id, reason: "duplicate", duplicateOf: replacement.id },
+    ],
+    categoryQuotas: selection.categoryQuotas!.map((quota) =>
+      quota.category === "Supply Chain"
+        ? {
+            ...quota,
+            publishedDriverIds: quota.publishedDriverIds.slice(0, 2),
+            gap: 1,
+          }
+        : quota,
+    ),
+  };
+  return result;
+}
+
 async function mockDriverApis(
   page: Page,
   options: { delayedCatalogPagination?: boolean; delayedHistoryPreview?: boolean } = {},
@@ -235,14 +317,31 @@ async function mockDriverApis(
   const rankedCompleteResult = makeRankedResult(15, 0);
   const rankedGapResult = makeRankedResult(15, 2, true);
   const rankedPartialResult = makeRankedResult(12, 2);
+  const categoryBalancedResult = makeCategoryBalancedResult();
+  const categoryGapResult = makeCategoryGapResult();
   const rejectedReason = 'The proposed score borrowed a deadline from another regulation.';
   const rankedUnscoredResult = {
     ...rankedCompleteResult,
-    candidatePool: rankedCompleteResult.candidatePool.map((driver, index) => index === 15 ? {
-      ...driver, relevance: undefined, statusReason: rejectedReason,
-      relevanceFailure: { assessment: { ...driver.relevance!, review: { ...driver.relevance!.review, checks: { ...driver.relevance!.review.checks, noBorrowedObligations: false } } }, reasons: [rejectedReason] },
-    } : driver),
-    selection: { ...rankedCompleteResult.selection, excluded: rankedCompleteResult.selection.excluded.map((item, index) => index === 0 ? { ...item, reason: 'unscored' } : item) },
+    candidatePool: rankedCompleteResult.candidatePool!.map((driver, index) => {
+      if (index !== 15) return driver;
+      const relevance = driver.relevance!;
+      return {
+        ...driver,
+        relevance: undefined,
+        statusReason: rejectedReason,
+        relevanceFailure: {
+          assessment: {
+            ...relevance,
+            review: {
+              ...relevance.review!,
+              checks: { ...relevance.review!.checks, noBorrowedObligations: false },
+            },
+          },
+          reasons: [rejectedReason],
+        },
+      };
+    }),
+    selection: { ...rankedCompleteResult.selection!, excluded: rankedCompleteResult.selection!.excluded.map((item, index) => index === 0 ? { ...item, reason: 'unscored' } : item) },
     warnings: ['One supported candidate has no approved relevance score.'],
   };
   const resultByJob: Record<string, unknown> = {
@@ -252,6 +351,8 @@ async function mockDriverApis(
     "ranked-date-job": rankedGapResult,
     "ranked-child-job": rankedCompleteResult,
     "ranked-unscored-job": rankedUnscoredResult,
+    "category-order-job": categoryBalancedResult,
+    "category-gap-job": categoryGapResult,
   };
 
   const activeWorkbook = {
@@ -484,6 +585,17 @@ async function mockDriverApis(
       headers: {
         "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "content-disposition": 'attachment; filename="ranked-esg-drivers.xlsx"',
+      },
+      body: "mock workbook",
+    });
+  });
+
+  await page.route("**/api/esg/drivers/category-order-job/export*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: {
+        "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "content-disposition": 'attachment; filename="category-esg-drivers.xlsx"',
       },
       body: "mock workbook",
     });
@@ -821,7 +933,7 @@ test('renders Arabic narrative and distinguishes undated sources from retrieval 
   await expect(page.getByText(narrative, { exact: true })).toHaveAttribute('dir', 'rtl');
   await page.getByRole('button', { name: 'Show parsed evidence', exact: true }).click();
   await expect(page.getByText(excerpt, { exact: true })).toBeVisible();
-  await expect(page.getByText(/Publication date not stated/)).toBeVisible();
+  await expect(page.getByText('Date not provided', { exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Paris Agreement', exact: true })).toBeVisible();
   if (process.env.ESG_DRIVERS_ISOLATED_UI_TEST) await page.screenshot({ path: "../../docs/audits/esg-drivers-2026-09-09/ui-arabic.png", fullPage: true });
 });
@@ -842,7 +954,7 @@ test('renders the stored ranked Top 15 order with explainable relevance scores',
   await expect(page.getByText('20/25 pts', { exact: true }).first()).toBeVisible();
   await expect(page.getByText(/Rating 4\/5 · 4 × 25 ÷ 5/).first()).toBeVisible();
 
-  const candidatePoolTitle = makeRankedResult(15, 0).candidatePool[20].driverTitle;
+  const candidatePoolTitle = makeRankedResult(15, 0).candidatePool![20].driverTitle;
   await expect(page.getByText(candidatePoolTitle, { exact: true })).toHaveCount(0);
 });
 
@@ -892,9 +1004,85 @@ test('uses source publication evidence and keeps HTTP metadata separate', async 
   const evidenceButtons = page.getByRole('button', { name: 'Show parsed evidence', exact: true });
   await expect(evidenceButtons).toHaveCount(2);
   await evidenceButtons.nth(0).click();
-  await expect(page.getByText(/Published June 2026/)).toBeVisible();
+  await expect(page.getByText('Published: June 2026', { exact: true })).toBeVisible();
   await expect(page.getByText(/Date evidence: “Published June 2026” · cover page/)).toBeVisible();
   await evidenceButtons.nth(0).click();
-  await expect(page.getByText(/Publication date not stated/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /Banking context page.*Date not provided.*Retrieved/ })).toBeVisible();
   await expect(page.getByText(/HTTP modified/)).toHaveCount(0);
+});
+
+test('keeps category report order by default and supports A-Z export order', async ({ page }) => {
+  if (!process.env.ESG_DRIVERS_ISOLATED_UI_TEST) await authenticateE2eUser(page);
+  await mockDriverApis(page);
+  await page.goto('/esg/tools?tool=drivers&jobId=category-order-job');
+
+  await expect(page.getByText('Category-balanced report:', { exact: false })).toBeVisible();
+  await expect(page.getByTestId('category-coverage-summary')).toContainText('3/3 published');
+  await expect(page.getByText('Driver 1 of 15', { exact: true })).toBeVisible();
+  await expect(page.getByTestId(/driver-slide-/).first()).toContainText('Zulu global signal');
+  if (process.env.ESG_DRIVERS_ISOLATED_UI_TEST) await page.screenshot({ path: test.info().outputPath('category-report.png'), fullPage: true });
+
+  await page.getByRole('button', { name: 'A-Z', exact: true }).click();
+  await expect(page.getByTestId(/driver-slide-/).first()).toContainText('Alpha capital signal');
+  await expect(page.getByTestId(/driver-slide-/).first()).toContainText('Capital Markets');
+  await expect(page.getByText('Driver 1 of 15', { exact: true })).toBeVisible();
+  if (process.env.ESG_DRIVERS_ISOLATED_UI_TEST) await page.screenshot({ path: test.info().outputPath('alphabetical-report.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Matrix', exact: true }).click();
+  await expect(page.getByRole('columnheader', { name: 'No.', exact: true })).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: 'Rank', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Deck', exact: true }).click();
+
+  const exportRequest = page.waitForRequest(
+    (request) => request.method() === 'GET' && request.url().includes('/api/esg/drivers/category-order-job/export'),
+  );
+  await page.getByRole('button', { name: 'Export Excel', exact: true }).click();
+  await expect((await exportRequest).url()).toContain('order=alphabetical');
+
+  await page.getByRole('button', { name: 'Report order', exact: true }).click();
+  await expect(page.getByTestId(/driver-slide-/).first()).toContainText('Zulu global signal');
+});
+
+test('explains a structural category gap without offering a retry that cannot fill it', async ({ page }) => {
+  if (!process.env.ESG_DRIVERS_ISOLATED_UI_TEST) await authenticateE2eUser(page);
+  await mockDriverApis(page);
+  await page.goto('/esg/tools?tool=drivers&jobId=category-gap-job');
+
+  await expect(page.getByTestId('category-coverage-summary').getByText(/not enough distinct eligible drivers cleared/)).toBeVisible();
+  await expect(page.getByTestId('category-coverage-summary').getByText(/Update the workbook if necessary/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /Retry/ })).toHaveCount(0);
+  await page.getByText(/Candidate assessment coverage/).click();
+  await expect(page.getByText(/Duplicate candidate excluded from the report/)).toBeVisible();
+});
+
+test('shows precise, unknown, and legacy source dates without substituting retrieval metadata', async ({ page }) => {
+  if (!process.env.ESG_DRIVERS_ISOLATED_UI_TEST) await authenticateE2eUser(page);
+  await mockDriverApis(page);
+  const result = makeRankedResult(15, 0, true);
+  (result.evidence[1] as unknown as { sourceDate: object | null }).sourceDate = {
+    value: 'Q2 2026',
+    kind: 'updated',
+    evidence: 'Updated Q2 2026',
+    location: 'revision note',
+  };
+  result.drivers[0].sourceLinks = [
+    SOURCE_URL,
+    'https://www.unep.org/resources/report/example-banking-context',
+  ];
+  result.drivers[0].sourceRefs = ['S1', 'S2'];
+  await page.route('**/api/esg/drivers/result?*', (route) =>
+    route.fulfill({ json: { success: true, result, resumable: false } }),
+  );
+  await page.goto('/esg/tools?tool=drivers&jobId=source-precision-job');
+
+  await expect(page.getByText(/Published: June 2026/).first()).toBeVisible();
+  await expect(page.getByText(/Updated: Q2 2026/).first()).toBeVisible();
+  await expect(page.getByText(/Date evidence: “Updated Q2 2026” · revision note/)).toBeVisible();
+  await expect(page.getByText(/HTTP modified/)).toHaveCount(0);
+
+  const legacyDateResult = makeResult('complete');
+  await page.route('**/api/esg/drivers/result?jobId=legacy-date-job', (route) =>
+    route.fulfill({ json: { success: true, result: legacyDateResult, resumable: false } }),
+  );
+  await page.goto('/esg/tools?tool=drivers&jobId=legacy-date-job');
+  await expect(page.getByText(/Date not provided/).first()).toBeVisible();
 });

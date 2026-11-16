@@ -49,7 +49,19 @@ import type {
   EsgDriverResult,
   EsgDriverSource,
   DriverRelevance,
+  DriverSelectionPolicy,
 } from "@/lib/esg-drivers/types";
+import {
+  CATEGORY_SELECTION_POLICY,
+  DRIVER_REPORT_CATEGORIES,
+  driverReportCategory,
+  isRankedSelectionPolicy,
+} from "@/lib/esg-drivers/ranking-policy";
+import {
+  orderDriversForDisplay,
+  sourceDateLabel,
+  type DriverDisplayOrder,
+} from "@/lib/esg-drivers/presentation";
 import {
   canResumePartialDriverJob,
   driverPollRetryDelay,
@@ -77,7 +89,7 @@ interface DriverStatus {
   error: string | null;
   activity: EsgDriverJobActivity[];
   /** Optional ranked-report telemetry returned by newer status endpoints. */
-  selectionPolicy?: "relevance-top15-v1";
+  selectionPolicy?: DriverSelectionPolicy;
   candidateCount?: number;
   candidateAssessedCount?: number;
   publishedDriverCount?: number;
@@ -98,7 +110,7 @@ interface HistoryItem {
   needsAttention: boolean;
   createdAt: string | null;
   completedAt: string | null;
-  selectionPolicy?: "relevance-top15-v1";
+  selectionPolicy?: DriverSelectionPolicy;
   candidateCount?: number;
   publishedDriverCount?: number;
 }
@@ -125,7 +137,6 @@ interface AccuracySummary {
 }
 
 const LANGUAGE_OPTIONS = ["English", "Russian", "Arabic"];
-const RANKED_SELECTION_POLICY = "relevance-top15-v1" as const;
 const RELEVANCE_WEIGHTS: Record<
   keyof DriverRelevance["dimensions"],
   number
@@ -163,6 +174,7 @@ export default function EsgDriversTool() {
   const [historyNeedsAttention, setHistoryNeedsAttention] = useState(0);
   const [expandedDriverId, setExpandedDriverId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<DriverViewMode>("deck");
+  const [displayOrder, setDisplayOrder] = useState<DriverDisplayOrder>("report");
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [loadingMoreHistory, setLoadingMoreHistory] = useState(false);
@@ -207,7 +219,7 @@ export default function EsgDriversTool() {
       }),
   );
   const isRtl = isRtlLanguage(result?.language || language);
-  const isRankedResult = result?.selection?.policyVersion === RANKED_SELECTION_POLICY;
+  const isRankedResult = isRankedSelectionPolicy(result?.selection?.policyVersion);
   const activeWorkbookOptions = workbookCatalog.catalog?.options || null;
   const workbookOptionsReady = Boolean(
     activeWorkbookOptions &&
@@ -244,15 +256,27 @@ export default function EsgDriversTool() {
 
   const sortedDrivers = useMemo(() => {
     if (!result) return [];
-    // Ranked reports arrive in their stored relevance order. Legacy packs
-    // retain the historical confidence ordering used by the full workbook UI.
-    if (result.selection?.policyVersion === RANKED_SELECTION_POLICY) {
-      return result.drivers;
+    if (displayOrder === "alphabetical") {
+      // Alphabetical order is an explicit presentation choice; it never changes
+      // the persisted report selection or category labels shown on each card.
+      return orderDriversForDisplay(result.drivers, displayOrder);
+    }
+
+    // New category-balanced reports are persisted in category order, with each
+    // category already sorted by relevance. Keep that saved order intact.
+    if (result.selection?.policyVersion === CATEGORY_SELECTION_POLICY) {
+      return orderDriversForDisplay(result.drivers, "report");
+    }
+
+    // Legacy ranked packs also retain their saved relevance order. Older
+    // pre-ranked packs keep the historical confidence ordering used by the UI.
+    if (isRankedSelectionPolicy(result.selection?.policyVersion)) {
+      return [...result.drivers];
     }
     return [...result.drivers].sort(
       (a, b) => (b.confidence ?? 0) - (a.confidence ?? 0),
     );
-  }, [result]);
+  }, [displayOrder, result]);
 
   const safeSlideIndex = result
     ? Math.min(activeSlideIndex, Math.max(sortedDrivers.length - 1, 0))
@@ -394,6 +418,7 @@ export default function EsgDriversTool() {
       setExpandedDriverId(null);
       setActiveSlideIndex(0);
       setViewMode("deck");
+      setDisplayOrder("report");
       setError("");
       return true;
     },
@@ -695,8 +720,8 @@ export default function EsgDriversTool() {
         error: null,
         activity: Array.isArray(data.job?.activity) ? data.job.activity : [],
         selectionPolicy:
-          data.job?.selectionPolicy === RANKED_SELECTION_POLICY
-            ? RANKED_SELECTION_POLICY
+          isRankedSelectionPolicy(data.job?.selectionPolicy)
+            ? data.job.selectionPolicy
             : undefined,
         candidateCount: toOptionalCount(data.job?.candidateCount),
         candidateAssessedCount: toOptionalCount(data.job?.candidateAssessedCount),
@@ -748,6 +773,7 @@ export default function EsgDriversTool() {
     setResult(null);
     setResultJobId("");
     setResultResumable(false);
+    setDisplayOrder("report");
     setJobId(item.id);
     // Reflect the opened job's scope so the processing view shows the right
     // country/sector when a still-running job is reopened from history.
@@ -762,13 +788,13 @@ export default function EsgDriversTool() {
       error: item.error,
       activity: item.latestActivity ? [item.latestActivity] : [],
       selectionPolicy:
-        item.selectionPolicy === RANKED_SELECTION_POLICY
-          ? RANKED_SELECTION_POLICY
+        isRankedSelectionPolicy(item.selectionPolicy)
+          ? item.selectionPolicy
           : undefined,
       candidateCount: item.candidateCount,
       publishedDriverCount: item.publishedDriverCount,
       expectedDriverCount:
-        item.selectionPolicy === RANKED_SELECTION_POLICY ? 15 : undefined,
+        isRankedSelectionPolicy(item.selectionPolicy) ? 15 : undefined,
     });
     navigateJob(item.id);
   }
@@ -857,8 +883,10 @@ export default function EsgDriversTool() {
     setExportingJobId(activeJobId);
 
     try {
+      const exportQuery =
+        displayOrder === "alphabetical" ? "?order=alphabetical" : "";
       const response = await fetch(
-        `/api/esg/drivers/${encodeURIComponent(activeJobId)}/export`,
+        `/api/esg/drivers/${encodeURIComponent(activeJobId)}/export${exportQuery}`,
         { cache: "no-store" },
       );
 
@@ -939,8 +967,8 @@ export default function EsgDriversTool() {
         error: null,
         activity: Array.isArray(data.job?.activity) ? data.job.activity : [],
         selectionPolicy:
-          data.job?.selectionPolicy === RANKED_SELECTION_POLICY
-            ? RANKED_SELECTION_POLICY
+          isRankedSelectionPolicy(data.job?.selectionPolicy)
+            ? data.job.selectionPolicy
             : undefined,
         candidateCount: toOptionalCount(data.job?.candidateCount),
         candidateAssessedCount: toOptionalCount(data.job?.candidateAssessedCount),
@@ -1028,6 +1056,7 @@ export default function EsgDriversTool() {
           sector={sector}
           language={language}
           workbookCount={status?.candidateCount ?? selectedWorkbookCount}
+           displayOrder={displayOrder}
           canceling={Boolean(deletingJobId && deletingJobId === jobId)}
           onCancel={() => void cancelActiveGeneration()}
           viewMode={viewMode}
@@ -1046,6 +1075,7 @@ export default function EsgDriversTool() {
           onRetryMissingDrivers={() => void retryMissingDrivers()}
           onSlideChange={setActiveSlideIndex}
           onViewModeChange={setViewMode}
+           onDisplayOrderChange={setDisplayOrder}
           onExpandedDriverChange={setExpandedDriverId}
         />
       )}
@@ -1419,7 +1449,7 @@ function DriversHome({
 
                 <div className="mt-5 grid grid-cols-3 gap-2">
                   <SmallStat
-                    label={item.selectionPolicy === RANKED_SELECTION_POLICY ? "Published" : "Drivers"}
+                    label={isRankedSelectionPolicy(item.selectionPolicy) ? "Published" : "Drivers"}
                     value={item.publishedDriverCount ?? item.driverCount ?? 0}
                   />
                   <SmallStat label="Progress" value={item.progress || 0} suffix="%" />
@@ -1429,7 +1459,7 @@ function DriversHome({
                   />
                 </div>
 
-                {item.selectionPolicy === RANKED_SELECTION_POLICY && (
+                {isRankedSelectionPolicy(item.selectionPolicy) && (
                   <p className="mt-2 text-xs font-semibold text-[#68756c]">
                     {item.candidateCount ?? "—"} workbook candidates assessed
                   </p>
@@ -1815,7 +1845,7 @@ function ProcessingView({
 
   const activity = useMemo(() => status?.activity ?? [], [status?.activity]);
   const model = useMemo(() => deriveProcessingModel(activity, status?.driverPlan || Array.from({ length: workbookCount }, (_, i) => ({ id: String(i + 1), number: i + 1, title: "", section: "Workbook drivers" }))), [activity, status?.driverPlan, workbookCount]);
-  const isRanked = status?.selectionPolicy === RANKED_SELECTION_POLICY;
+  const isRanked = isRankedSelectionPolicy(status?.selectionPolicy);
   const candidateTotal = Math.max(
     0,
     status?.candidateCount ?? status?.driverPlan?.length ?? model.slots.length,
@@ -2373,6 +2403,7 @@ function DriverDetailPage({
   sector,
   language,
   workbookCount,
+  displayOrder,
   canceling,
   onCancel,
   viewMode,
@@ -2391,6 +2422,7 @@ function DriverDetailPage({
   onRetryMissingDrivers,
   onSlideChange,
   onViewModeChange,
+  onDisplayOrderChange,
   onExpandedDriverChange,
 }: {
   result: EsgDriverResult | null;
@@ -2403,6 +2435,7 @@ function DriverDetailPage({
   sector: string;
   language: string;
   workbookCount: number;
+  displayOrder: DriverDisplayOrder;
   canceling: boolean;
   onCancel: () => void;
   viewMode: DriverViewMode;
@@ -2421,6 +2454,7 @@ function DriverDetailPage({
   onRetryMissingDrivers: () => void;
   onSlideChange: (index: number) => void;
   onViewModeChange: (mode: DriverViewMode) => void;
+  onDisplayOrderChange: (order: DriverDisplayOrder) => void;
   onExpandedDriverChange: (driverId: string | null) => void;
 }) {
   if (loadingJob && !result && !status) {
@@ -2503,11 +2537,18 @@ function DriverDetailPage({
     ? result.selection?.requestedCount ?? 15
     : result.expectedDriverCount ?? result.drivers.length;
   const supportedCount = result.verifiedDriverCount ?? result.drivers.length;
+  const showRelevanceRank = ranked && displayOrder === "report"
+    && result.selection?.policyVersion !== CATEGORY_SELECTION_POLICY;
   return (
     <main className="grid min-h-[calc(100vh-151px)] grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(0,1fr)_360px]">
       <aside className="border-b border-[#d7ddd6] bg-[#f8faf5] lg:border-b-0 lg:border-r">
         <div className="sticky top-0 space-y-5 p-4 lg:max-h-[calc(100vh-88px)] lg:overflow-y-auto">
           <DeckBrief result={result} summary={accuracySummary} ranked={ranked} />
+          <DisplayOrderToggle
+            displayOrder={displayOrder}
+            categoryBalanced={result.selection?.policyVersion === CATEGORY_SELECTION_POLICY}
+            onChange={onDisplayOrderChange}
+          />
           <ViewToggle viewMode={viewMode} onViewModeChange={onViewModeChange} />
           <SlideRail
             drivers={drivers}
@@ -2573,6 +2614,7 @@ function DriverDetailPage({
             activeSlideIndex={activeSlideIndex}
             drivers={drivers}
             ranked={ranked}
+            showRelevanceRank={showRelevanceRank}
             isRtl={isRtl}
             showEmbeddedEvidence={false}
             onSlideChange={onSlideChange}
@@ -2582,6 +2624,7 @@ function DriverDetailPage({
             drivers={drivers}
             evidenceById={evidenceById}
             ranked={ranked}
+            showRelevanceRank={showRelevanceRank}
             expandedDriverId={expandedDriverId}
             isRtl={isRtl}
             onExpandedDriverChange={onExpandedDriverChange}
@@ -2653,7 +2696,7 @@ function RankedCoverageNotice({
   onRetryMissingDrivers: () => void;
 }) {
   const selection = result.selection;
-  if (!selection || selection.policyVersion !== RANKED_SELECTION_POLICY) return null;
+  if (!selection || !isRankedSelectionPolicy(selection.policyVersion)) return null;
 
   const candidateById = new Map(
     (result.candidatePool || []).map((candidate) => [candidate.id, candidate]),
@@ -2666,6 +2709,28 @@ function RankedCoverageNotice({
     item.reason === "unavailable" || item.reason === "unscored",
   );
   const isComplete = publishedCount === requestedCount;
+  const isCategoryBalanced = selection.policyVersion === CATEGORY_SELECTION_POLICY;
+  const categoryRows = isCategoryBalanced
+    ? DRIVER_REPORT_CATEGORIES.map((category) => {
+        const quota = selection.categoryQuotas?.find((item) => item.category === category);
+        const published = result.drivers.filter(
+          (driver) => driverReportCategory(driver) === category,
+        ).length;
+        const requested = quota?.requestedCount ?? 3;
+        const gap = Math.max(0, quota?.gap ?? requested - published);
+        const candidateCount = quota?.candidateCount ?? 0;
+        const eligibleCandidateCount = quota?.eligibleCandidateCount ?? 0;
+        return {
+          category,
+          published,
+          requested,
+          gap,
+          candidateCount,
+          eligibleCandidateCount,
+        };
+      })
+    : [];
+  const totalCategoryGap = categoryRows.reduce((total, row) => total + row.gap, 0);
 
   return (
     <section
@@ -2679,18 +2744,26 @@ function RankedCoverageNotice({
       <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
         <div className="max-w-4xl leading-6">
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold">
-            <span className="font-bold">Relevance-ranked report:</span>
+            <span className="font-bold">
+              {isCategoryBalanced ? "Category-balanced report:" : "Relevance-ranked report:"}
+            </span>
             <span>
-              {publishedCount} of {requestedCount} requested drivers published from {candidateCount} workbook candidates.
+              {isCategoryBalanced
+                ? `${publishedCount} of ${requestedCount} requested drivers published across five categories.`
+                : `${publishedCount} of ${requestedCount} requested drivers published from ${candidateCount} workbook candidates.`}
             </span>
           </p>
           <p className="mt-1 text-xs leading-5 opacity-85">
-            The report is ordered by the stored relevance score. Candidate assessment coverage is kept separately for audit and does not add extra report cards.
-            {isComplete && retryableExcluded.length > 0
-              ? ` The report is complete; ${retryableExcluded.length} candidate${retryableExcluded.length === 1 ? " remains" : "s remain"} available for retry.`
-              : !isComplete
-                ? " Fewer than 15 candidates passed the publication gates."
-                : ""}
+            {isCategoryBalanced
+              ? "The report keeps the workbook category order and ranks candidates by relevance within each category."
+              : "The report is ordered by the stored relevance score. Candidate assessment coverage is kept separately for audit and does not add extra report cards."}
+            {isCategoryBalanced && totalCategoryGap > 0
+              ? ` ${totalCategoryGap} ${totalCategoryGap === 1 ? "category slot is" : "category slots are"} still unfilled: not enough distinct eligible drivers cleared the evidence, relevance, category, and duplicate gates. Update the workbook if necessary.`
+              : isComplete && retryableExcluded.length > 0
+                ? ` The report is complete; ${retryableExcluded.length} candidate${retryableExcluded.length === 1 ? " remains" : "s remain"} available for retry.`
+                : !isComplete
+                  ? " Fewer than 15 candidates passed the publication gates."
+                  : ""}
           </p>
           <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-bold">
             <span className="rounded-full border border-current/15 bg-white/60 px-2 py-1">
@@ -2700,6 +2773,35 @@ function RankedCoverageNotice({
               {selection.eligibleCandidateCount} eligible after scoring
             </span>
           </div>
+
+          {isCategoryBalanced && (
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5" data-testid="category-coverage-summary">
+              {categoryRows.map((row) => (
+                <div
+                  key={row.category}
+                  className={`rounded-[5px] border px-2.5 py-2 ${
+                    row.gap > 0
+                      ? "border-amber-300 bg-amber-50/70"
+                      : "border-current/10 bg-white/60"
+                  }`}
+                >
+                  <p className="text-[11px] font-bold leading-4">{row.category}</p>
+                  <p className="mt-1 font-mono text-xs font-bold">
+                    {row.published}/{row.requested} published
+                  </p>
+                  <p className="mt-1 text-[10px] leading-4 opacity-80">
+                    {row.gap > 0
+                      ? row.eligibleCandidateCount > 0
+                        ? `${row.eligibleCandidateCount} qualifying candidate${row.eligibleCandidateCount === 1 ? "" : "s"}; not enough distinct eligible drivers cleared every publication gate for ${row.gap} slot${row.gap === 1 ? "" : "s"}. Update the workbook if necessary.`
+                        : row.candidateCount > 0
+                          ? `${row.candidateCount} candidate${row.candidateCount === 1 ? "" : "s"} assessed; none passed the publication gates.`
+                          : "No workbook candidates were available for this category."
+                      : `${row.candidateCount} workbook candidate${row.candidateCount === 1 ? "" : "s"} assessed.`}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {canRetryMissingDrivers && (
@@ -2809,7 +2911,9 @@ function DeckBrief({
 
       {ranked && (
         <p className="mt-3 rounded-[5px] bg-[#eaf4df] px-2.5 py-2 text-xs font-semibold leading-5 text-[#46632e]">
-          Top {result.selection?.requestedCount ?? 15} report drivers from {result.selection?.candidateCount ?? result.candidatePool?.length ?? 0} workbook candidates
+          {result.selection?.policyVersion === CATEGORY_SELECTION_POLICY
+            ? `${result.drivers.length} report drivers`
+            : `Top ${result.selection?.requestedCount ?? 15} report drivers`} from {result.selection?.candidateCount ?? result.candidatePool?.length ?? 0} workbook candidates
         </p>
       )}
 
@@ -2838,6 +2942,55 @@ function MetricTile({ label, value }: { label: string; value: number | string })
         {label}
       </p>
     </div>
+  );
+}
+
+function DisplayOrderToggle({
+  displayOrder,
+  categoryBalanced,
+  onChange,
+}: {
+  displayOrder: DriverDisplayOrder;
+  categoryBalanced: boolean;
+  onChange: (order: DriverDisplayOrder) => void;
+}) {
+  return (
+    <section aria-label="Driver display order">
+      <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[#6b786d]">
+        Display order
+      </p>
+      <div
+        className="grid grid-cols-2 overflow-hidden rounded-[6px] border border-[#cfd8d0] bg-white p-1"
+        role="group"
+        aria-label="Choose driver display order"
+      >
+        {([
+          ["report", "Report order"],
+          ["alphabetical", "A-Z"],
+        ] as const).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={displayOrder === value}
+            onClick={() => onChange(value)}
+            className={`rounded-[4px] px-2 py-2 text-xs font-bold transition focus:outline-none focus:ring-2 focus:ring-[#d6ff66]/70 ${
+              displayOrder === value
+                ? "bg-[#172019] text-white"
+                : "text-[#536156] hover:bg-[#edf2ed]"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <p className="mt-2 text-[11px] leading-4 text-[#68756c]">
+        {displayOrder === "alphabetical"
+          ? "Sorted A-Z across the selected drivers; category labels stay visible."
+          : categoryBalanced
+            ? "Saved report order: categories first, then relevance within each category."
+            : "Saved report order: keep this pack's stored order for compatibility."}
+      </p>
+    </section>
   );
 }
 
@@ -2962,7 +3115,7 @@ function SlideRail({
                     selected ? "text-[#d6ff66]" : "text-[#75857a]"
                   }`}
                 >
-                  {driver.driverSection} / {driver.driverType}
+                  {driverCategoryLabel(driver)} / {driver.driverType}
                 </span>
                 <span className="mt-0.5 line-clamp-2 text-sm font-semibold leading-5">
                   {driver.driverTitle}
@@ -3000,6 +3153,7 @@ function DeckCanvas({
   activeSlideIndex,
   drivers,
   ranked,
+  showRelevanceRank,
   isRtl,
   showEmbeddedEvidence = true,
   onSlideChange,
@@ -3010,6 +3164,7 @@ function DeckCanvas({
   activeSlideIndex: number;
   drivers: EsgDriver[];
   ranked: boolean;
+  showRelevanceRank: boolean;
   isRtl: boolean;
   showEmbeddedEvidence?: boolean;
   onSlideChange: (index: number) => void;
@@ -3024,10 +3179,10 @@ function DeckCanvas({
         <div>
           <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#627166]">
             <BookOpen className="h-4 w-4" />
-            {ranked ? "Rank" : "Driver"} {activeSlideIndex + 1} of {drivers.length}
+            {showRelevanceRank ? "Rank" : "Driver"} {activeSlideIndex + 1} of {drivers.length}
           </div>
           <p className="mt-1 text-sm text-[#68756c]">
-            {activeDriver.driverSection} / {activeDriver.driverType}
+            {driverCategoryLabel(activeDriver)} · {activeDriver.driverSection} / {activeDriver.driverType}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -3056,6 +3211,7 @@ function DeckCanvas({
         <div className="p-6 md:p-8">
           <div className="mb-7 flex flex-wrap items-start justify-between gap-4">
             <div className="flex min-w-0 flex-wrap gap-2">
+              <SlideChip>Report category: {driverCategoryLabel(activeDriver)}</SlideChip>
               <SlideChip>{activeDriver.driverSection}</SlideChip>
               <SlideChip>{activeDriver.driverType}</SlideChip>
               {activeDriver.driverLogicId && (
@@ -3143,7 +3299,7 @@ function DeckCanvas({
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#68756c]">
                 Footnotes
               </p>
-              <SourceLinkList driver={activeDriver} />
+                <SourceLinkList driver={activeDriver} sources={activeDriverSources} />
             </div>
           </footer>
         </div>
@@ -3231,7 +3387,7 @@ function EvidenceInspector({
               Driver
             </p>
             <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.12em] text-[#6b786d]">
-              {driver.driverSection} / {driver.driverType}
+              {driverCategoryLabel(driver)} · {driver.driverSection} / {driver.driverType}
             </p>
             <p className="mt-2 text-sm font-semibold leading-5 text-[#172019]">
               {driver.driverTitle}
@@ -3252,7 +3408,17 @@ function EvidenceInspector({
           <DriverEvidenceBasis driver={driver} />
           {driver.statusReason && <p className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{driver.statusReason}</p>}
           {driver.baseline && <details className="rounded border border-[#d6ded7] bg-white p-3 text-sm"><summary className="cursor-pointer font-semibold">Original Excel row {driver.workbookRow} · unverified baseline</summary><p className="mt-2 whitespace-pre-wrap">{driver.baseline.logic}</p><p className="mt-2 whitespace-pre-wrap">{driver.baseline.evidenceKpi}</p><p className="mt-2">{driver.baseline.keySources}</p></details>}
-          {driver.citations?.map((citation, index) => <blockquote key={`${citation.passageId}-${index}`} className="border-l-2 border-[#91b268] bg-white p-3 text-sm leading-6"><p dir="auto">{citation.quote}</p><footer className="mt-2 text-xs text-[#68756c]">{sources.find((s) => s.id === citation.sourceId)?.title} · {citation.location}</footer></blockquote>)}
+          {driver.citations?.map((citation, index) => {
+            const citationSource = sources.find((source) => source.id === citation.sourceId);
+            return (
+              <blockquote key={`${citation.passageId}-${index}`} className="border-l-2 border-[#91b268] bg-white p-3 text-sm leading-6">
+                <p dir="auto">{citation.quote}</p>
+                <footer className="mt-2 text-xs text-[#68756c]">
+                  {citationSource?.title || citation.sourceId} · {citation.location} · {sourceDisplayDate(citationSource)}
+                </footer>
+              </blockquote>
+            );
+          })}
           <SourceDetailGrid sources={sources} compact />
         </div>
       ) : (
@@ -3277,6 +3443,7 @@ function DriversMatrix({
   drivers,
   evidenceById,
   ranked,
+  showRelevanceRank,
   expandedDriverId,
   isRtl,
   onExpandedDriverChange,
@@ -3284,6 +3451,7 @@ function DriversMatrix({
   drivers: EsgDriver[];
   evidenceById: Map<string, EsgDriverSource>;
   ranked: boolean;
+  showRelevanceRank: boolean;
   expandedDriverId: string | null;
   isRtl: boolean;
   onExpandedDriverChange: (driverId: string | null) => void;
@@ -3301,7 +3469,7 @@ function DriversMatrix({
               <tr>
                 {(ranked
                   ? [
-                      "Rank",
+                      showRelevanceRank ? "Rank" : "No.",
                       "Section",
                       "Type",
                       "Title",
@@ -3361,7 +3529,7 @@ function DriversMatrix({
                           ) : (
                             <ChevronRight className="mt-0.5 h-4 w-4 text-[#637269]" />
                           )}
-                          {driver.driverSection}
+                          {driverCategoryLabel(driver)}
                         </button>
                       </td>
                       <td className="w-36 px-3 py-3 text-[#536156]">
@@ -3372,7 +3540,7 @@ function DriversMatrix({
                         dir={isRtl ? "rtl" : "ltr"}
                       >
                         <span className="block text-[10px] font-bold uppercase tracking-[0.12em] text-[#75857a]">
-                          {driver.driverSection} / {driver.driverType}
+                          {driverCategoryLabel(driver)} · {driver.driverSection} / {driver.driverType}
                         </span>
                         <span className="mt-1 block">{driver.driverTitle}</span>
                       </td>
@@ -3416,7 +3584,7 @@ function DriversMatrix({
                         </div>
                       </td>
                       <td className="w-60 px-3 py-3">
-                        <SourceLinkList driver={driver} />
+                          <SourceLinkList driver={driver} sources={sources} />
                       </td>
                       <td className="w-28 px-3 py-3">
                         {ranked || driver.generationStatus ? (
@@ -3564,24 +3732,40 @@ function StatusDot({ review }: { review: AccuracyReview }) {
   return <span className={`mt-1 h-2.5 w-2.5 rounded-full ${classes}`} />;
 }
 
-function SourceLinkList({ driver }: { driver: EsgDriver }) {
-  const links = Array.from(new Set(driver.sourceLinks)).slice(0, 2);
+function SourceLinkList({
+  driver,
+  sources,
+}: {
+  driver: EsgDriver;
+  sources: readonly EsgDriverSource[];
+}) {
+  const links = Array.from(new Set(driver.sourceLinks));
   return (
     <div className="mt-2 space-y-1" dir="ltr">
-      {links.map((link, index) => (
-        <a
-          key={`${driver.id}-${link}`}
-          href={link}
-          target="_blank"
-          rel="noreferrer"
-          className="flex min-w-0 items-center gap-1 text-xs font-bold text-[#1f5fb8] hover:underline"
-        >
-          <ExternalLink className="h-3 w-3 flex-none" />
-          <span className="truncate">
-            {index + 1}. {sourceLinkLabel(link)}
-          </span>
-        </a>
-      ))}
+      {links.map((link, index) => {
+        const source =
+          sources.find(
+            (item) => item.url === link && driver.sourceRefs.includes(item.id),
+          ) || sources.find((item) => item.url === link);
+        return (
+          <div key={`${driver.id}-${link}`} className="min-w-0">
+            <a
+              href={link}
+              target="_blank"
+              rel="noreferrer"
+              className="flex min-w-0 items-center gap-1 text-xs font-bold text-[#1f5fb8] hover:underline"
+            >
+              <ExternalLink className="h-3 w-3 flex-none" />
+              <span className="truncate">
+                {index + 1}. {sourceLinkLabel(link)}
+              </span>
+            </a>
+            <span className="ml-4 block text-[10px] font-semibold text-[#68756c]">
+              {sourceDisplayDate(source)}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -3729,13 +3913,14 @@ function getDriverSources(
       .filter((source): source is EsgDriverSource => Boolean(source)),
   );
 
-  if (byRef.length > 0) return byRef;
-
-  return uniqueSourcesById(
-    Array.from(evidenceById.values()).filter((source) =>
-      driver.sourceLinks.includes(source.url),
-    ),
+  const byLink = Array.from(evidenceById.values()).filter((source) =>
+    driver.sourceLinks.includes(source.url),
   );
+
+  // Keep both persisted references and URL-only legacy citations. This makes
+  // each cited source visible with its own date label instead of silently
+  // dropping a source whenever the two legacy fields disagree.
+  return uniqueSourcesById([...byRef, ...byLink]);
 }
 
 function uniqueSourcesById(sources: EsgDriverSource[]): EsgDriverSource[] {
@@ -3745,6 +3930,10 @@ function uniqueSourcesById(sources: EsgDriverSource[]): EsgDriverSource[] {
     seen.add(source.id);
     return true;
   });
+}
+
+function driverCategoryLabel(driver: Pick<EsgDriver, "driverSection" | "driverType">): string {
+  return driverReportCategory(driver) || driver.driverSection || "Unmapped category";
 }
 
 function buildAccuracySummary(
@@ -3882,27 +4071,11 @@ function isLikelyGarbled(text: string): boolean {
   return replacement || oddChars > sample.length * 0.16 || letters < 30 || spaces < 8;
 }
 
-export function sourceDisplayDate(source: EsgDriverSource): string {
-  if (source.sourceDate?.value) {
-    return `${sourceDateKindLabel(source.sourceDate.kind)} ${formatSourceDate(source.sourceDate.value)}`;
-  }
-  // Legacy packs may only carry these raw fields. Preserve their precision and
-  // never use HTTP modification metadata as a publication date.
-  if (source.updatedDate) return `Updated ${formatSourceDate(source.updatedDate)}`;
-  if (source.publishedDate) return `Published ${formatSourceDate(source.publishedDate)}`;
-  return "Publication date not stated";
-}
-
-function sourceDateKindLabel(kind: NonNullable<EsgDriverSource["sourceDate"]>["kind"]): string {
-  switch (kind) {
-    case "updated":
-      return "Updated";
-    case "version-issued":
-      return "Version issued";
-    case "published":
-    default:
-      return "Published";
-  }
+export function sourceDisplayDate(source?: EsgDriverSource): string {
+  // Canonical source dates are the only dates shown beside evidence. Legacy
+  // packs without sourceDate remain supported and are explicitly marked as
+  // unknown; raw HTTP/published fields are not silently promoted here.
+  return sourceDateLabel(source);
 }
 
 function formatSourceDate(value: string): string {
@@ -3960,6 +4133,10 @@ function selectionExclusionLabel(
       return "Duplicate candidate excluded from the report.";
     case "below-cutoff":
       return "Below cutoff: ranked outside the requested report size.";
+    case "category-quota":
+      return "Category quota filled: another qualifying candidate filled this category slot.";
+    case "unmapped-category":
+      return "Unmapped category: this workbook row does not match a published report category.";
     default:
       return "Excluded from the published report.";
   }
@@ -3967,7 +4144,14 @@ function selectionExclusionLabel(
 
 type DriverSelectionLike = {
   excluded: Array<{
-    reason: "unavailable" | "unscored" | "below-threshold" | "duplicate" | "below-cutoff";
+    reason:
+      | "unavailable"
+      | "unscored"
+      | "below-threshold"
+      | "duplicate"
+      | "below-cutoff"
+      | "category-quota"
+      | "unmapped-category";
     driverId: string;
     duplicateOf?: string;
   }>;
@@ -4085,7 +4269,7 @@ function isRtlLanguage(language: string): boolean {
 }
 
 function hasRankedCandidateGap(result: EsgDriverResult): boolean {
-  if (result.selection?.policyVersion !== RANKED_SELECTION_POLICY) return false;
+  if (!isRankedSelectionPolicy(result.selection?.policyVersion)) return false;
   const excluded = result.selection.excluded || [];
   if (excluded.some(
     (item) => item.reason === "unavailable" || item.reason === "unscored",
@@ -4221,7 +4405,7 @@ function canRetryDriverResult(input: {
     return false;
   }
 
-  if (input.result.selection?.policyVersion === RANKED_SELECTION_POLICY) {
+  if (isRankedSelectionPolicy(input.result.selection?.policyVersion)) {
     // Ranked reports may be complete at 15 published drivers while still
     // retaining unavailable or unscored workbook candidates for a retry.
     return hasRankedCandidateGap(input.result);

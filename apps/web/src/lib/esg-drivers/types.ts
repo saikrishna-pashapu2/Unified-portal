@@ -82,6 +82,9 @@ export type EsgDriverSection =
   | "Capital Markets"
   | "Supply Chain";
 
+/** Selection policies are persisted in workbook checkpoints and result JSON. */
+export type DriverSelectionPolicy = "relevance-top15-v1" | "category-balanced15-v1";
+
 export type EsgDriverType = "General" | "Sector-related" | "Country-related";
 
 export interface EsgDriverSource {
@@ -259,6 +262,7 @@ export interface DriverRelevance {
     reviewer: { model: string; responseId: string | null };
     checks: { exactDriverSupport: boolean; noBorrowedObligations: boolean; urgencySupported: boolean; ratingsProportionate: boolean };
   };
+  /** Relevance is scored with the same rubric for both report selection policies. */
   policyVersion: 'relevance-top15-v1';
   score: number;
   band: 'high' | 'medium' | 'low';
@@ -270,14 +274,34 @@ export interface DriverRelevance {
 }
 
 export interface DriverSelection {
-  policyVersion: 'relevance-top15-v1';
+  policyVersion: DriverSelectionPolicy;
   requestedCount: 15;
   minimumScore: 50;
   candidateCount: number;
   supportedCandidateCount: number;
   eligibleCandidateCount: number;
   publishedDriverIds: string[];
-  excluded: Array<{ driverId: string; reason: 'unavailable' | 'unscored' | 'below-threshold' | 'duplicate' | 'below-cutoff'; duplicateOf?: string }>;
+  excluded: Array<{
+    driverId: string;
+    reason:
+      | 'unavailable'
+      | 'unscored'
+      | 'below-threshold'
+      | 'duplicate'
+      | 'below-cutoff'
+      | 'category-quota'
+      | 'unmapped-category';
+    duplicateOf?: string;
+  }>;
+  /** Present only for the category-balanced policy; order is the report order. */
+  categoryQuotas?: Array<{
+    category: EsgDriverSection;
+    requestedCount: 3;
+    candidateCount: number;
+    eligibleCandidateCount: number;
+    publishedDriverIds: string[];
+    gap: number;
+  }>;
   assessedAt: string;
 }
 
@@ -402,7 +426,7 @@ export interface EsgWorkbookCheckpoint {
   evidenceContract?: 'excel-evidence-v3';
   qualityPolicy?: '2026-09-editorial-v1' | '2026-09-editorial-v2';
   /** Absent on existing full-workbook jobs; new jobs explicitly opt into the ranked report contract. */
-  selectionPolicy?: 'relevance-top15-v1';
+  selectionPolicy?: DriverSelectionPolicy;
   workflow: 'excel-sources';
   /** Catalog row identity for dynamic jobs; absent on legacy workbook checkpoints. */
   catalogVersionId?: string;
@@ -428,7 +452,7 @@ export interface GenerateEsgDriverOptions {
 
 export interface EsgDriverJob {
   id: string;
-  selectionPolicy?: 'relevance-top15-v1';
+  selectionPolicy?: DriverSelectionPolicy;
   candidateCount?: number;
   candidateAssessedCount?: number;
   publishedDriverCount?: number;

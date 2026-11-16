@@ -53,15 +53,16 @@ describe("ESG Driver v5 queue routing", () => {
         ["esg_driver_excel_v5"],
         "esg_driver",
       ),
-    ).rejects.toThrow("may only claim esg_driver jobs");
+    ).rejects.toThrow("unversioned");
   });
 
-  it("makes the production ESG-only worker claim v5 exclusively", () => {
+  it("makes the production ESG-only worker claim v5 and v6 exclusively", () => {
     const worker = readFileSync(
       fileURLToPath(new URL("../../esg-driver-worker.mts", import.meta.url)),
       "utf8",
     );
-    expect(worker).toContain('? (["esg_driver_excel_v5"] as const)');
+    expect(worker).toContain('? (["esg_driver_excel_v5", "esg_driver_excel_v6"] as const)');
     expect(worker).toContain('jobType === "esg_driver_excel_v5"');
+    expect(worker).toContain('jobType === "esg_driver_excel_v6"');
   });
 });

@@ -17,6 +17,7 @@ import type { ClaimedBackgroundJob } from "@/lib/jobs/queue";
 import { throwIfJobCancelled } from "@/lib/jobs/queue";
 import { assertWorkbookResult } from './result-integrity';
 import { canonicalizeEsgDriverCountry, canonicalizeEsgDriverSector } from './coverage';
+import { CATEGORY_SELECTION_POLICY, isRankedSelectionPolicy } from './ranking-policy';
 
 function payloadMatchesPinnedScope(
   payload: GenerateEsgDriversInput,
@@ -40,10 +41,20 @@ export async function runEsgDriverGenerationJob(
       includeCheckpoint: true,
     });
     const checkpoint = existing?.checkpoint;
-    if (job.jobType === "esg_driver_excel_v5" && checkpoint?.version !== 2) {
+    if (job.jobType === "esg_driver_excel_v6") {
+      if (checkpoint?.version !== 2) {
+        throw new Error("ESG Driver v6 jobs require an immutable workbook checkpoint.");
+      }
+      if (checkpoint.selectionPolicy !== CATEGORY_SELECTION_POLICY) {
+        throw new Error("ESG Driver v6 jobs require the category-balanced selection policy.");
+      }
+    } else if (job.jobType === "esg_driver_excel_v5" && checkpoint?.version !== 2) {
       throw new Error("ESG Driver v5 jobs require an immutable workbook checkpoint.");
     }
     if (checkpoint?.version === 2) {
+      if (checkpoint.selectionPolicy && !isRankedSelectionPolicy(checkpoint.selectionPolicy)) {
+        throw new Error(`Unsupported driver selection policy: ${String(checkpoint.selectionPolicy)}`);
+      }
       const payload = job.payload as GenerateEsgDriversInput & {
         catalogVersionId?: unknown;
         workbookSha256?: unknown;
@@ -84,7 +95,7 @@ export async function runEsgDriverGenerationJob(
     // The unversioned queue and v3/v4 rows may still carry the original
     // selection-runtime checkpoint. Keep those jobs on the legacy harness;
     // version 5 is always the catalog-pinned workbook workflow above.
-    const generate = job.jobType !== "esg_driver_excel_v5" && checkpoint?.version !== 2
+    const generate = job.jobType !== "esg_driver_excel_v5" && job.jobType !== "esg_driver_excel_v6" && checkpoint?.version !== 2
       ? generateLegacyEsgDriverResult
       : generateEsgDriverResult;
     const result = await (generate as typeof generateEsgDriverResult)(job.payload, {

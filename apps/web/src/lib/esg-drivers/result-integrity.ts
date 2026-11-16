@@ -1,13 +1,19 @@
 import type { AnyEsgDriverCheckpoint, EsgDriverResult, EsgWorkbookCheckpoint } from './types';
 import { normalizeWorkbookUrl } from './workbook-types';
 import { ESG_DRIVER_QUALITY_POLICY, EVIDENCE_STATUS_LABELS, hasSuggestedEvidenceKpi } from './quality-policy';
-import { DRIVER_SELECTION_POLICY, MAX_PUBLISHED_DRIVERS, relevanceIssues, relevanceFailureIssues, selectRankedDrivers } from './ranking-policy';
+import {
+  MAX_PUBLISHED_DRIVERS,
+  isRankedSelectionPolicy,
+  relevanceIssues,
+  relevanceFailureIssues,
+  selectDriversForPolicy,
+} from './ranking-policy';
 import { relevanceEvidenceFingerprint } from './relevance-evidence';
 import { isPlausibleSourceDate } from './excel-source-metadata';
 
 export const ESG_EVIDENCE_CONTRACT = 'excel-evidence-v3' as const;
-export const ESG_DRIVER_QUEUE_TYPE = 'esg_driver_excel_v5' as const;
-export const isEsgDriverJobType = (type: string) => type === ESG_DRIVER_QUEUE_TYPE || type === 'esg_driver_excel_v4' || type === 'esg_driver_excel_v3' || type === 'esg_driver';
+export const ESG_DRIVER_QUEUE_TYPE = 'esg_driver_excel_v6' as const;
+export const isEsgDriverJobType = (type: string) => type === ESG_DRIVER_QUEUE_TYPE || type === 'esg_driver_excel_v5' || type === 'esg_driver_excel_v4' || type === 'esg_driver_excel_v3' || type === 'esg_driver';
 
 // JSONB reorders object keys; compare values canonically across the DB boundary.
 const canonicalJson = (value: unknown): string => JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item) ? Object.fromEntries(Object.keys(item).sort().map((key) => [key, item[key]])) : item);
@@ -33,7 +39,7 @@ export function workbookResultIssues(result: EsgDriverResult, checkpoint: EsgWor
   if (checkpoint.workbookSha256 && result.workbookSha256 && result.workbookSha256 !== checkpoint.workbookSha256) issue('The result does not match the pinned workbook hash.');
   if (checkpoint.workbookSha256 && !result.workbookSha256 && checkpoint.catalogVersionId) issue('The result is missing the pinned workbook hash.');
   if (['country', 'sector', 'language'].some((key) => result[key as keyof typeof checkpoint.input] !== checkpoint.input[key as keyof typeof checkpoint.input])) issue('The result does not match the requested country, sector and language.');
-  const ranked = checkpoint.selectionPolicy === DRIVER_SELECTION_POLICY;
+  const ranked = isRankedSelectionPolicy(checkpoint.selectionPolicy);
   if (checkpoint.selectionPolicy && !ranked) issue('Unsupported driver selection policy.');
   if (!ranked && (result.selection || result.candidatePool)) issue('Ranked output does not match the saved selection policy.');
   const published = Array.isArray(result.drivers) ? result.drivers : [];
@@ -92,11 +98,14 @@ export function workbookResultIssues(result: EsgDriverResult, checkpoint: EsgWor
   const verified = drivers.filter((d) => d.generationStatus === 'verified').length;
   if (ranked) {
     const selection = result.selection;
-    if (!selection || selection.policyVersion !== DRIVER_SELECTION_POLICY || !Number.isFinite(Date.parse(selection.assessedAt))) issue('A ranked result is missing its selection record.');
-    const expected = selectRankedDrivers(drivers, selection?.assessedAt || result.generatedAt);
-    if (canonicalJson(selection) !== canonicalJson(expected.selection) || canonicalJson(published) !== canonicalJson(expected.drivers)) issue('Published drivers or ranking differ from the saved rubric and candidate assessment.');
+    const expectedPolicy = checkpoint.selectionPolicy;
+    if (!selection || !isRankedSelectionPolicy(expectedPolicy) || selection.policyVersion !== expectedPolicy || !Number.isFinite(Date.parse(selection.assessedAt))) issue('A ranked result is missing its selection record.');
+    if (isRankedSelectionPolicy(expectedPolicy)) {
+      const expected = selectDriversForPolicy(drivers, expectedPolicy, selection?.assessedAt || result.generatedAt);
+      if (canonicalJson(selection) !== canonicalJson(expected.selection) || canonicalJson(published) !== canonicalJson(expected.drivers)) issue('Published drivers or ranking differ from the saved rubric and candidate assessment.');
+      if ((verified < drivers.length || expected.selection.excluded.some((item) => item.reason === 'unscored' || item.reason === 'unmapped-category') || expected.selection.categoryQuotas?.some((quota) => quota.gap > 0)) && !result.warnings?.length) issue('Unverified candidate coverage gaps must remain visible.');
+    }
     if (result.expectedDriverCount !== MAX_PUBLISHED_DRIVERS || result.verifiedDriverCount !== published.length || result.completion !== (published.length === MAX_PUBLISHED_DRIVERS ? 'complete' : 'partial')) issue('The ranked completion label or driver count is incorrect.');
-    if ((verified < drivers.length || expected.selection.excluded.some((item) => item.reason === 'unscored')) && !result.warnings?.length) issue('Unverified candidate coverage gaps must remain visible.');
   } else if (result.verifiedDriverCount !== verified || result.completion !== (verified === checkpoint.definitions.length ? 'complete' : 'partial')) issue('The completion label or verified count is incorrect.');
   if (checkpoint.evidenceContract === ESG_EVIDENCE_CONTRACT && result.provenance?.contract !== ESG_EVIDENCE_CONTRACT) issue('The worker did not use the required evidence contract.');
   return issues;
@@ -109,7 +118,7 @@ export function assertWorkbookResult(result: EsgDriverResult, checkpoint: AnyEsg
   if (checkpoint?.version === 1) return;
   if (checkpoint?.version !== 2) throw new EsgDriverQualityGateError(['A pinned workbook checkpoint is required. Start a new workbook run.']);
   const issues = workbookResultIssues(result, checkpoint);
-  const candidates = checkpoint.selectionPolicy === DRIVER_SELECTION_POLICY ? result.candidatePool || [] : result.drivers;
+  const candidates = isRankedSelectionPolicy(checkpoint.selectionPolicy) ? result.candidatePool || [] : result.drivers;
   if (requireSavedSlots && (checkpoint.slots.length !== checkpoint.definitions.length || candidates.some((driver) => canonicalJson(checkpoint.slots.find((s) => s.driver.id === driver.id)?.driver) !== canonicalJson(driver)))) issues.push('The result does not match the durably reviewed checkpoint rows.');
   if (issues.length) throw new EsgDriverQualityGateError(issues);
 }
@@ -117,6 +126,6 @@ export function assertWorkbookResult(result: EsgDriverResult, checkpoint: AnyEsg
 /** Legacy history remains readable; a workbook job must never masquerade as legacy output. */
 export function savedResultError(result: EsgDriverResult, checkpoint: AnyEsgDriverCheckpoint | null | undefined): string | null {
   if (checkpoint?.version !== 2 && result.workflow !== 'excel-sources') return null;
-  try { assertWorkbookResult(result, checkpoint, checkpoint?.version === 2 && checkpoint.selectionPolicy === DRIVER_SELECTION_POLICY); return null; }
+  try { assertWorkbookResult(result, checkpoint, checkpoint?.version === 2 && isRankedSelectionPolicy(checkpoint.selectionPolicy)); return null; }
   catch { return 'This saved result failed workbook verification and cannot be used or exported. Start a new run to assess the workbook drivers from permitted sources.'; }
 }

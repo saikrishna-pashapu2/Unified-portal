@@ -1,12 +1,58 @@
-import type { DriverRelevance, DriverRelevanceDimension, DriverSelection, EsgDriver } from './types';
+import type {
+  DriverRelevance,
+  DriverRelevanceDimension,
+  DriverSelection,
+  DriverSelectionPolicy,
+  EsgDriver,
+  EsgDriverSection,
+} from './types';
 
 export const DRIVER_SELECTION_POLICY = 'relevance-top15-v1' as const;
+export const CATEGORY_SELECTION_POLICY = 'category-balanced15-v1' as const;
 export const RELEVANCE_ASSESSMENT_VERSION = 'driver-specific-v2' as const;
 const RELEVANCE_REVIEW_ISSUE = 'Relevance assessment is missing its driver-specific evidence review.';
 export const MAX_PUBLISHED_DRIVERS = 15 as const;
+export const CATEGORY_QUOTA = 3 as const;
+/** The published report order is part of the persisted result contract. */
+export const DRIVER_REPORT_CATEGORIES = [
+  'Global Drivers',
+  'Regulatory Requirements',
+  'Capital Markets',
+  'Climate Risks',
+  'Supply Chain',
+] as const satisfies readonly EsgDriverSection[];
 export const MIN_RELEVANCE_SCORE = 50 as const;
 export const RELEVANCE_WEIGHTS = { country: 30, sector: 30, businessImpact: 25, urgency: 15 } as const;
 export const RELEVANCE_DIMENSIONS = Object.keys(RELEVANCE_WEIGHTS) as DriverRelevanceDimension[];
+
+export function isRankedSelectionPolicy(value: unknown): value is DriverSelectionPolicy {
+  return value === DRIVER_SELECTION_POLICY || value === CATEGORY_SELECTION_POLICY;
+}
+
+function normalizeCategoryLabel(value: string): string {
+  return value.normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('en-US');
+}
+
+/**
+ * Map an immutable workbook row to a report category. Global rows are identified
+ * by their section first; country rows use the workbook's normalized type label.
+ * No category is inferred from prose, title or score, so an unmapped row can
+ * never be silently relabelled to fill a quota.
+ */
+export function driverReportCategory(
+  driver: Pick<EsgDriver, 'driverSection' | 'driverType'>,
+): EsgDriverSection | null {
+  const section = normalizeCategoryLabel(driver.driverSection || '');
+  if (section === 'global drivers' || section === 'global driver') return 'Global Drivers';
+  const type = normalizeCategoryLabel(driver.driverType || '');
+  switch (type) {
+    case 'regulatory requirements': return 'Regulatory Requirements';
+    case 'capital markets': return 'Capital Markets';
+    case 'climate risks': return 'Climate Risks';
+    case 'supply chain': return 'Supply Chain';
+    default: return null;
+  }
+}
 
 /** Model ratings have anchored 0–5 bands; only application code computes points. */
 export function computeRelevanceScore(dimensions: DriverRelevance['dimensions']): number {
@@ -88,4 +134,217 @@ export function selectRankedDrivers(candidatePool: EsgDriver[], assessedAt = new
     eligibleCandidateCount: distinct.length, publishedDriverIds: drivers.map((d) => d.id),
     excluded: candidatePool.flatMap((d) => excluded.has(d.id) ? [excluded.get(d.id)!] : []), assessedAt,
   } };
+}
+
+type SelectionCandidate = {
+  driver: EsgDriver;
+  category: EsgDriverSection;
+  key: string;
+};
+
+function compareEligibleDrivers(left: EsgDriver, right: EsgDriver): number {
+  return (right.relevance?.score ?? -Infinity) - (left.relevance?.score ?? -Infinity)
+    || (left.workbookRow ?? Number.MAX_SAFE_INTEGER) - (right.workbookRow ?? Number.MAX_SAFE_INTEGER)
+    || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
+}
+
+function eligibilityReason(driver: EsgDriver): 'unavailable' | 'unscored' | 'below-threshold' | null {
+  return driver.generationStatus !== 'verified' ? 'unavailable'
+    : relevanceIssues(driver).length ? 'unscored'
+      : driver.relevance!.score < MIN_RELEVANCE_SCORE ? 'below-threshold' : null;
+}
+
+/** Small deterministic min-cost flow used to reserve duplicate aliases across categories. */
+interface FlowEdge {
+  to: number;
+  rev: number;
+  capacity: number;
+  cost: number;
+  candidateId?: string;
+}
+
+function addFlowEdge(graph: FlowEdge[][], from: number, to: number, capacity: number, cost: number, candidateId?: string): FlowEdge {
+  const forward: FlowEdge = { to, rev: graph[to].length, capacity, cost, ...(candidateId ? { candidateId } : {}) };
+  const reverse: FlowEdge = { to: from, rev: graph[from].length, capacity: 0, cost: -cost };
+  graph[from].push(forward);
+  graph[to].push(reverse);
+  return forward;
+}
+
+function selectCategoryCandidates(candidates: SelectionCandidate[]): Set<string> {
+  const keySet = Array.from(new Set(candidates.map((candidate) => candidate.key))).sort();
+  const categoryCount = DRIVER_REPORT_CATEGORIES.length;
+  const source = 0;
+  const categoryStart = 1;
+  const keyStart = categoryStart + categoryCount;
+  const sink = keyStart + keySet.length;
+  const graph: FlowEdge[][] = Array.from({ length: sink + 1 }, () => []);
+  const keyNodes = new Map(keySet.map((key, index) => [key, keyStart + index]));
+  const categoryNodes = new Map(DRIVER_REPORT_CATEGORIES.map((category, index) => [category, categoryStart + index]));
+
+  for (const category of DRIVER_REPORT_CATEGORIES) {
+    addFlowEdge(graph, source, categoryNodes.get(category)!, CATEGORY_QUOTA, 0);
+  }
+  Array.from(keyNodes.values()).forEach((node) => addFlowEdge(graph, node, sink, 1, 0));
+
+  const edgeRefs: FlowEdge[] = [];
+  const ordered = [...candidates].sort((left, right) => compareEligibleDrivers(left.driver, right.driver));
+  ordered.forEach((candidate, rank) => {
+    const from = categoryNodes.get(candidate.category);
+    const to = keyNodes.get(candidate.key);
+    if (from === undefined || to === undefined) return;
+    // A score point dominates deterministic workbook-order tie breaking. The
+    // scale also tolerates a future decimal score without changing the policy.
+    const cost = -Math.round((candidate.driver.relevance?.score ?? 0) * 1_000_000) + rank;
+    edgeRefs.push(addFlowEdge(graph, from, to, 1, cost, candidate.driver.id));
+  });
+
+  // Successive shortest augmenting paths yield a maximum-cardinality matching;
+  // its costs then maximize relevance score and finally preserve stable order.
+  while (true) {
+    const distance = Array<number>(graph.length).fill(Number.POSITIVE_INFINITY);
+    const previousNode = Array<number>(graph.length).fill(-1);
+    const previousEdge = Array<number>(graph.length).fill(-1);
+    const inQueue = Array<boolean>(graph.length).fill(false);
+    const queue: number[] = [source];
+    distance[source] = 0;
+    inQueue[source] = true;
+    for (let cursor = 0; cursor < queue.length; cursor += 1) {
+      const node = queue[cursor];
+      inQueue[node] = false;
+      graph[node].forEach((edge, edgeIndex) => {
+        if (edge.capacity <= 0 || !Number.isFinite(distance[node])) return;
+        const nextDistance = distance[node] + edge.cost;
+        if (nextDistance >= distance[edge.to]) return;
+        distance[edge.to] = nextDistance;
+        previousNode[edge.to] = node;
+        previousEdge[edge.to] = edgeIndex;
+        if (!inQueue[edge.to]) {
+          inQueue[edge.to] = true;
+          queue.push(edge.to);
+        }
+      });
+    }
+    if (!Number.isFinite(distance[sink])) break;
+    let node = sink;
+    while (node !== source) {
+      const from = previousNode[node];
+      const edge = graph[from][previousEdge[node]];
+      edge.capacity -= 1;
+      graph[node][edge.rev].capacity += 1;
+      node = from;
+    }
+  }
+
+  return new Set(edgeRefs.filter((edge) => edge.capacity === 0).map((edge) => edge.candidateId!));
+}
+
+/**
+ * Select exactly three supported, relevance-qualified rows per report category
+ * where the workbook supplies them. Shortages stay explicit; rows from another
+ * category are never used to fill a gap.
+ */
+export function selectCategoryBalancedDrivers(
+  candidatePool: EsgDriver[],
+  assessedAt = new Date().toISOString(),
+): { drivers: EsgDriver[]; selection: DriverSelection } {
+  const excluded = new Map<string, DriverSelection['excluded'][number]>();
+  const categories = new Map<string, EsgDriverSection>();
+  const categoryCandidates = new Map<EsgDriverSection, EsgDriver[]>();
+  const eligible: SelectionCandidate[] = [];
+
+  for (const driver of candidatePool) {
+    const category = driverReportCategory(driver);
+    if (category) {
+      categories.set(driver.id, category);
+      const rows = categoryCandidates.get(category) ?? [];
+      rows.push(driver);
+      categoryCandidates.set(category, rows);
+    }
+    const reason = eligibilityReason(driver);
+    if (reason) {
+      excluded.set(driver.id, { driverId: driver.id, reason });
+    } else if (!category) {
+      excluded.set(driver.id, { driverId: driver.id, reason: 'unmapped-category' });
+    } else {
+      eligible.push({ driver, category, key: canonicalDriverKey(driver.driverTitle) });
+    }
+  }
+
+  // Keep only the strongest alias within a category. Cross-category aliases are
+  // retained until matching so a scarce category can reserve the shared key.
+  const bestByCategoryKey = new Map<string, SelectionCandidate>();
+  for (const candidate of [...eligible].sort((left, right) => compareEligibleDrivers(left.driver, right.driver))) {
+    const mapKey = `${candidate.category}\u0000${candidate.key}`;
+    const previous = bestByCategoryKey.get(mapKey);
+    if (previous) {
+      excluded.set(candidate.driver.id, { driverId: candidate.driver.id, reason: 'duplicate', duplicateOf: previous.driver.id });
+    } else {
+      bestByCategoryKey.set(mapKey, candidate);
+    }
+  }
+  const distinctEligible = Array.from(bestByCategoryKey.values());
+  const selectedIds = selectCategoryCandidates(distinctEligible);
+  const selectedByKey = new Map<string, string>();
+  for (const candidate of distinctEligible) {
+    if (selectedIds.has(candidate.driver.id)) selectedByKey.set(candidate.key, candidate.driver.id);
+  }
+
+  for (const candidate of distinctEligible) {
+    if (selectedIds.has(candidate.driver.id)) continue;
+    const winner = selectedByKey.get(candidate.key);
+    if (winner && winner !== candidate.driver.id) {
+      excluded.set(candidate.driver.id, { driverId: candidate.driver.id, reason: 'duplicate', duplicateOf: winner });
+    } else {
+      excluded.set(candidate.driver.id, { driverId: candidate.driver.id, reason: 'category-quota' });
+    }
+  }
+
+  const drivers = DRIVER_REPORT_CATEGORIES.flatMap((category) => distinctEligible
+    .filter((candidate) => candidate.category === category && selectedIds.has(candidate.driver.id))
+    .sort((left, right) => compareEligibleDrivers(left.driver, right.driver))
+    .map((candidate) => candidate.driver));
+  const categoryQuotas = DRIVER_REPORT_CATEGORIES.map((category) => {
+    const all = categoryCandidates.get(category) ?? [];
+    const categoryEligible = distinctEligible.filter((candidate) => candidate.category === category);
+    const publishedDriverIds = drivers.filter((driver) => categories.get(driver.id) === category).map((driver) => driver.id);
+    return {
+      category,
+      requestedCount: CATEGORY_QUOTA,
+      candidateCount: all.length,
+      eligibleCandidateCount: categoryEligible.length,
+      publishedDriverIds,
+      gap: Math.max(0, CATEGORY_QUOTA - publishedDriverIds.length),
+    };
+  });
+
+  return {
+    drivers,
+    selection: {
+      policyVersion: CATEGORY_SELECTION_POLICY,
+      requestedCount: MAX_PUBLISHED_DRIVERS,
+      minimumScore: MIN_RELEVANCE_SCORE,
+      candidateCount: candidatePool.length,
+      supportedCandidateCount: candidatePool.filter((driver) => driver.generationStatus === 'verified').length,
+      // Report the number of distinct named drivers globally; the per-category
+      // values below use distinct (category, key) pairs so an alias shared by
+      // two categories cannot be counted as two globally eligible drivers.
+      eligibleCandidateCount: new Set(distinctEligible.map((candidate) => candidate.key)).size,
+      publishedDriverIds: drivers.map((driver) => driver.id),
+      excluded: candidatePool.flatMap((driver) => excluded.has(driver.id) ? [excluded.get(driver.id)!] : []),
+      categoryQuotas,
+      assessedAt,
+    },
+  };
+}
+
+/** Dispatch a persisted selection policy without silently falling back. */
+export function selectDriversForPolicy(
+  candidatePool: EsgDriver[],
+  policy: DriverSelectionPolicy | string,
+  assessedAt = new Date().toISOString(),
+): { drivers: EsgDriver[]; selection: DriverSelection } {
+  if (policy === DRIVER_SELECTION_POLICY) return selectRankedDrivers(candidatePool, assessedAt);
+  if (policy === CATEGORY_SELECTION_POLICY) return selectCategoryBalancedDrivers(candidatePool, assessedAt);
+  throw new Error(`Unsupported driver selection policy: ${String(policy)}`);
 }
