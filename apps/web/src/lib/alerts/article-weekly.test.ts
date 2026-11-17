@@ -81,6 +81,16 @@ describe('canonical weekly article emails', () => {
     vi.stubEnv('ARTICLE_WEEKLY_DIGEST_START_AT', '2026-11-23T05:00:00');
     expect(getArticleWeeklyDigestStartAt()).toBe('invalid');
   });
+  it('rejects normalized calendar dates and non-UTC offsets', () => {
+    for (const value of [
+      '2026-02-31T05:00:00.000Z',
+      '2026-11-23T24:00:00.000Z',
+      '2026-11-23T05:00:00.000+00:00',
+    ]) {
+      vi.stubEnv('ARTICLE_WEEKLY_DIGEST_START_AT', value);
+      expect(getArticleWeeklyDigestStartAt()).toBe('invalid');
+    }
+  });
   it('fetches only the recipient’s AI selections and records domain-qualified provenance', async () => {
     expect((await queueDueArticleWeeklyDigests(now)).queued).toBe(1);
     expect(mocks.picks).toHaveBeenCalledWith(7, ['esg', 'credit'], expect.objectContaining({ since: expect.any(Date), until: expect.any(Date) }), now);

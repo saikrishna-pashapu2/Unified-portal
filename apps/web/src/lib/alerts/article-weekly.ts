@@ -12,7 +12,7 @@ export function articleWeeklyDigestEnabled(): boolean {
 }
 
 export type ArticleWeeklyDigestStartAt = Date | 'invalid' | null;
-const ARTICLE_WEEKLY_DIGEST_START_AT_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/;
+const ARTICLE_WEEKLY_DIGEST_START_AT_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?Z$/;
 
 /**
  * Optional release gate for turning weekly delivery back on without replaying
@@ -22,7 +22,20 @@ const ARTICLE_WEEKLY_DIGEST_START_AT_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?
 export function getArticleWeeklyDigestStartAt(): ArticleWeeklyDigestStartAt {
   const configured = process.env.ARTICLE_WEEKLY_DIGEST_START_AT?.trim();
   if (!configured) return null;
-  if (!ARTICLE_WEEKLY_DIGEST_START_AT_PATTERN.test(configured)) return 'invalid';
+  const match = ARTICLE_WEEKLY_DIGEST_START_AT_PATTERN.exec(configured);
+  if (!match) return 'invalid';
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  const milliseconds = Number((match[7] ?? '').padEnd(3, '0') || 0);
+  const calendar = new Date(Date.UTC(year, month - 1, day, hour, minute, second, milliseconds));
+  if (calendar.getUTCFullYear() !== year || calendar.getUTCMonth() + 1 !== month
+    || calendar.getUTCDate() !== day || calendar.getUTCHours() !== hour
+    || calendar.getUTCMinutes() !== minute || calendar.getUTCSeconds() !== second
+    || calendar.getUTCMilliseconds() !== milliseconds) return 'invalid';
   const parsed = new Date(configured);
   if (!Number.isFinite(parsed.getTime())) return 'invalid';
   return parsed;
