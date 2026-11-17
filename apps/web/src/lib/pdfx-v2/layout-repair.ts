@@ -1,6 +1,7 @@
 import type { PdfCell, PdfElement, PdfPageLayout, StoredPdfPageLayout } from './schemas';
 import { PdfPageLayoutSchema } from './schemas';
 import { isTextualElement } from './serialize';
+import { reconstructNativePage } from './native-page-recovery';
 import { normalizeTableIndexes } from './table-indexes';
 import { enforceEnglishProtection } from './language-protection';
 import { detectCellLanguage, isIdentifierText } from '@/lib/xlsx-translator/language';
@@ -364,6 +365,10 @@ export function repairExtractedLayout(
   native?: NativeGeometry,
   options: { fillTableHoles?: boolean } = {},
 ): PdfPageLayout {
+  // Rebuild a provably complete digital page as one coordinate system. Never
+  // mix native tables with guessed model positions from another geometry.
+  const recovered = native ? reconstructNativePage(layout, native) : null;
+  if (recovered) return recovered;
   const indexed=normalizeTableIndexes(layout);
   const regions=native ? nativeTableRegions(native) : [];
   let filled=0;
