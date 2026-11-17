@@ -241,6 +241,12 @@ Writer and content review require a material amended-version notice to be cited
 alongside an older or undated account when the exact amended requirement is not
 accessible. The report states that status limitation instead of inferring unchanged
 operation or repeal, and relevance review receives both cited passages.
+Even when an amended extract confirms the broad framework, older procedural
+periods, thresholds and permit conditions must remain attributed and qualified
+unless the exact amended provision confirms them. Amendment notices and minimum
+procedure lengths do not by themselves establish a live deadline or urgency.
+Regional findings remain attributed to their geographic scope; selected-country
+implications are conditional unless the source establishes that country separately.
 When that uncertainty concerns the main legal requirement, its evidence status
 must be `status-unresolved`, even if the older account supplies an effective date.
 Review distinguishes a named legal instrument from a descriptive business driver.
