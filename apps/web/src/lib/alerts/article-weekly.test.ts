@@ -8,7 +8,7 @@ vi.mock('@esgcredit/db-esg', () => ({ esgPrisma: { $transaction: mocks.transacti
 vi.mock('./article-weekly-repository', () => ({ listWeeklyArticleAlerts: mocks.list, getHumanWeeklyItems: mocks.human }));
 vi.mock('@/lib/article-ai/service', () => ({ getArticleAiDigestPicks: mocks.picks, filterArticleAiDigestPicksForCommit: mocks.filter }));
 vi.mock('./email-queue', () => ({ enqueueEmailWithHistory: mocks.enqueue }));
-import { queueDueArticleWeeklyDigests } from './article-weekly';
+import { getArticleWeeklyDigestStartAt, queueDueArticleWeeklyDigests } from './article-weekly';
 
 const now = new Date('2026-11-16T05:01:00Z');
 function alert(overrides: Partial<WeeklyArticleAlert> = {}): WeeklyArticleAlert {
@@ -45,6 +45,41 @@ describe('canonical weekly article emails', () => {
     vi.stubEnv('ARTICLE_WEEKLY_DIGEST_ENABLED', 'false');
     expect(await queueDueArticleWeeklyDigests(now)).toEqual({ queued: 0, deduplicated: 0, skipped: 0, failed: 0 });
     expect(mocks.list).not.toHaveBeenCalled();
+  });
+  it('does no work before the configured activation instant', async () => {
+    vi.stubEnv('ARTICLE_WEEKLY_DIGEST_START_AT', '2026-11-23T05:00:00.000Z');
+    const result = await queueDueArticleWeeklyDigests(new Date('2026-11-23T04:59:59.999Z'));
+    expect(result).toEqual({ queued: 0, deduplicated: 0, skipped: 0, failed: 0 });
+    expect(mocks.list).not.toHaveBeenCalled();
+  });
+  it('allows the first cohort exactly at the configured activation instant', async () => {
+    vi.stubEnv('ARTICLE_WEEKLY_DIGEST_START_AT', '2026-11-23T05:00:00.000Z');
+    const activation = new Date('2026-11-23T05:00:00.000Z');
+    const configured = getArticleWeeklyDigestStartAt();
+    expect(configured).toBeInstanceOf(Date);
+    expect(configured instanceof Date ? configured.toISOString() : null).toBe(activation.toISOString());
+    expect((await queueDueArticleWeeklyDigests(activation)).queued).toBe(1);
+    expect(mocks.enqueue.mock.calls[0][0].deliveryKey).toBe('article-weekly:9:2026-11-23');
+  });
+  it('does not backfill a digest window that ended before activation', async () => {
+    vi.stubEnv('ARTICLE_WEEKLY_DIGEST_START_AT', '2026-11-16T06:00:00.000Z');
+    const afterActivation = new Date('2026-11-16T06:01:00.000Z');
+    expect((await queueDueArticleWeeklyDigests(afterActivation)).skipped).toBe(1);
+    expect(mocks.list).toHaveBeenCalledOnce();
+    expect(mocks.human).not.toHaveBeenCalled();
+    expect(mocks.enqueue).not.toHaveBeenCalled();
+  });
+  it('fails closed on an invalid activation value before reading schedules', async () => {
+    vi.stubEnv('ARTICLE_WEEKLY_DIGEST_START_AT', 'not-a-timestamp');
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    expect(await queueDueArticleWeeklyDigests(now)).toEqual({ queued: 0, deduplicated: 0, skipped: 0, failed: 0 });
+    expect(mocks.list).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalledWith('[article-weekly] invalid ARTICLE_WEEKLY_DIGEST_START_AT; delivery remains disabled');
+    error.mockRestore();
+  });
+  it('requires an explicit timezone on the activation value', () => {
+    vi.stubEnv('ARTICLE_WEEKLY_DIGEST_START_AT', '2026-11-23T05:00:00');
+    expect(getArticleWeeklyDigestStartAt()).toBe('invalid');
   });
   it('fetches only the recipient’s AI selections and records domain-qualified provenance', async () => {
     expect((await queueDueArticleWeeklyDigests(now)).queued).toBe(1);

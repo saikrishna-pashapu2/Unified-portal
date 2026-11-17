@@ -185,6 +185,9 @@ databases. All feature switches default to off:
 ARTICLE_WEEKLY_DIGEST_ENABLED=false
 ARTICLE_AI_ENABLED=false
 ARTICLE_AI_EMAIL_ENABLED=false
+# Optional absolute UTC boundary for enabling delivery without replaying an
+# earlier due cohort. Monday 23 Nov 2026 at 09:00 Asia/Dubai:
+ARTICLE_WEEKLY_DIGEST_START_AT=2026-11-23T05:00:00.000Z
 ARTICLE_AI_MODEL=gpt-6-luna
 ARTICLE_AI_WEEKLY_REQUEST_LIMIT=128
 ARTICLE_AI_WEEKLY_TOKEN_LIMIT=4000000
@@ -216,6 +219,16 @@ email. Disabling `ARTICLE_AI_ENABLED` also stops selection jobs. Disabling
 `ARTICLE_WEEKLY_DIGEST_ENABLED` stops creation of weekly article emails; already
 queued mail remains under the email queue's delivery lifecycle. These switches
 do not require enabling the older in-process scheduler.
+
+For a controlled re-enable after a no-email deployment, set
+`ARTICLE_WEEKLY_DIGEST_START_AT` to an absolute UTC timestamp. The worker returns
+before reading alert schedules while that boundary is in the future, and skips a
+window whose scheduled send time ended before the boundary. This prevents a stale
+subscription from receiving a catch-up message when delivery is turned back on.
+At `2026-11-23T05:00:00.000Z`, for example, Monday 09:00 Dubai delivery becomes
+eligible for the 23 November cohort. An invalid value fails closed. Keep the
+boundary in place so future weeks continue automatically; an unset value
+preserves the existing behavior for deployments that do not need a staged start.
 
 ## Validation
 

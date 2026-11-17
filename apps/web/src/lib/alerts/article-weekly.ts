@@ -11,6 +11,23 @@ export function articleWeeklyDigestEnabled(): boolean {
   return process.env.ARTICLE_WEEKLY_DIGEST_ENABLED === 'true';
 }
 
+export type ArticleWeeklyDigestStartAt = Date | 'invalid' | null;
+const ARTICLE_WEEKLY_DIGEST_START_AT_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/;
+
+/**
+ * Optional release gate for turning weekly delivery back on without replaying
+ * a previously due cohort. The value is an absolute ISO timestamp so the
+ * worker and web process apply the same boundary regardless of host timezone.
+ */
+export function getArticleWeeklyDigestStartAt(): ArticleWeeklyDigestStartAt {
+  const configured = process.env.ARTICLE_WEEKLY_DIGEST_START_AT?.trim();
+  if (!configured) return null;
+  if (!ARTICLE_WEEKLY_DIGEST_START_AT_PATTERN.test(configured)) return 'invalid';
+  const parsed = new Date(configured);
+  if (!Number.isFinite(parsed.getTime())) return 'invalid';
+  return parsed;
+}
+
 function asEmailItem(pick: ArticleAiDigestPick): WeeklyArticleItem {
   return { id: pick.articleId, domain: pick.domain, kind: 'article', origin: 'ai', title: pick.title,
     url: pick.url, source: pick.source, publishedAt: pick.publishedAt, reason: pick.reason, contentHash: pick.contentHash };
@@ -22,10 +39,16 @@ export interface ArticleWeeklyResult { queued: number; deduplicated: number; ski
 export async function queueDueArticleWeeklyDigests(now = new Date()): Promise<ArticleWeeklyResult> {
   const result: ArticleWeeklyResult = { queued: 0, deduplicated: 0, skipped: 0, failed: 0 };
   if (!articleWeeklyDigestEnabled()) return result;
+  const digestStartAt = getArticleWeeklyDigestStartAt();
+  if (digestStartAt === 'invalid') {
+    console.error('[article-weekly] invalid ARTICLE_WEEKLY_DIGEST_START_AT; delivery remains disabled');
+    return result;
+  }
+  if (digestStartAt && now < digestStartAt) return result;
   const alerts = await listWeeklyArticleAlerts();
   for (const alert of alerts) {
     try {
-      const outcome = await queueOneWeeklyDigest(alert, now);
+      const outcome = await queueOneWeeklyDigest(alert, now, digestStartAt);
       result[outcome]++;
     } catch {
       // IDs diagnose bad schedules/outages without logging recipient or article contents.
@@ -39,10 +62,12 @@ export async function queueDueArticleWeeklyDigests(now = new Date()): Promise<Ar
 async function queueOneWeeklyDigest(
   alert: WeeklyArticleAlert,
   now: Date,
+  digestStartAt: Date | null,
 ): Promise<'queued' | 'deduplicated' | 'skipped'> {
   const window = getArticleWeeklyWindow(now, alert);
   if (!window.due || (alert.created_at && alert.created_at > window.until)
-    || (alert.last_sent_at && alert.last_sent_at >= window.until)) return 'skipped';
+    || (alert.last_sent_at && alert.last_sent_at >= window.until)
+    || (digestStartAt && window.until < digestStartAt)) return 'skipped';
   const domains = normalizeWeeklyDomains(alert.domains, alert.domain);
   const destination = (alert.email_address || alert.email || '').trim();
   if (!destination) return 'skipped';
