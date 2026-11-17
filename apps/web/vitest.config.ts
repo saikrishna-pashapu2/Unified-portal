@@ -5,6 +5,9 @@ import { defineConfig } from "vitest/config";
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
+  // Next preserves JSX for its own compiler; server-component unit tests need
+  // Vite to transform it before Node imports the TSX module.
+  oxc: { jsx: { runtime: "automatic" } },
   resolve: {
     alias: {
       "@": path.resolve(dirname, "src"),
