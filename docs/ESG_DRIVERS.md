@@ -228,16 +228,22 @@ Both scoring and independent review limit urgency to 0–2 when the only support
 is a past forecast with unconfirmed implementation, or an older description of
 a requirement whose status after a newer cited amendment is unresolved. A higher
 rating requires separate cited evidence of current implementation and applicability.
+Writer and content review require a material amended-version notice to be cited
+alongside an older or undated account when the exact amended requirement is not
+accessible. The report states that status limitation instead of inferring unchanged
+operation or repeal, and relevance review receives both cited passages.
 Review distinguishes a named legal instrument from a descriptive business driver.
 A directly evidenced regulatory mechanism can support carbon-cost exposure or
 product competitiveness without transferring an importer's statutory duties to
 exporters. Partially supported compound drivers receive proportionate, qualified
 dimension ratings; absent measured valuation effects do not erase established cost
-exposure, and unsupported valuation facts remain prohibited.
+exposure, and unsupported valuation facts remain prohibited. Writer and both content
+reviewers apply the same boundary: retain supported carbon-cost facts and explicitly
+state the absence of measured valuation effects.
 Writer and evidence review also distinguish direct statutory duties from buyer-data
 and commercial preparation burdens. Bibliographic citation years cannot establish
 the date of a substantive driver update; the stated event or reporting period must
-support `evidenceDate` independently.
+support `evidenceDate` independently. Related-news dates cannot date the main evidence.
 If independent review still rejects a score when the scoring budget is exhausted,
 the verified driver content and cited
 sources remain in the candidate audit with an explicit `relevanceFailure`
