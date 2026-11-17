@@ -120,6 +120,19 @@ account for their exact child outputs. Publishing requires complete coverage
 and produces at most 20 shared picks per domain, including a valid result of
 zero picks. A new ready-zero assessment never resurrects earlier selections.
 
+Candidate evaluation uses a request-specific strict response schema with a
+required decision key for every candidate and a required evidence-note key for
+every text fragment. Each candidate key fixes its article ID. Missing or unknown
+keys fail validation; coverage and abstention records are derived only from the
+validated response. Candidate reasons are limited to 160 characters and fragment
+notes to 80 characters. Request budgets include the serialized schema, and batch
+planning reserves space for these fields. Candidate ranking also requires one
+decision per direct-child survivor and a literal output hash for each direct
+child. Selection and elimination arrays are derived from those single decisions,
+so an article cannot appear in both. Ranking reasons are limited to 80 characters.
+This response-format contract uses prompt version `weekly-v4-keyed-coverage-2`,
+invalidating older production caches.
+
 Publication time determines weekday eligibility, while first observation or
 known ingestion time determines whether a late import must carry into the next
 cohort. ESG uses publication time with save time as fallback. Credit uses its

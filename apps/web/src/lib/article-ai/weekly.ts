@@ -217,8 +217,11 @@ function estimatedStructuredOutputBytes(
   inputs: ArticleAiWeeklyInputSnapshot[],
   fragments: ArticleAiWeeklyTextFragment[],
 ): number {
-  const perInput = phase === "candidate_evaluation" ? 900 : 180;
-  return 2_000 + inputs.length * perInput + fragments.length * 110;
+  // Candidate wire reasons (160 chars) and fragment notes (80 chars) need room
+  // for four-byte UTF-8 characters, identifiers, and structured-output metadata.
+  const perInput = phase === "candidate_evaluation" ? 1_000 : 180;
+  const perFragment = phase === "candidate_evaluation" ? 450 : 110;
+  return 2_000 + inputs.length * perInput + fragments.length * perFragment;
 }
 
 export function estimateArticleAiWeeklyStructuredOutputBytes(

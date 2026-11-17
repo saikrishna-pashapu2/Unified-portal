@@ -17,10 +17,15 @@ describe("weekly Article AI DAG planning", () => {
   );
 
   it("bounds candidate leaf response coverage without capping the cohort", () => {
-    expect(estimateArticleAiWeeklyStructuredOutputBytes("candidate_evaluation", 20, 20)).toBeLessThanOrEqual(24_000);
-    expect(estimateArticleAiWeeklyStructuredOutputBytes("candidate_evaluation", 22, 22)).toBeGreaterThan(24_000);
+    expect(estimateArticleAiWeeklyStructuredOutputBytes("candidate_evaluation", 14, 15)).toBeLessThanOrEqual(24_000);
+    expect(estimateArticleAiWeeklyStructuredOutputBytes("candidate_evaluation", 16, 16)).toBeGreaterThan(24_000);
     // The planner splits batches; it never drops candidates from the manifest.
     expect(estimateArticleAiWeeklyStructuredOutputBytes("candidate_evaluation", 100, 100)).toBeGreaterThan(24_000);
+  });
+
+  it("splits fragment-heavy candidates to leave room for required evidence notes", () => {
+    expect(estimateArticleAiWeeklyStructuredOutputBytes("candidate_evaluation", 1, 46)).toBeLessThanOrEqual(24_000);
+    expect(estimateArticleAiWeeklyStructuredOutputBytes("candidate_evaluation", 1, 47)).toBeGreaterThan(24_000);
   });
 
   it("keeps history fragment coverage bounded independently of full text size", () => {
