@@ -20,7 +20,7 @@ export function reconstructNativePage(
         item.bbox.some(v => !Number.isFinite(v) || v < 0 || v > 1000) ||
         item.bbox[2] <= item.bbox[0] || item.bbox[3] <= item.bbox[1])) return null;
   if (validateExtractedPage(source, source.pageNumber, { extraction: true }).valid) return null;
-  if (source.elements.some(e => ['image', 'diagram', 'other'].includes(e.kind))) return null;
+  if (source.elements.some(e => ['image', 'diagram', 'stamp', 'signature', 'other'].includes(e.kind))) return null;
 
   const regions = nativeTableRegions(native).sort((a, b) => a[1] - b[1] || a[0] - b[0]);
   if (!regions.length || regions.length > 30) return null;
