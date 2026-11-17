@@ -64,7 +64,7 @@ export async function fetchExcelSource(
         finalUrl: item.url,
         title: item.title || sourceDocumentTitle(text),
         documentDates: documentDates(text),
-        sourceDate: extractSourceDate({ text, title: item.title }),
+        sourceDate: extractSourceDate({ text, title: item.title, sourceUrl: item.url }),
         publishedDate: null,
         updatedDate: null,
         lastModified: null,

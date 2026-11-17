@@ -22,6 +22,14 @@ describe('exact-URL extraction fallback', () => {
     expect(body.urls).toEqual([url]); expect(body.query).toBeUndefined(); expect(body.chunks_per_source).toBeUndefined();
     expect(fetchImpl.mock.calls[0][1].redirect).toBe('error');
   });
+  it('passes the exact catalog URL into source-date extraction for reader text', async () => {
+    const sourceUrl = 'https://www.mdpi.com/2071-1050/18/13/6479';
+    const title = 'Mine Tailings Facilities in Kazakhstan: Public Databases, Management Practices, and Extreme Weather Events';
+    const rawContent = `Article\nOpen Access\n25 June 2026\n24 Pages\n${title}\nAbstract\nThis article examines mine tailings facilities.`;
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({ results: [{ url: sourceUrl, raw_content: rawContent, title }] })));
+    const result = await fetchExcelSource(sourceUrl, { allowedUrls: [sourceUrl], searchableText: true }, { directFetch: blocked(), fetchImpl, lookupImpl, apiKey: 'test-reader-key' });
+    expect(result.sourceDate).toMatchObject({ kind: 'published', value: '25 June 2026' });
+  });
   it('never uses the reader to bypass an unlisted URL or redirect', async () => {
     const fetchImpl = vi.fn(); const directFetch = vi.fn().mockRejectedValue(new Error('Source URL is not listed in the selected Excel worksheet.'));
     await expect(fetchExcelSource(url, { allowedUrls: [] }, { directFetch, fetchImpl, apiKey: 'test' })).rejects.toThrow('not listed');
@@ -153,6 +161,106 @@ Government of the Republic of Kazakhstan`;
       location: 'document opening / labelled metadata',
       evidence: 'Decree of the President of the Republic of Kazakhstan of 2 February 2023 No. 121',
     });
+  });
+  it('extracts the saved EEAS article header with day-first dotted date semantics', () => {
+    const text = `PRINT
+
+ASSESSING CBAM READINESS IN KAZAKHSTAN: SUPPORTING THE COMPLIANCE OF KAZAKHSTAN EXPORTERS IN ALUMINIUM, IRON AND STEEL SECTORS
+
+09.06.2026
+
+Astana
+
+Press and information team of the Delegation to KAZAKHSTAN
+
+The International Trade Centre presented the findings of the report.`;
+    expect(extractSourceDate({
+      text,
+      title: 'ASSESSING CBAM READINESS IN KAZAKHSTAN: SUPPORTING THE COMPLIANCE OF KAZAKHSTAN EXPORTERS IN ALUMINIUM, IRON AND STEEL SECTORS',
+      sourceUrl: 'https://www.eeas.europa.eu/delegations/kazakhstan/assessing-cbam-readiness-kazakhstan-supporting-compliance-kazakhstan-exporters-aluminium-iron-and_en',
+    })).toMatchObject({
+      kind: 'published',
+      value: '2026-06-09',
+      location: 'document opening / labelled metadata',
+      evidence: expect.stringContaining('09.06.2026'),
+    });
+  });
+  it('extracts the EEAS date from its bounded node metadata when HTML text nodes are nested', () => {
+    const title = 'ASSESSING CBAM READINESS IN KAZAKHSTAN: SUPPORTING THE COMPLIANCE OF KAZAKHSTAN EXPORTERS IN ALUMINIUM, IRON AND STEEL SECTORS';
+    const html = `<div class="node__content"><div class="text-box-header"><h1 class="node__title">${title}</h1></div><div class="node__meta">09.06.2026 <span>Astana</span> <a>Press and information team of the Delegation to KAZAKHSTAN</a></div><p>The International Trade Centre presented the findings.</p></div>`;
+    expect(extractSourceDate({ html, title, sourceUrl: 'https://www.eeas.europa.eu/delegations/kazakhstan/article' })).toMatchObject({ kind: 'published', value: '2026-06-09' });
+  });
+  it('extracts the saved DBK article date only when it is immediately paired with the own title', () => {
+    const title = 'DBK Launches a New Large-Scale Financing Programme';
+    const text = `Қаз
+Рус
+Eng
+Question-answer
+Press center
+News
+Contact Us
+
+31.10.2025
+${title}
+
+JSC Development Bank of Kazakhstan is launching a Programme for financing projects in the extraction and processing of rare materials.`;
+    expect(extractSourceDate({
+      text,
+      title,
+      sourceUrl: 'https://baiterek.gov.kz/en/pr/news/dbk-launches-a-new-large-scale-financing-programme',
+    })).toMatchObject({ kind: 'published', value: '2025-10-31', evidence: expect.stringContaining('31.10.2025') });
+
+    const unrelated = `The article discusses an event dated 31.10.2025.\n${title}`;
+    expect(extractSourceDate({ text: unrelated, title, sourceUrl: 'https://baiterek.gov.kz/en/pr/news/dbk-launches-a-new-large-scale-financing-programme' })).toBeNull();
+    const deepBody = `${'unrelated navigation '.repeat(500)}31.10.2025\n${title}`;
+    expect(extractSourceDate({ text: deepBody, title, sourceUrl: 'https://baiterek.gov.kz/en/pr/news/dbk-launches-a-new-large-scale-financing-programme' })).toBeNull();
+  });
+  it('extracts the saved MDPI Article/Open Access publication header without using body dates', () => {
+    const title = 'Mine Tailings Facilities in Kazakhstan: Public Databases, Management Practices, and Extreme Weather Events';
+    const text = `Skip to Content
+You are currently on the new version of our website. Access the old version.
+MDPI
+Sustainability
+Download PDF
+PDF
+Article
+Open Access
+25 June 2026
+24 Pages
+${title}
+School of Mining and Geosciences, Nazarbayev University, Astana 010000, Kazakhstan
+Abstract
+This article examines mine tailings facilities.`;
+    expect(extractSourceDate({ text, title, sourceUrl: 'https://www.mdpi.com/2071-1050/18/13/6479' })).toMatchObject({
+      kind: 'published',
+      value: '25 June 2026',
+      evidence: expect.stringContaining('Article\nOpen Access\n25 June 2026'),
+    });
+    expect(extractSourceDate({
+      text: `Article\nOpen Access\n${title}\nThe study was published on 25 June 2026.`,
+      title,
+      sourceUrl: 'https://www.mdpi.com/2071-1050/18/13/6479',
+    })).toBeNull();
+  });
+  it('keeps dotted dates, policy identifiers, copyright years, and future headers bounded', () => {
+    expect(isPlausibleSourceDate('09.06.2026')).toBe(true);
+    expect(isPlausibleSourceDate('31.12.2026')).toBe(false);
+    expect(extractSourceDate({
+      text: 'Article title\n09.06.2026 / 10.06.2026\nAstana\nPress and information team of the Delegation to KAZAKHSTAN',
+      title: 'Article title',
+      sourceUrl: 'https://www.eeas.europa.eu/delegations/kazakhstan/article',
+    })).toBeNull();
+    expect(extractSourceDate({
+      text: 'Policy C 8/2025 and file-2025.pdf. Copyright 2024.\nA body event occurred on 09.06.2026.',
+      title: 'Climate disclosure framework',
+      sourceUrl: 'https://example.org/source',
+    })).toBeNull();
+  });
+  it('does not scan unbounded HTML time elements for a document date', () => {
+    const deepTimeElements = Array.from({ length: 8 }, (_, index) => `<p>Calendar event ${index + 1}</p><time datetime="2024-01-01">event</time>`).join('');
+    const html = `<main>${deepTimeElements}<p><time itemprop="datePublished" datetime="2024-02-03">Published</time></p></main>`;
+    expect(extractHtmlSourceDateMetadata(html).sourceDates).toEqual([]);
+    expect(extractSourceDate({ html, sourceUrl: 'https://example.org/source' })).toBeNull();
   });
   it('does not broaden opening-header extraction to body prose, ambiguous or future dates, or IEA citation years', () => {
     expect(extractSourceDate({

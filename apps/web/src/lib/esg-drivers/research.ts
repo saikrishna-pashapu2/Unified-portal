@@ -1851,7 +1851,7 @@ async function fetchSourceSnippetActive(
             publishedDate: null,
             updatedDate: null,
             lastModified,
-            sourceDate: extractSourceDate({ text: contentSnippet, pdfTitle: extracted.title }),
+            sourceDate: extractSourceDate({ text: contentSnippet, pdfTitle: extracted.title, sourceUrl: currentUrl.toString() }),
             finalUrl: currentUrl.toString(),
           };
         }
@@ -1864,12 +1864,12 @@ async function fetchSourceSnippetActive(
             publishedDate: null,
             updatedDate: null,
             lastModified,
-            sourceDate: extractSourceDate({ text: contentSnippet }),
+            sourceDate: extractSourceDate({ text: contentSnippet, sourceUrl: currentUrl.toString() }),
             finalUrl: currentUrl.toString(),
           };
         }
 
-        const parsed = parseHtmlSource(buffer.toString("utf8"), lastModified);
+        const parsed = parseHtmlSource(buffer.toString("utf8"), lastModified, currentUrl.toString());
         assertUsableRetrievedText(parsed.contentSnippet);
         return { ...parsed, finalUrl: currentUrl.toString() };
       } finally {
@@ -2003,7 +2003,7 @@ export async function fetchCatalogEvidence(
             publishedDate: null,
             updatedDate: null,
             lastModified,
-            sourceDate: extractSourceDate({ text: contentSnippet, pdfTitle: extracted.title }),
+            sourceDate: extractSourceDate({ text: contentSnippet, pdfTitle: extracted.title, sourceUrl: currentUrl.toString() }),
             finalUrl: currentUrl.toString(),
             title: sourceDocumentTitle(contentSnippet, undefined, extracted.title),
             documentDates: documentDates(contentSnippet),
@@ -2020,7 +2020,7 @@ export async function fetchCatalogEvidence(
             publishedDate: null,
             updatedDate: null,
             lastModified,
-            sourceDate: extractSourceDate({ text: contentSnippet }),
+            sourceDate: extractSourceDate({ text: contentSnippet, sourceUrl: currentUrl.toString() }),
             finalUrl: currentUrl.toString(),
           };
         }
@@ -2029,7 +2029,7 @@ export async function fetchCatalogEvidence(
         if (options.searchableText && /_Incapsula_Resource|\/cdn-cgi\/challenge-platform\/|cf-chl-/i.test(html)) {
           throw new Error('Source returned a browser verification challenge instead of readable evidence.');
         }
-        const parsed = parseHtmlSource(html, lastModified);
+        const parsed = parseHtmlSource(html, lastModified, currentUrl.toString());
         if (options.searchableText) parsed.contentSnippet = extractExcelHtml(html);
         assertUsableRetrievedText(parsed.contentSnippet);
         return { ...parsed, finalUrl: currentUrl.toString(), title: sourceDocumentTitle(parsed.contentSnippet, html), documentDates: documentDates(parsed.contentSnippet), retrievalMethod: 'direct' };
@@ -2336,6 +2336,7 @@ function errorMessage(error: unknown): string {
 function parseHtmlSource(
   html: string,
   lastModified: string | null,
+  sourceUrl?: string,
 ): {
   contentSnippet: string;
   publishedDate: string | null;
@@ -2366,7 +2367,7 @@ function parseHtmlSource(
     publishedDate,
     updatedDate,
     lastModified,
-    sourceDate: extractSourceDate({ text: selected.join(" "), html }),
+    sourceDate: extractSourceDate({ text: selected.join(" "), html, sourceUrl }),
   };
 }
 

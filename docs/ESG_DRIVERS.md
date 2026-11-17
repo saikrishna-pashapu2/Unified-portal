@@ -228,6 +228,16 @@ Both scoring and independent review limit urgency to 0–2 when the only support
 is a past forecast with unconfirmed implementation, or an older description of
 a requirement whose status after a newer cited amendment is unresolved. A higher
 rating requires separate cited evidence of current implementation and applicability.
+Review distinguishes a named legal instrument from a descriptive business driver.
+A directly evidenced regulatory mechanism can support carbon-cost exposure or
+product competitiveness without transferring an importer's statutory duties to
+exporters. Partially supported compound drivers receive proportionate, qualified
+dimension ratings; absent measured valuation effects do not erase established cost
+exposure, and unsupported valuation facts remain prohibited.
+Writer and evidence review also distinguish direct statutory duties from buyer-data
+and commercial preparation burdens. Bibliographic citation years cannot establish
+the date of a substantive driver update; the stated event or reporting period must
+support `evidenceDate` independently.
 If independent review still rejects a score when the scoring budget is exhausted,
 the verified driver content and cited
 sources remain in the candidate audit with an explicit `relevanceFailure`
@@ -284,7 +294,9 @@ kind (published, updated or version-issued), original evidence and location.
 Only the page/document's own publication or version context can establish this
 field; unrelated dates mentioned in the body cannot.
 Explicitly dated opening press-release headers and numbered governmental decree
-headers can establish publication and version-issue dates respectively; a bare
+headers can establish publication and version-issue dates respectively. Publisher-specific
+opening layouts also recognize the own article dates on EEAS delegation pages,
+Baiterek news and MDPI articles, with source URL and title/header checks. A bare
 report edition or citation year remains insufficient. Unknown dates stay unknown,
 and month/year precision is preserved. Source dates remain separate from the
 driver's evidence period, legal effective dates, HTTP metadata and retrieval time.
