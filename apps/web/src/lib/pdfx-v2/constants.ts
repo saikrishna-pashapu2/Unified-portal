@@ -61,6 +61,25 @@ export function buildPdfContentDisposition(
   return `${disposition}; filename="${asciiFallback}"; filename*=UTF-8''${encodedFilename}`;
 }
 
+/** Build a neutral filename for a translated PDF download. */
+export function buildTranslatedPdfFilename(originalFilename: string): string {
+  const leaf = String(originalFilename || '').replace(/^.*[\\/]/, '');
+  let basename = leaf.replace(/\.[^.]+$/, '').trim();
+  // Avoid stacking prefixes when a previously downloaded result is uploaded
+  // again, including the historical misspelling used by an older release.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const next = basename.replace(
+      /^(?:(?:openai[_ -]*)?(?:translated|transalted|translation))[_ -]+/i,
+      '',
+    ).trim();
+    if (next === basename) break;
+    basename = next;
+  }
+  // Remove only generated translation branding; preserve the user's actual
+  // document name (including words such as "openair" and legitimate titles).
+  return `translated_${basename || 'document'}.pdf`;
+}
+
 function makeWellFormed(value: string): string {
   let result = '';
   for (let index = 0; index < value.length; index += 1) {

@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { translatorDisplayMessage } from "@/lib/document-translator/display-message";
 export default function ExcelUsageCard({
   period,
   refreshKey = 0,
@@ -49,10 +50,11 @@ export default function ExcelUsageCard({
         if (abort.signal.aborted) return;
         setLoadError({
           period,
-          message:
+          message: translatorDisplayMessage(
             loadError instanceof Error
               ? loadError.message
               : "Excel usage could not be loaded.",
+          ),
         });
       } finally {
         if (!abort.signal.aborted) setLoading(false);
