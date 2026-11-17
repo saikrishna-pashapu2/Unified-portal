@@ -41,13 +41,16 @@ export async function runEsgDriverGenerationJob(
       includeCheckpoint: true,
     });
     const checkpoint = existing?.checkpoint;
-    if (job.jobType === "esg_driver_excel_v6" || job.jobType === "esg_driver_excel_v7") {
-      const queueVersion = job.jobType.endsWith("v7") ? "v7" : "v6";
+    if (job.jobType === "esg_driver_excel_v6" || job.jobType === "esg_driver_excel_v7" || job.jobType === "esg_driver_excel_v8") {
+      const queueVersion = job.jobType.slice("esg_driver_excel_".length);
       if (checkpoint?.version !== 2) {
         throw new Error(`ESG Driver ${queueVersion} jobs require an immutable workbook checkpoint.`);
       }
       if (checkpoint.selectionPolicy !== CATEGORY_SELECTION_POLICY) {
         throw new Error(`ESG Driver ${queueVersion} jobs require the category-balanced selection policy.`);
+      }
+      if (job.jobType === "esg_driver_excel_v8" && checkpoint.relevanceAssessmentVersion !== "driver-specific-v3") {
+        throw new Error("ESG Driver v8 jobs require the status-bound relevance assessment contract.");
       }
     } else if (job.jobType === "esg_driver_excel_v5" && checkpoint?.version !== 2) {
       throw new Error("ESG Driver v5 jobs require an immutable workbook checkpoint.");
@@ -96,7 +99,7 @@ export async function runEsgDriverGenerationJob(
     // The unversioned queue and v3/v4 rows may still carry the original
     // selection-runtime checkpoint. Keep those jobs on the legacy harness;
     // version 5 and later are always the catalog-pinned workbook workflow above.
-    const generate = job.jobType !== "esg_driver_excel_v5" && job.jobType !== "esg_driver_excel_v6" && job.jobType !== "esg_driver_excel_v7" && checkpoint?.version !== 2
+    const generate = job.jobType !== "esg_driver_excel_v5" && job.jobType !== "esg_driver_excel_v6" && job.jobType !== "esg_driver_excel_v7" && job.jobType !== "esg_driver_excel_v8" && checkpoint?.version !== 2
       ? generateLegacyEsgDriverResult
       : generateEsgDriverResult;
     const result = await (generate as typeof generateEsgDriverResult)(job.payload, {

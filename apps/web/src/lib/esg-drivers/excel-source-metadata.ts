@@ -204,7 +204,7 @@ interface KnownPublisherSourceDateInput {
 }
 
 /**
- * Recognise only the three publisher-owned opening layouts confirmed from the
+ * Recognise only publisher-owned layouts confirmed from the
  * saved workbook sources. The URL gate is intentional: a generic date near a
  * heading is not enough to establish publication, while these layouts carry a
  * publisher-specific title/date relationship.
@@ -227,8 +227,12 @@ function findKnownPublisherSourceDate(input: KnownPublisherSourceDateInput): Sou
   }
 
   if (source.hostname === 'www.mdpi.com' && /^\/\d/.test(source.pathname)) {
-    const opening = input.html ? openingHtmlText(input.html, 32) : openingDocumentText(input.text, 32);
+    const opening = input.html ? openingHtmlText(input.html, 160, MAX_KNOWN_PUBLISHER_TEXT_CHARS) : openingDocumentText(input.text.slice(0, MAX_KNOWN_PUBLISHER_TEXT_CHARS), 160, MAX_KNOWN_PUBLISHER_TEXT_CHARS);
     return findMdpiArticleHeaderDate(opening, input.title);
+  }
+
+  if (source.hostname === 'www.oecd.org' && source.pathname.startsWith('/en/publications/')) {
+    return findOecdReportHeaderDate(input.text, input.title);
   }
 
   return null;
@@ -283,18 +287,35 @@ function findBaiterekNewsHeaderDate(input: KnownPublisherSourceDateInput): Sourc
 }
 
 function findMdpiArticleHeaderDate(opening: string, title: string): SourceDateEvidence | null {
-  const lines = openingLines(opening, 32);
-  const articleIndex = lines.findIndex((line) => /^article$/i.test(line));
-  if (articleIndex < 0) return null;
-  const accessIndex = lines.findIndex((line, index) => index > articleIndex && index <= articleIndex + 3 && /^open\s+access$/i.test(line));
-  if (accessIndex < 0) return null;
-  const dateIndex = lines.findIndex((line, index) => index > accessIndex && index <= accessIndex + 3 && dateMatches(line, false).length === 1);
-  if (dateIndex < 0) return null;
-  const dateCandidates = dateMatches(lines[dateIndex], false);
-  if (dateCandidates.length !== 1 || !/^(?:\d{1,2}(?:st|nd|rd|th)?(?:\s+of)?\s+[A-Za-z]+|[A-Za-z]+\s+\d{1,2},?)\s+\d{4}$/i.test(dateCandidates[0].raw)) return null;
-  if (dateIndex + 2 >= lines.length || !/^\d{1,3}\s+pages?$/i.test(lines[dateIndex + 1])) return null;
-  if (!sameHeaderTitle(lines[dateIndex + 2], title)) return null;
-  return knownHeaderSourceDate(dateCandidates[0].raw, 'published', lines.slice(articleIndex, dateIndex + 3).join('\n'));
+  const lines = openingLines(opening, 160);
+  for (let articleIndex = 0; articleIndex < lines.length; articleIndex++) {
+    if (!/^article$/i.test(lines[articleIndex])) continue;
+    const accessIndex = lines.findIndex((line, index) => index > articleIndex && index <= articleIndex + 3 && /^(?:Image\s+\d+:\s*)?open\s+access$/i.test(line));
+    if (accessIndex < 0) continue;
+    const dateIndex = accessIndex + 1;
+    if (dateIndex + 2 >= lines.length) continue;
+    const raw = lines[dateIndex];
+    if (dateMatches(raw, false).length !== 1 || !/^(?:\d{1,2}(?:st|nd|rd|th)?(?:\s+of)?\s+[A-Za-z]+|[A-Za-z]+\s+\d{1,2},?)\s+\d{4}$/i.test(raw)) continue;
+    if (!/^\d{1,3}\s+pages?$/i.test(lines[dateIndex + 1]) || !sameHeaderTitle(lines[dateIndex + 2], title)) continue;
+    return knownHeaderSourceDate(raw, 'published', lines.slice(articleIndex, dateIndex + 3).join('\n'));
+  }
+  return null;
+}
+
+function findOecdReportHeaderDate(text: string, title: string): SourceDateEvidence | null {
+  // OECD reader output may include a very long navigation menu. Locate the
+  // own title/Report boundary within a fixed prefix, then inspect only its
+  // small bibliographic metadata block, never the article body or event list.
+  const lines = text.slice(0, 80_000).replace(/\r/g, '').split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  for (let index = 0; index + 1 < lines.length; index++) {
+    if (cleanText(lines[index]).toLowerCase() !== cleanText(title).toLowerCase() || !/^report$/i.test(lines[index + 1])) continue;
+    const header = lines.slice(index + 2, index + 45).join('\n').slice(0, 2_500).split(/\n(?:Summary|Full report|Abstract)\b/i)[0];
+    if (!/\bDOI\b/.test(header) || !/Authors\s+OECD\b/.test(header) || !/Pages\s+\d+\b/.test(header) || !/ISBN\s+[\d-]{10,}/.test(header)) continue;
+    const dates = header.split('\n').filter((line) => new RegExp(`^\\d{1,2} ${month} \\d{4}$`, 'i').test(line));
+    if (dates.length !== 1) continue;
+    return knownHeaderSourceDate(dates[0], 'published', `${title}\nReport\n${header}`);
+  }
+  return null;
 }
 
 function sourceUrlParts(value: string | null | undefined): { hostname: string; pathname: string } | null {
@@ -484,17 +505,17 @@ function dateMatches(text: string, includeBareYear: boolean): Array<{ raw: strin
   return matches.sort((left, right) => left.index - right.index);
 }
 
-function openingDocumentText(text: string, lineLimit = 8): string {
+function openingDocumentText(text: string, lineLimit = 8, charLimit = 1_000): string {
   const normalized = text.replace(/\r/g, '');
   const pageOne = normalized.match(/(?:^|\n\n?)Page\s+1:\s*([\s\S]*?)(?=\n\n?Page\s+2:|$)/i)?.[1];
-  return (pageOne || normalized).split(/\n+/).map((line) => line.trim()).filter(Boolean).slice(0, lineLimit).join('\n').slice(0, 1_000);
+  return (pageOne || normalized).split(/\n+/).map((line) => line.trim()).filter(Boolean).slice(0, lineLimit).join('\n').slice(0, charLimit);
 }
 
-function openingHtmlText(html: string, elementLimit = 8): string {
+function openingHtmlText(html: string, elementLimit = 8, charLimit = 1_000): string {
   const $ = cheerio.load(html);
   $('script, style, noscript, svg, nav, footer, header, form').remove();
   const root = $('main').length ? $('main') : $('article').length ? $('article') : $('body');
-  return root.find('h1, h2, h3, h4, p, li, time').map((_, element) => $(element).contents().toArray().map((child) => $(child).text()).join(' ').replace(/\s+/g, ' ').trim()).get().filter(Boolean).slice(0, elementLimit).join('\n').slice(0, 1_000);
+  return root.find('h1, h2, h3, h4, p, li, time').map((_, element) => $(element).contents().toArray().map((child) => $(child).text()).join(' ').replace(/\s+/g, ' ').trim()).get().filter(Boolean).slice(0, elementLimit).join('\n').slice(0, charLimit);
 }
 
 function hasAmbiguousMention(block: string, date: string): boolean {

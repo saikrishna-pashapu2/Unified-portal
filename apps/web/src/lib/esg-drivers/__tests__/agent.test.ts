@@ -64,6 +64,20 @@ beforeEach(() => {
 });
 
 describe('September workbook generation', () => {
+  it('upgrades a ranked legacy checkpoint before persisting any new work and rejects unknown versions', async () => {
+    const checkpoint = snapshot(1);
+    checkpoint.selectionPolicy = DRIVER_SELECTION_POLICY;
+    checkpoint.relevanceAssessmentVersion = 'driver-specific-v2';
+    const stop = new Error('stop after observing initial checkpoint');
+    const saved: EsgWorkbookCheckpoint[] = [];
+    await expect(generateEsgDriverResult(input, { checkpoint, onCheckpoint: async (value) => { saved.push(structuredClone(value as EsgWorkbookCheckpoint)); throw stop; } })).rejects.toBe(stop);
+    expect(saved[0].relevanceAssessmentVersion).toBe('driver-specific-v3');
+    expect(checkpoint.relevanceAssessmentVersion).toBe('driver-specific-v2');
+    const onCheckpoint = vi.fn();
+    await expect(generateEsgDriverResult(input, { checkpoint: { ...checkpoint, relevanceAssessmentVersion: 'unknown' } as any, onCheckpoint })).rejects.toThrow('Unsupported relevance assessment checkpoint version');
+    expect(onCheckpoint).not.toHaveBeenCalled();
+    expect(mocks.writer).not.toHaveBeenCalled();
+  });
   it('runs the full 52-row UAE Banking pipeline without capping, changing names, or omitting rows', async () => {
     const checkpoint = createWorkbookCheckpoint(input);
     delete checkpoint.selectionPolicy;

@@ -1,15 +1,19 @@
 import type {
   DriverRelevance,
+  DriverRelevanceAssessmentVersion,
   DriverRelevanceDimension,
   DriverSelection,
   DriverSelectionPolicy,
   EsgDriver,
   EsgDriverSection,
 } from './types';
+import { EVIDENCE_STATUS_LABELS, type DriverEvidenceStatus } from './quality-policy';
 
 export const DRIVER_SELECTION_POLICY = 'relevance-top15-v1' as const;
 export const CATEGORY_SELECTION_POLICY = 'category-balanced15-v1' as const;
-export const RELEVANCE_ASSESSMENT_VERSION = 'driver-specific-v2' as const;
+export const LEGACY_RELEVANCE_ASSESSMENT_VERSION = 'driver-specific-v2' as const;
+export const RELEVANCE_ASSESSMENT_VERSION = 'driver-specific-v3' as const;
+export const MAX_UNRESOLVED_URGENCY_RATING = 2 as const;
 const RELEVANCE_REVIEW_ISSUE = 'Relevance assessment is missing its driver-specific evidence review.';
 export const MAX_PUBLISHED_DRIVERS = 15 as const;
 export const CATEGORY_QUOTA = 3 as const;
@@ -24,6 +28,14 @@ export const DRIVER_REPORT_CATEGORIES = [
 export const MIN_RELEVANCE_SCORE = 50 as const;
 export const RELEVANCE_WEIGHTS = { country: 30, sector: 30, businessImpact: 25, urgency: 15 } as const;
 export const RELEVANCE_DIMENSIONS = Object.keys(RELEVANCE_WEIGHTS) as DriverRelevanceDimension[];
+
+export function isRelevanceAssessmentVersion(value: unknown): value is DriverRelevanceAssessmentVersion {
+  return value === LEGACY_RELEVANCE_ASSESSMENT_VERSION || value === RELEVANCE_ASSESSMENT_VERSION;
+}
+
+export function isDriverEvidenceStatus(value: unknown): value is DriverEvidenceStatus {
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(EVIDENCE_STATUS_LABELS, value);
+}
 
 export function isRankedSelectionPolicy(value: unknown): value is DriverSelectionPolicy {
   return value === DRIVER_SELECTION_POLICY || value === CATEGORY_SELECTION_POLICY;
@@ -78,11 +90,14 @@ export function canonicalDriverKey(name: string): string {
     .replace(/[\u2010-\u2015]/g, '-').replace(/\s+/g, ' ').trim();
 }
 
-export function relevanceIssues(driver: EsgDriver): string[] {
+export function relevanceIssues(
+  driver: EsgDriver,
+  expectedVersion: DriverRelevanceAssessmentVersion = RELEVANCE_ASSESSMENT_VERSION,
+): string[] {
   const score = driver.relevance;
   if (!score || score.policyVersion !== DRIVER_SELECTION_POLICY) return ['Missing relevance assessment.'];
   const issues: string[] = [];
-  if (score.assessmentVersion !== RELEVANCE_ASSESSMENT_VERSION || !score.review?.reviewer?.model?.trim()
+  if (score.assessmentVersion !== expectedVersion || !score.review?.reviewer?.model?.trim()
     || (['exactDriverSupport', 'noBorrowedObligations', 'urgencySupported', 'ratingsProportionate'] as const).some((check) => score.review?.checks?.[check] !== true)) issues.push(RELEVANCE_REVIEW_ISSUE);
   try {
     if (score.score !== computeRelevanceScore(score.dimensions) || score.band !== relevanceBand(score.score)) issues.push('Relevance total or band differs from the rubric.');
@@ -95,11 +110,23 @@ export function relevanceIssues(driver: EsgDriver): string[] {
       || dimension.passageIds.some((id) => !cited.has(id))) issues.push(`Unsubstantiated ${key} relevance rating.`);
   }
   if (!score.rationale?.trim() || !score.assessor?.model || !score.evidenceFingerprint?.trim() || !Number.isFinite(Date.parse(score.assessedAt))) issues.push('Incomplete relevance provenance.');
+  // v2 reports are immutable historical artifacts. Apply the status-bound
+  // safety rule only to the current v3 contract, so reading old history does
+  // not rewrite or silently downgrade its original score.
+  if (expectedVersion === RELEVANCE_ASSESSMENT_VERSION) {
+    if (!isDriverEvidenceStatus(driver.evidenceStatus)) issues.push('Relevance assessment is missing its verified evidence status.');
+    else if (driver.evidenceStatus === 'status-unresolved' && score.dimensions?.urgency?.rating > MAX_UNRESOLVED_URGENCY_RATING) {
+      issues.push('An unresolved evidence status cannot carry urgency above 2.');
+    }
+  }
   return issues;
 }
 
 /** Preserve a failed qualification without presenting its rejected numeric score. */
-export function relevanceFailureIssues(driver: EsgDriver): string[] {
+export function relevanceFailureIssues(
+  driver: EsgDriver,
+  expectedVersion: DriverRelevanceAssessmentVersion = RELEVANCE_ASSESSMENT_VERSION,
+): string[] {
   const failure = driver.relevanceFailure;
   if (failure && failure.kind !== undefined && failure.kind !== 'review-rejected' && failure.kind !== 'evidence-binding') {
     return ['An unscored candidate has an unknown relevance failure kind.'];
@@ -108,7 +135,8 @@ export function relevanceFailureIssues(driver: EsgDriver): string[] {
     const invalidShape = driver.relevance
       || !hasText(driver.statusReason)
       || failure.policyVersion !== DRIVER_SELECTION_POLICY
-      || failure.assessmentVersion !== RELEVANCE_ASSESSMENT_VERSION
+      || failure.assessmentVersion !== expectedVersion
+      || (expectedVersion === RELEVANCE_ASSESSMENT_VERSION && !isDriverEvidenceStatus(driver.evidenceStatus))
       || !hasText(failure.evidenceFingerprint)
       || !hasText(failure.attemptedAt)
       || !Number.isFinite(Date.parse(failure.attemptedAt))
@@ -134,20 +162,24 @@ export function relevanceFailureIssues(driver: EsgDriver): string[] {
     return invalidShape ? ['An unscored candidate is missing its failed evidence-binding assessment.'] : [];
   }
   const assessment = failure?.assessment;
-  if (driver.relevance || !assessment || assessment.assessmentVersion !== RELEVANCE_ASSESSMENT_VERSION
+  if (driver.relevance || !assessment || assessment.assessmentVersion !== expectedVersion
     || !assessment.review?.reviewer?.model?.trim() || !driver.statusReason?.trim()
     || !Array.isArray(failure?.reasons) || !failure.reasons.length || failure.reasons.some((reason) => !reason?.trim())) return ['An unscored candidate is missing its failed relevance review.'];
   const checks = ['exactDriverSupport', 'noBorrowedObligations', 'urgencySupported', 'ratingsProportionate'] as const;
   if (checks.some((key) => typeof assessment.review?.checks?.[key] !== 'boolean') || checks.every((key) => assessment.review!.checks[key])) return ['An unscored candidate does not contain a rejected relevance review.'];
-  return relevanceIssues({ ...driver, relevance: assessment }).filter((issue) => issue !== RELEVANCE_REVIEW_ISSUE);
+  return relevanceIssues({ ...driver, relevance: assessment }, expectedVersion).filter((issue) => issue !== RELEVANCE_REVIEW_ISSUE);
 }
 
 /** Pure, locale-independent selection. The full candidate pool stays in workbook order. */
-export function selectRankedDrivers(candidatePool: EsgDriver[], assessedAt = new Date().toISOString()): { drivers: EsgDriver[]; selection: DriverSelection } {
+export function selectRankedDrivers(
+  candidatePool: EsgDriver[],
+  assessedAt = new Date().toISOString(),
+  assessmentVersion: DriverRelevanceAssessmentVersion = RELEVANCE_ASSESSMENT_VERSION,
+): { drivers: EsgDriver[]; selection: DriverSelection } {
   const excluded = new Map<string, DriverSelection['excluded'][number]>();
   const eligible = candidatePool.filter((driver) => {
     const reason = driver.generationStatus !== 'verified' ? 'unavailable'
-      : relevanceIssues(driver).length ? 'unscored'
+      : relevanceIssues(driver, assessmentVersion).length ? 'unscored'
         : driver.relevance!.score < MIN_RELEVANCE_SCORE ? 'below-threshold' : null;
     if (reason) excluded.set(driver.id, { driverId: driver.id, reason });
     return !reason;
@@ -184,9 +216,12 @@ function compareEligibleDrivers(left: EsgDriver, right: EsgDriver): number {
     || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
 }
 
-function eligibilityReason(driver: EsgDriver): 'unavailable' | 'unscored' | 'below-threshold' | null {
+function eligibilityReason(
+  driver: EsgDriver,
+  assessmentVersion: DriverRelevanceAssessmentVersion,
+): 'unavailable' | 'unscored' | 'below-threshold' | null {
   return driver.generationStatus !== 'verified' ? 'unavailable'
-    : relevanceIssues(driver).length ? 'unscored'
+    : relevanceIssues(driver, assessmentVersion).length ? 'unscored'
       : driver.relevance!.score < MIN_RELEVANCE_SCORE ? 'below-threshold' : null;
 }
 
@@ -283,6 +318,7 @@ function selectCategoryCandidates(candidates: SelectionCandidate[]): Set<string>
 export function selectCategoryBalancedDrivers(
   candidatePool: EsgDriver[],
   assessedAt = new Date().toISOString(),
+  assessmentVersion: DriverRelevanceAssessmentVersion = RELEVANCE_ASSESSMENT_VERSION,
 ): { drivers: EsgDriver[]; selection: DriverSelection } {
   const excluded = new Map<string, DriverSelection['excluded'][number]>();
   const categories = new Map<string, EsgDriverSection>();
@@ -297,7 +333,7 @@ export function selectCategoryBalancedDrivers(
       rows.push(driver);
       categoryCandidates.set(category, rows);
     }
-    const reason = eligibilityReason(driver);
+    const reason = eligibilityReason(driver, assessmentVersion);
     if (reason) {
       excluded.set(driver.id, { driverId: driver.id, reason });
     } else if (!category) {
@@ -379,8 +415,9 @@ export function selectDriversForPolicy(
   candidatePool: EsgDriver[],
   policy: DriverSelectionPolicy | string,
   assessedAt = new Date().toISOString(),
+  assessmentVersion: DriverRelevanceAssessmentVersion = RELEVANCE_ASSESSMENT_VERSION,
 ): { drivers: EsgDriver[]; selection: DriverSelection } {
-  if (policy === DRIVER_SELECTION_POLICY) return selectRankedDrivers(candidatePool, assessedAt);
-  if (policy === CATEGORY_SELECTION_POLICY) return selectCategoryBalancedDrivers(candidatePool, assessedAt);
+  if (policy === DRIVER_SELECTION_POLICY) return selectRankedDrivers(candidatePool, assessedAt, assessmentVersion);
+  if (policy === CATEGORY_SELECTION_POLICY) return selectCategoryBalancedDrivers(candidatePool, assessedAt, assessmentVersion);
   throw new Error(`Unsupported driver selection policy: ${String(policy)}`);
 }

@@ -256,6 +256,28 @@ This article examines mine tailings facilities.`;
       sourceUrl: 'https://example.org/source',
     })).toBeNull();
   });
+  it('recognizes MDPI reader headers after navigation and an image-labelled access badge', () => {
+    const title = 'Mine Tailings Facilities in Kazakhstan: Public Databases, Management Practices, and Extreme Weather Events';
+    const header = `Article\nImage 4: Open Access\n25 June 2026\n24 Pages\n${title}`;
+    const sourceUrl = 'https://www.mdpi.com/2071-1050/18/13/6479';
+    const navigation = `Article\nNavigation\n${'Navigation item\n'.repeat(55)}`;
+    expect(extractSourceDate({ text: navigation + header, title, sourceUrl })).toMatchObject({ value: '25 June 2026', kind: 'published' });
+    expect(extractSourceDate({ text: 'x'.repeat(8_001) + '\n' + header, title, sourceUrl })).toBeNull();
+    expect(extractSourceDate({ text: navigation + header.replace('25 June 2026', 'Event held on 25 June 2026'), title, sourceUrl })).toBeNull();
+    expect(extractSourceDate({ text: navigation + header, title: 'A different article about climate risks', sourceUrl })).toBeNull();
+  });
+  it('recognizes OECD own report metadata after a long menu without borrowing featured-event dates', () => {
+    const title = 'Advancing Security and Transparency for the Governance of Critical Raw Materials in Central Asia';
+    const sourceUrl = 'https://www.oecd.org/en/publications/advancing-security-and-transparency-for-the-governance-of-critical-raw-materials-in-central-asia_42a74a65-en.html';
+    const navigation = `${'Navigation links '.repeat(3_100)}\nFeatured events\n25 November 2026\nClose menu\n`;
+    const header = `${title}\nReport\nMore info\nClose\nDOI\nAuthors\nOECD\nPages\n138\nISBN\n9789264807754\nTags\nCritical Minerals\n19 March 2026\nImage 77\nSummary\nFull report\nAbstract\nBody text.`;
+    expect(extractSourceDate({ text: navigation + header, title, sourceUrl })).toMatchObject({ value: '19 March 2026', kind: 'published', evidence: expect.stringContaining('19 March 2026') });
+    expect(extractSourceDate({ text: navigation + header.replace('19 March 2026', '19 March 2026\n20 March 2026'), title, sourceUrl })).toBeNull();
+    expect(extractSourceDate({ text: navigation + header.replace('19 March 2026', '19 March 2099'), title, sourceUrl })).toBeNull();
+    expect(extractSourceDate({ text: 'x'.repeat(80_001) + '\n' + header, title, sourceUrl })).toBeNull();
+    expect(extractSourceDate({ text: navigation + header, title: 'Different OECD report', sourceUrl })).toBeNull();
+    expect(extractSourceDate({ text: navigation + header, title, sourceUrl: 'https://example.org/report' })).toBeNull();
+  });
   it('does not scan unbounded HTML time elements for a document date', () => {
     const deepTimeElements = Array.from({ length: 8 }, (_, index) => `<p>Calendar event ${index + 1}</p><time datetime="2024-01-01">event</time>`).join('');
     const html = `<main>${deepTimeElements}<p><time itemprop="datePublished" datetime="2024-02-03">Published</time></p></main>`;

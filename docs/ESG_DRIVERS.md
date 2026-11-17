@@ -98,8 +98,8 @@ response, leaving existing saved reports readable. New generation is disabled
 until catalog loading succeeds.
 
 Deploy the web application and ESG workers together. New jobs use queue type
-`esg_driver_excel_v7`, which prevents older workers from claiming category-balanced
-jobs. The updated workers continue to accept earlier queue versions. Version 5
+`esg_driver_excel_v8`, which prevents older workers from claiming jobs that require
+the status-bound relevance contract. Updated workers accept earlier queue versions. Version 5
 and later jobs require their persisted workbook snapshot and fail clearly if it is missing;
 they must never fall back to a bundled or newly active workbook. No migration or
 worker restart is needed for subsequent uploads or activations.
@@ -215,15 +215,24 @@ The application computes each contribution as `rating * weight / 5`. The model
 must explain each rating and reference the driver's verified citation passages;
 it cannot supply an unchecked final percentage. Relevance is a prioritization
 judgment, not a confidence or probability score. Scoring uses country, sector,
-canonical workbook identity and evidence, excluding output language and translated
+canonical workbook identity, verified evidence status and evidence, excluding output language and translated
 narrative. Translations change explanations only. The assessment stores its model,
 response ID, policy version and an evidence fingerprint for checkpoint reuse.
-Assessment revision `driver-specific-v2` also requires a separate evidence review
+Assessment revision `driver-specific-v3` requires a separate evidence review
 of the proposed ratings. It checks exact-driver support, proportional ratings,
 driver-specific urgency and the absence of borrowed obligations. A background
 mention in another regulation cannot transfer that regulation's duties or
 deadlines to the named framework. Rejected ratings receive bounded repair;
 unreviewed assessments cannot be selected or reused.
+Revision v3 binds the verified `evidenceStatus` enum into the evidence fingerprint
+and rejects urgency above 2 when the main requirement is `status-unresolved`.
+This is a code-level validation rule, including persisted-result validation, and
+uses the same bounded correction/failure path as invalid citation evidence.
+Other evidence statuses do not receive this automatic cap; a historical source
+can coexist with separately confirmed current duties. Historical v2 results retain
+their original fingerprint algorithm and selection validation. New and resumed
+ranked jobs pin v3 in their checkpoint and reassess retained v2 scores; history
+counts use each checkpoint's pinned version, with absent historical markers meaning v2.
 Both scoring and independent review limit urgency to 0–2 when the only support
 is a past forecast with unconfirmed implementation, or an older description of
 a requirement whose status after a newer cited amendment is unresolved. A higher
@@ -232,6 +241,8 @@ Writer and content review require a material amended-version notice to be cited
 alongside an older or undated account when the exact amended requirement is not
 accessible. The report states that status limitation instead of inferring unchanged
 operation or repeal, and relevance review receives both cited passages.
+When that uncertainty concerns the main legal requirement, its evidence status
+must be `status-unresolved`, even if the older account supplies an effective date.
 Review distinguishes a named legal instrument from a descriptive business driver.
 A directly evidenced regulatory mechanism can support carbon-cost exposure or
 product competitiveness without transferring an importer's statutory duties to
@@ -240,6 +251,9 @@ dimension ratings; absent measured valuation effects do not erase established co
 exposure, and unsupported valuation facts remain prohibited. Writer and both content
 reviewers apply the same boundary: retain supported carbon-cost facts and explicitly
 state the absence of measured valuation effects.
+A separate customer-requirements driver needs actual buyer procurement criteria,
+contract/supplier conditions or product-carbon specifications. Regulatory adaptation
+guidance and general buyer engagement cannot substitute for that evidence.
 Writer and evidence review also distinguish direct statutory duties from buyer-data
 and commercial preparation burdens. Bibliographic citation years cannot establish
 the date of a substantive driver update; the stated event or reporting period must
@@ -302,7 +316,11 @@ field; unrelated dates mentioned in the body cannot.
 Explicitly dated opening press-release headers and numbered governmental decree
 headers can establish publication and version-issue dates respectively. Publisher-specific
 opening layouts also recognize the own article dates on EEAS delegation pages,
-Baiterek news and MDPI articles, with source URL and title/header checks. A bare
+Baiterek news, MDPI articles and OECD report metadata, with source URL and
+title/header checks. MDPI reader navigation and image-labelled access badges are
+recognized within a bounded opening. OECD's long reader menu is skipped only to
+locate the own title/Report boundary and a small DOI/author/pages/ISBN metadata
+block; featured-event dates and body dates remain excluded. A bare
 report edition or citation year remains insufficient. Unknown dates stay unknown,
 and month/year precision is preserved. Source dates remain separate from the
 driver's evidence period, legal effective dates, HTTP metadata and retrieval time.
@@ -344,8 +362,8 @@ child, rechecks supported rows against their saved source versions and quotation
 unavailable rows and relevance assessment gaps. Results from the older catalog remain readable/exportable, but
 legacy checkpoints cannot resume into this restricted workflow. Start a new run
 for those packs. No database migration is required for the JSON checkpoint format.
-New jobs use `esg_driver_excel_v7`, which fences the evidence-binding failure
-contract from older workers. Updated workers also drain existing v6 and older
+New jobs use `esg_driver_excel_v8`, which fences the status-bound relevance
+contract from older workers. Updated workers also drain existing v7 and older
 queue versions without rewriting their saved selection policy. Before
 completion, the domain transaction checks the result against the saved workbook
 rows, allowlist, citations, model review records and relevance evidence fingerprints.
@@ -363,8 +381,8 @@ for both writing and verification, with low reasoning for the first draft,
 medium for the first repair and reviews, and high for the final repair. The provider's returned model and response ID are
 recorded for both stages of each supported driver. Avoid switching a worker binary while it is actively
 processing a job; allow it to stop gracefully first.
-Refresh every local worker to support `esg_driver_excel_v7`, including a
-general worker started by another terminal. Workers predating version 7 cannot
+Refresh every local worker to support `esg_driver_excel_v8`, including a
+general worker started by another terminal. Workers predating version 8 cannot
 claim new jobs; leaving only older workers running leaves them queued. Worker logs
 record the job ID, claiming process identity and quality policy for new ESG jobs.
 Creating a retry keeps the parent read, checkpoint copy and child queue entry in

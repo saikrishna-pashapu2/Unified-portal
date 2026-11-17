@@ -256,8 +256,10 @@ export interface HarnessTrace {
 }
 
 export type DriverRelevanceDimension = 'country' | 'sector' | 'businessImpact' | 'urgency';
+/** Persisted relevance contracts. v2 is retained only for immutable history reads; new work writes v3. */
+export type DriverRelevanceAssessmentVersion = 'driver-specific-v2' | 'driver-specific-v3';
 export interface DriverRelevance {
-  assessmentVersion?: 'driver-specific-v2';
+  assessmentVersion?: DriverRelevanceAssessmentVersion;
   review?: {
     reviewer: { model: string; responseId: string | null };
     checks: { exactDriverSupport: boolean; noBorrowedObligations: boolean; urgencySupported: boolean; ratingsProportionate: boolean };
@@ -283,7 +285,7 @@ export interface ReviewRejectedRelevanceFailure {
 export interface EvidenceBindingRelevanceFailure {
   kind: 'evidence-binding';
   policyVersion: 'relevance-top15-v1';
-  assessmentVersion: 'driver-specific-v2';
+  assessmentVersion: DriverRelevanceAssessmentVersion;
   evidenceFingerprint: string;
   attemptedAt: string;
   assessor: { model: string; responseId: string | null };
@@ -449,6 +451,8 @@ export interface EsgWorkbookCheckpoint {
   qualityPolicy?: '2026-09-editorial-v1' | '2026-09-editorial-v2';
   /** Absent on existing full-workbook jobs; new jobs explicitly opt into the ranked report contract. */
   selectionPolicy?: DriverSelectionPolicy;
+  /** Absent on historical checkpoints, which therefore use the byte-compatible v2 relevance contract. */
+  relevanceAssessmentVersion?: DriverRelevanceAssessmentVersion;
   workflow: 'excel-sources';
   /** Catalog row identity for dynamic jobs; absent on legacy workbook checkpoints. */
   catalogVersionId?: string;

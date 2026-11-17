@@ -140,7 +140,7 @@ describe("dynamic catalog job creation", () => {
       workbook: "Custom ESG Drivers.xlsx",
       input,
     });
-    expect(queueInsert?.values).toContain("esg_driver_excel_v7");
+    expect(queueInsert?.values).toContain("esg_driver_excel_v8");
     expect(queueInsert?.values).toContain(JSON.stringify(input));
   });
 
@@ -164,12 +164,17 @@ describe("dynamic catalog job creation", () => {
     const { createEsgDriverJob } = await import("../jobs");
     const input = { country: "ألمانيا", sector: "Retail Finance", language: "English" };
     const checkpoint = createWorkbookCheckpoint(input, activeCatalog.catalog as any, catalogId);
+    delete checkpoint.relevanceAssessmentVersion;
     mocks.activeCatalog.mockRejectedValue(new Error("active catalog changed"));
     mocks.queryRaw.mockResolvedValue([jobRow("4c4ebf2b-a9e5-4f40-b633-740ee43ea7ec", input)]);
 
     await createEsgDriverJob(7, input, { checkpoint });
 
     expect(mocks.activeCatalog).not.toHaveBeenCalled();
-    expect(mocks.transactionStatements.find(({ sql }) => sql.includes("INSERT INTO background_jobs"))?.values).toContain("esg_driver_excel_v7");
+    expect(checkpoint.relevanceAssessmentVersion).toBeUndefined();
+    const domainInsert = mocks.transactionStatements.find(({ sql }) => sql.includes("INSERT INTO esg_driver_jobs"));
+    const savedCheckpoint = domainInsert?.values.find((value): value is string => typeof value === "string" && value.includes('"relevanceAssessmentVersion"'));
+    expect(savedCheckpoint).toContain('"relevanceAssessmentVersion":"driver-specific-v3"');
+    expect(mocks.transactionStatements.find(({ sql }) => sql.includes("INSERT INTO background_jobs"))?.values).toContain("esg_driver_excel_v8");
   });
 });

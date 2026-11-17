@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { rankedWorkbookResultFixture, workbookResultFixture } from "./workbook-result.fixture";
-import { CATEGORY_SELECTION_POLICY, DRIVER_REPORT_CATEGORIES, relevanceBand, selectCategoryBalancedDrivers, selectRankedDrivers } from '../ranking-policy';
+import { CATEGORY_SELECTION_POLICY, DRIVER_REPORT_CATEGORIES, RELEVANCE_ASSESSMENT_VERSION, relevanceBand, selectCategoryBalancedDrivers, selectRankedDrivers } from '../ranking-policy';
 import { relevanceEvidenceFingerprint } from '../relevance-evidence';
 
 const mocks = vi.hoisted(() => {
@@ -117,7 +117,7 @@ describe("ESG driver durable job lifecycle", () => {
     driver.relevanceFailure = {
       kind: 'evidence-binding',
       policyVersion: 'relevance-top15-v1',
-      assessmentVersion: 'driver-specific-v2',
+      assessmentVersion: RELEVANCE_ASSESSMENT_VERSION,
       evidenceFingerprint,
       attemptedAt: '2026-09-15T00:00:00.000Z',
       assessor: { model: 'gpt-5.6-luna', responseId: 'assessment-response' },
@@ -325,6 +325,20 @@ describe("ESG driver durable job lifecycle", () => {
     expect(statement?.values).toContain("2026-07-14");
   });
 
+  it("permits a recognized in-flight v2 to v3 checkpoint upgrade but rejects unknown markers", async () => {
+    const { updateEsgDriverJobCheckpoint } = await import("../jobs");
+    mocks.state.checkpointRows = [{ id }];
+    const upgraded = { ...checkpoint(), relevanceAssessmentVersion: RELEVANCE_ASSESSMENT_VERSION };
+    await expect(updateEsgDriverJobCheckpoint(id, "lease-token-a", upgraded)).resolves.toBeUndefined();
+    const statement = mocks.statements.find(({ sql }) => sql.includes("SET checkpoint_json ="));
+    expect(statement?.sql).toContain("relevanceAssessmentVersion");
+    expect(statement?.values).toContain("driver-specific-v3");
+
+    mocks.statements.length = 0;
+    await expect(updateEsgDriverJobCheckpoint(id, "lease-token-a", { ...checkpoint(), relevanceAssessmentVersion: "driver-specific-v9" } as any)).rejects.toThrow("Unsupported relevance assessment version");
+    expect(mocks.statements).toHaveLength(0);
+  });
+
   it("creates an immutable child job seeded with resume revalidation metadata", async () => {
     const { createEsgDriverResumeJob } = await import("../jobs");
     const childId = "9320f9d0-1091-4484-9b56-e6e695bcf653";
@@ -350,7 +364,7 @@ describe("ESG driver durable job lifecycle", () => {
     );
     expect(domainInsert?.values).toContain(id);
     expect(domainInsert?.values.some((value) => typeof value === 'string' && value.includes('"selectionPolicy":"category-balanced15-v1"'))).toBe(true);
-    expect(mocks.statements.some(({ sql, values }) => sql.includes('INSERT INTO background_jobs') && values.includes('esg_driver_excel_v7'))).toBe(true);
+    expect(mocks.statements.some(({ sql, values }) => sql.includes('INSERT INTO background_jobs') && values.includes('esg_driver_excel_v8'))).toBe(true);
     expect(
       domainInsert?.values.some(
         (value) =>

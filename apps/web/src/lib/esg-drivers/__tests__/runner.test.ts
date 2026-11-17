@@ -28,6 +28,16 @@ afterEach(() => {
 });
 
 describe("ESG driver checkpoint runner", () => {
+  it.each([undefined, 'driver-specific-v2', 'unknown'])('rejects a v8 job with relevance contract %s before model work', async (version) => {
+    mocks.getEsgDriverJob.mockResolvedValue({ status: 'queued', progress: 0, result: null,
+      checkpoint: { ...checkpoint('2026-11-17T00:00:00Z'), selectionPolicy: 'category-balanced15-v1', relevanceAssessmentVersion: version },
+    });
+    const { runEsgDriverGenerationJob } = await import('../runner');
+    await expect(runEsgDriverGenerationJob({ id: '4c4ebf2b-a9e5-4f40-b633-740ee43ea7ec', userId: 7, jobType: 'esg_driver_excel_v8',
+      payload: { country: 'UAE', sector: 'Banking', language: 'English' }, leaseOwner: 'lease-token-a', attempts: 1, maxAttempts: 2, progress: 0,
+    } as any)).rejects.toThrow('v8 jobs require the status-bound relevance assessment contract');
+    expect(mocks.generateEsgDriverResult).not.toHaveBeenCalled();
+  });
   it("loads a saved checkpoint and persists every harness checkpoint callback", async () => {
     const savedCheckpoint = checkpoint("2026-07-14T00:00:00.000Z");
     const nextCheckpoint = checkpoint("2026-07-14T00:01:00.000Z");
@@ -55,6 +65,7 @@ describe("ESG driver checkpoint runner", () => {
     const outcome = await runEsgDriverGenerationJob({
       id: "4c4ebf2b-a9e5-4f40-b633-740ee43ea7ec",
       userId: 7,
+      jobType: "esg_driver_excel_v8",
       payload: {
         country: "United Arab Emirates",
         sector: "Banking",
@@ -201,6 +212,8 @@ describe("ESG driver checkpoint runner", () => {
 function checkpoint(updatedAt: string) {
   return {
     version: 2 as const,
+    selectionPolicy: "category-balanced15-v1" as const,
+    relevanceAssessmentVersion: "driver-specific-v3" as const,
     workflow: "excel-sources" as const,
     workbook: "ESG_Drivers_September.xlsx", workbookSha256: "test",
     input: { country: "UAE", sector: "Banking", language: "English" },

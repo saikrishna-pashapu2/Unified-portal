@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import {
   CATEGORY_SELECTION_POLICY,
   DRIVER_REPORT_CATEGORIES,
@@ -66,6 +67,23 @@ describe('evidence-based top15 selection', () => {
     expect(relevanceEvidenceFingerprint(driver, { country: 'Kazakhstan', sector: 'Banking' })).not.toBe(original);
     driver.citations![0].quote += 'Changed source.';
     expect(relevanceEvidenceFingerprint(driver, result)).not.toBe(original);
+  });
+
+  it('binds the v3 score to the verified evidence status while preserving the v2 byte shape', () => {
+    const { result } = rankedWorkbookResultFixture(1);
+    const driver = result.candidatePool![0];
+    const v3 = relevanceEvidenceFingerprint(driver, result, 'driver-specific-v3');
+    driver.evidenceStatus = 'status-unresolved';
+    expect(relevanceEvidenceFingerprint(driver, result, 'driver-specific-v3')).not.toBe(v3);
+    const v2 = relevanceEvidenceFingerprint(driver, result, 'driver-specific-v2');
+    driver.evidenceStatus = 'historical';
+    expect(relevanceEvidenceFingerprint(driver, result, 'driver-specific-v2')).toBe(v2);
+    const legacyCitations = (driver.citations || []).map(({ sourceId, passageId, quote }) => ({ sourceId, passageId, quote }))
+      .sort((left, right) => left.passageId < right.passageId ? -1 : left.passageId > right.passageId ? 1 : 0);
+    expect(v2).toBe(createHash('sha256').update(JSON.stringify({
+      country: result.country, sector: result.sector, driverId: driver.id, name: driver.driverTitle,
+      section: driver.driverSection, type: driver.driverType, citations: legacyCitations,
+    })).digest('hex'));
   });
 });
 

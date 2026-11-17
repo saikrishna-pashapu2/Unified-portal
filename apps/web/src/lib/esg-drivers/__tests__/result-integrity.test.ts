@@ -1,8 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import { assertWorkbookResult, savedResultError, workbookResultIssues } from '../result-integrity';
 import { workbookResultFixture, rankedWorkbookResultFixture } from './workbook-result.fixture';
-import { CATEGORY_SELECTION_POLICY, DRIVER_REPORT_CATEGORIES, selectCategoryBalancedDrivers, selectRankedDrivers } from '../ranking-policy';
+import { CATEGORY_SELECTION_POLICY, DRIVER_REPORT_CATEGORIES, LEGACY_RELEVANCE_ASSESSMENT_VERSION, RELEVANCE_ASSESSMENT_VERSION, computeRelevanceScore, relevanceBand, selectCategoryBalancedDrivers, selectRankedDrivers } from '../ranking-policy';
 import { relevanceEvidenceFingerprint } from '../relevance-evidence';
+
+function legacyRankedWorkbookResultFixture(count = 20) {
+  const fixture = rankedWorkbookResultFixture(count);
+  delete fixture.checkpoint.relevanceAssessmentVersion;
+  for (const driver of fixture.result.candidatePool || []) {
+    if (!driver.relevance) continue;
+    driver.relevance.assessmentVersion = LEGACY_RELEVANCE_ASSESSMENT_VERSION;
+    driver.relevance.evidenceFingerprint = relevanceEvidenceFingerprint(driver, fixture.checkpoint.input, LEGACY_RELEVANCE_ASSESSMENT_VERSION);
+  }
+  const selected = selectRankedDrivers(fixture.result.candidatePool!, fixture.result.generatedAt, LEGACY_RELEVANCE_ASSESSMENT_VERSION);
+  fixture.result = { ...fixture.result, ...selected };
+  fixture.checkpoint.slots = fixture.result.candidatePool!.map((driver) => ({ driver: structuredClone(driver), sources: [fixture.source] }));
+  return fixture;
+}
 
 function rejectedRelevanceFixture() {
   const fixture = rankedWorkbookResultFixture(20);
@@ -25,7 +39,7 @@ function evidenceBindingFixture() {
   driver.relevanceFailure = {
     kind: 'evidence-binding',
     policyVersion: 'relevance-top15-v1',
-    assessmentVersion: 'driver-specific-v2',
+    assessmentVersion: RELEVANCE_ASSESSMENT_VERSION,
     evidenceFingerprint,
     attemptedAt: '2026-09-15T00:00:00.000Z',
     assessor: { model: 'gpt-5.6-luna', responseId: 'assessment-response' },
@@ -206,6 +220,48 @@ describe('ranked workbook integrity', () => {
   it('accepts15 published drivers and the complete pinned candidate pool', () => {
     const { result, checkpoint } = rankedWorkbookResultFixture();
     expect(() => assertWorkbookResult(result, checkpoint, true)).not.toThrow();
+  });
+  it('reads an immutable v2 ranked report without applying the v3 unresolved-status cap', () => {
+    const fixture = legacyRankedWorkbookResultFixture();
+    const driver = fixture.result.candidatePool![0];
+    driver.evidenceStatus = 'status-unresolved';
+    driver.relevance!.dimensions.urgency.rating = 5;
+    driver.relevance!.score = computeRelevanceScore(driver.relevance!.dimensions);
+    driver.relevance!.band = relevanceBand(driver.relevance!.score);
+    driver.relevance!.evidenceFingerprint = relevanceEvidenceFingerprint(driver, fixture.checkpoint.input, LEGACY_RELEVANCE_ASSESSMENT_VERSION);
+    const selected = selectRankedDrivers(fixture.result.candidatePool!, fixture.result.generatedAt, LEGACY_RELEVANCE_ASSESSMENT_VERSION);
+    fixture.result = { ...fixture.result, ...selected };
+    fixture.checkpoint.slots = fixture.result.candidatePool!.map((candidate) => ({ driver: structuredClone(candidate), sources: [fixture.source] }));
+    expect(workbookResultIssues(fixture.result, fixture.checkpoint)).toEqual([]);
+    expect(() => assertWorkbookResult(fixture.result, fixture.checkpoint, true)).not.toThrow();
+  });
+  it('rejects a v3 unresolved score above the deterministic urgency cap', () => {
+    const fixture = rankedWorkbookResultFixture();
+    const driver = fixture.result.candidatePool![0];
+    driver.evidenceStatus = 'status-unresolved';
+    driver.relevance!.dimensions.urgency.rating = 5;
+    driver.relevance!.score = computeRelevanceScore(driver.relevance!.dimensions);
+    driver.relevance!.band = relevanceBand(driver.relevance!.score);
+    driver.relevance!.evidenceFingerprint = relevanceEvidenceFingerprint(driver, fixture.checkpoint.input, RELEVANCE_ASSESSMENT_VERSION);
+    expect(workbookResultIssues(fixture.result, fixture.checkpoint)).toContain('An unresolved evidence status cannot carry urgency above 2.');
+    expect(() => assertWorkbookResult(fixture.result, fixture.checkpoint)).toThrow();
+  });
+  it('rejects mixed checkpoint assessment versions and a retained v2 row in a v3 checkpoint', () => {
+    const fixture = rankedWorkbookResultFixture();
+    const driver = fixture.result.candidatePool![0];
+    driver.relevance!.assessmentVersion = LEGACY_RELEVANCE_ASSESSMENT_VERSION;
+    driver.relevance!.evidenceFingerprint = relevanceEvidenceFingerprint(driver, fixture.checkpoint.input, LEGACY_RELEVANCE_ASSESSMENT_VERSION);
+    const issues = workbookResultIssues(fixture.result, fixture.checkpoint);
+    expect(issues).toContain('Relevance assessment is missing its driver-specific evidence review.');
+    expect(issues).toContain('Relevance assessment does not match the candidate evidence and scope.');
+    expect(() => assertWorkbookResult(fixture.result, fixture.checkpoint)).toThrow();
+  });
+  it('fails closed for an unknown checkpoint relevance version without accepting a forged fingerprint', () => {
+    const fixture = rankedWorkbookResultFixture(1);
+    fixture.checkpoint.relevanceAssessmentVersion = 'driver-specific-v9' as any;
+    const issues = workbookResultIssues(fixture.result, fixture.checkpoint);
+    expect(issues).toContain('Unsupported relevance assessment version.');
+    expect(savedResultError(fixture.result, fixture.checkpoint)).toContain('cannot be used or exported');
   });
   it('accepts a partial report without inventing unsupported drivers', () => {
     for (const unavailable of [false, true]) {

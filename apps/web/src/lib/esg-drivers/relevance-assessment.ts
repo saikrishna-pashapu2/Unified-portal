@@ -6,13 +6,16 @@ import { z } from "zod";
 import { env } from "@/lib/config/env";
 import {
   DRIVER_SELECTION_POLICY,
+  MAX_UNRESOLVED_URGENCY_RATING,
   RELEVANCE_ASSESSMENT_VERSION,
   RELEVANCE_DIMENSIONS,
   computeRelevanceScore,
+  isDriverEvidenceStatus,
   relevanceBand,
   relevanceIssues,
 } from "./ranking-policy";
 import { relevanceEvidenceFingerprint } from "./relevance-evidence";
+import { EVIDENCE_STATUS_LABELS, type DriverEvidenceStatus } from "./quality-policy";
 import type {
   DriverRelevance,
   DriverRelevanceDimension,
@@ -77,7 +80,7 @@ const relevanceTranslationSchema = z.object({
 export type RelevanceAssessmentDriver = Pick<
   EsgDriver,
   "id" | "driverTitle" | "driverType" | "driverSection" | "citations"
->;
+> & { evidenceStatus?: DriverEvidenceStatus };
 
 export type RelevanceAssessmentInput = Pick<
   GenerateEsgDriversInput,
@@ -152,6 +155,14 @@ export class RelevanceAssessmentRejectedError extends RelevanceAssessmentError {
 
 function configuredModelName(): string {
   return String(env.OPENAI_ESG_DRIVERS_MODEL || RELEVANCE_ASSESSOR_MODEL).trim() || RELEVANCE_ASSESSOR_MODEL;
+}
+
+/** Validate the persisted enum before any model sees or influences scoring. */
+export function normalizeRelevanceEvidenceStatus(value: unknown): DriverEvidenceStatus {
+  if (!isDriverEvidenceStatus(value) || !Object.prototype.hasOwnProperty.call(EVIDENCE_STATUS_LABELS, value)) {
+    throw new RelevanceAssessmentValidationError("A relevance assessment requires a verified evidence status enum.");
+  }
+  return value;
 }
 
 function relevanceModel() {
@@ -259,9 +270,12 @@ export function buildRelevanceScoringPayload(
   country: string;
   sector: string;
   assessmentDate: string;
+  /** Verified enum only; never localized labels or statusReason prose. */
+  evidenceStatus: DriverEvidenceStatus;
   citedPassages: Array<{ sourceId: string; passageId: string; location: string; text: string }>;
 } {
   const passages = citedPassages(driver).sort((left, right) => left.passageId.localeCompare(right.passageId));
+  const evidenceStatus = normalizeRelevanceEvidenceStatus(driver.evidenceStatus);
   return {
     workbookDriver: {
       id: driver.id,
@@ -272,6 +286,7 @@ export function buildRelevanceScoringPayload(
     country: input.country,
     sector: input.sector,
     assessmentDate: input.assessmentDate || new Date().toISOString(),
+    evidenceStatus,
     citedPassages: passages,
   };
 }
@@ -286,6 +301,7 @@ export function buildRelevanceReviewPayload(
   country: string;
   sector: string;
   assessmentDate: string;
+  evidenceStatus: DriverEvidenceStatus;
   citedPassages: Array<{ sourceId: string; passageId: string; location: string; text: string }>;
   proposedAssessment: Pick<DriverRelevance, "score" | "band" | "dimensions" | "rationale">;
 } {
@@ -306,12 +322,14 @@ const SCORING_SYSTEM_PROMPT = [
   "Evaluate every dimension against the exact named workbook driver. A background mention of the driver inside another regulation, framework or general ESG passage cannot transfer that other instrument's obligation, scope, deadline or implementation status to this driver.",
   "Distinguish a named legal instrument or framework from a descriptive business driver such as carbon-cost exposure, product competitiveness, financing or asset valuation. For a descriptive driver, a cited regulation can be direct evidence when the passage itself connects that regulation to the named commercial or operational effect in the selected country and sector. Do not require a separate law or programme with the descriptive driver's title. Keep statutory duties with the actual regulated entity; a Kazakhstan exporter can face evidenced buyer-data demands, cost exposure or competitiveness pressure without becoming an EU importer or declarant.",
   "Support for a compound descriptive business driver is not all-or-nothing. Direct evidence of carbon-cost exposure can support country and sector relevance even when measured asset-valuation effects are absent. Lower the unsupported impact component and state the limitation; do not invent a measured valuation change or give unsupported components the same weight as directly established effects. A supported causal mechanism and a clearly qualified analytical implication are different from an unrelated background mention.",
+  "For a low-carbon customer-requirements or buyer-procurement driver, CBAM reporting, exporter adaptation, regulatory cost exposure or general engagement with buyers is not independent customer criteria. Require the supplied passage to establish actual buyer procurement criteria, a contract or supplier condition, or a product-carbon specification for the exact driver. Without that evidence, score the customer-requirements dimensions zero or conditionally low and do not borrow regulatory urgency from CBAM.",
   "For a named global framework, a high country or sector rating is allowed only when the cited passage itself establishes the framework's broad applicability or a clearly grounded implication. A local rule that merely lists or references the framework is background unless it directly establishes implementation of this exact driver.",
   "Return one integer rating from 0 through 5, one concise evidence-grounded reason, and the exact supplied passage IDs used for each dimension. Write every reason and the rationale in canonical English; the requested output language is handled later by a separate translation call. The application computes the weighted total; never return a percentage or a total score.",
   "Rating anchors: 0 means no support or no meaningful relevance; 1 means weak or indirect relevance; 2 means limited or conditional relevance; 3 means material relevance supported by the passage; 4 means strong and directly applicable relevance; 5 means critical, broad or binding relevance with a clear consequence for the selected scope.",
   "Country relevance considers exposure or applicability to the selected country. Sector relevance considers the selected sector or covered entities. A directly applicable global framework may score highly without naming the country when the passage clearly establishes its broad applicability. Entity-specific exposure that is unknown must be stated conditionally and cannot be turned into a local mandate.",
   "Business impact considers supported financial, operational, credit, revenue, cost, market-access or risk-management consequences of this exact driver. Generic banking consequences or effects of an unrelated instrument do not support a nonzero rating. For a descriptive business driver, an instrument that directly creates the evidenced cost or competitiveness pressure is a relevant mechanism, not an unrelated instrument.",
   "Urgency must be supported by this exact driver's dated implementation, operative requirement, effective date, driver-specific deadline or explicit near-term pressure. For a descriptive business driver, an instrument's timing can support proportionate urgency only when a passage directly connects it to the selected scope's named cost, market-access or operational exposure. A deadline applicable only to another instrument or entity without that evidenced connection, a background mention, or source freshness alone is not urgency and should produce a zero or conditional rating. An older binding rule can still score highly for relevance without being treated as a current deadline.",
+  "The verified evidenceStatus enum is a control input, not localized prose: when it is status-unresolved, urgency must be 0–2 even if an older passage contains a date. Never override this cap using statusReason, translated text or the assessment date.",
   "The assessment date is context for urgency only. Do not copy it into a reason, treat a future target as a current obligation, or infer that an old announcement remains current. A dated announcement without later status evidence can still describe a historical or conditional relevance.",
   "An older passage saying a measure is set to start, expected, proposed or planned is a forecast, not proof of implementation. If that forecast date is now past, urgency must be 0–2 unless another supplied passage confirms actual implementation and applicability of this exact driver. Passing the forecast date does not make the measure operative.",
   "If a newer cited amendment or revision exists but the supplied passages do not establish its effect on this exact requirement, an older descriptive account alone cannot establish the requirement's current operative status. In that case urgency must be 0–2 and the reason must state the unresolved status; do not assume either that the old requirement continues unchanged or that it has been repealed. A separate passage confirming the current requirement can support a higher rating.",
@@ -327,6 +345,8 @@ const REVIEW_SYSTEM_PROMPT = [
   "For compound descriptive drivers, missing measured asset-valuation effects do not invalidate directly established carbon-cost exposure or its country/sector relevance. Require lower, qualified ratings for the unsupported impact component and reject invented valuation facts; do not reject every nonzero dimension solely because one component lacks measured outcomes. Continue to reject generic adjacent context with no direct causal connection to the named driver.",
   "Set noBorrowedObligations=true only when no obligation, scope, threshold, implementation status or deadline has been transferred from another instrument or a generic ESG passage. A local regulation mentioning Paris, for example, cannot support a Paris Agreement obligation without direct implementation evidence.",
   "Set urgencySupported=true only when urgency is driver-specific or an explicit implementation, operative requirement, effective date or deadline for the exact driver is cited. Publication recency, a historical announcement, or another regulation's deadline is not urgency.",
+  "For a low-carbon customer-requirements or buyer-procurement driver, CBAM reporting, exporter adaptation, regulatory cost exposure or general buyer engagement cannot satisfy exactDriverSupport or urgencySupported by themselves. Require actual buyer procurement criteria, contract/supplier conditions or product-carbon specifications for the exact driver; otherwise mark unsupported or proportionately conditional and do not borrow CBAM urgency.",
+  "When the supplied evidenceStatus is status-unresolved, urgency above 2 is invalid regardless of the proposed reason; set urgencySupported=false and ratingsProportionate=false for such a proposal. Historical, framework-reference and dated-update statuses do not receive this cap by label alone.",
   "Set urgencySupported=false and ratingsProportionate=false when urgency exceeds 2 based only on a past forecast whose actual implementation is unconfirmed, or on an older account of a requirement whose status after a newer cited amendment is unresolved. Compare all supplied passages and the assessment date: a forecast date passing or an amendment notice alone does not confirm current operation. Higher urgency needs a separate cited passage establishing current implementation and applicability of this exact requirement.",
   "Set ratingsProportionate=true only when each 0–5 rating matches the directness and strength of evidence for the exact driver. Lower unsupported dimensions to zero or a conditional low rating rather than carrying a high rating from adjacent context.",
   "A zero rating with a reason that the supplied passages do not establish exact-driver support is valid and should not fail the review. In particular, urgencySupported=true is appropriate when urgency is correctly scored zero because no exact-driver deadline or implementation evidence is supplied.",
@@ -379,6 +399,7 @@ async function invokeBounded<T>(
 function normalizeAssessment(
   parsed: z.infer<typeof relevanceAssessmentSchema>,
   allowedPassageIds: ReadonlySet<string>,
+  evidenceStatus: DriverEvidenceStatus,
 ): z.infer<typeof relevanceAssessmentSchema> {
   const dimensions = {} as z.infer<typeof relevanceAssessmentSchema>["dimensions"];
   const failures: string[] = [];
@@ -392,6 +413,10 @@ function normalizeAssessment(
     } else if (dimension.rating > 0 && ids.length === 0) {
       failures.push(`The ${key} relevance rating has no cited passage.`);
       failedDimensions.push(key);
+    }
+    if (evidenceStatus === 'status-unresolved' && key === 'urgency' && dimension.rating > MAX_UNRESOLVED_URGENCY_RATING) {
+      failures.push('The verified status-unresolved evidence status caps urgency at 2.');
+      if (!failedDimensions.includes(key)) failedDimensions.push(key);
     }
     dimensions[key] = {
       rating: dimension.rating,
@@ -429,7 +454,7 @@ function buildCanonicalAssessment(
     dimensions,
     rationale: parsed.rationale,
     assessedAt: new Date().toISOString(),
-    evidenceFingerprint: relevanceEvidenceFingerprint(assessmentDriver(driver), input),
+    evidenceFingerprint: relevanceEvidenceFingerprint(assessmentDriver(driver), input, RELEVANCE_ASSESSMENT_VERSION),
     assessor: identity,
   };
 }
@@ -529,6 +554,7 @@ async function scoreAssessment(
       (value) => normalizeAssessment(
         relevanceAssessmentSchema.parse(value),
         new Set(payload.citedPassages.map((passage) => passage.passageId)),
+        payload.evidenceStatus,
       ),
       (error) => error instanceof RelevanceAssessmentEvidenceError
         ? repairScoringMessages(payload, error.reasons)
@@ -545,7 +571,7 @@ async function scoreAssessment(
       kind: 'evidence-binding',
       policyVersion: DRIVER_SELECTION_POLICY,
       assessmentVersion: RELEVANCE_ASSESSMENT_VERSION,
-      evidenceFingerprint: relevanceEvidenceFingerprint(assessmentDriver(driver), input),
+      evidenceFingerprint: relevanceEvidenceFingerprint(assessmentDriver(driver), input, RELEVANCE_ASSESSMENT_VERSION),
       attemptedAt: new Date().toISOString(),
       assessor: responseIdentity(error.raw),
       attempts: scoringBudget.calls,
@@ -604,7 +630,7 @@ export async function assessDriverRelevance(
     lastReviewedAssessment = reviewed;
     lastReviewReasons = [...review.reasons];
     if (Object.values(review.checks).every(Boolean)) {
-      if (relevanceIssues({ ...assessmentDriver(driver), relevance: reviewed }).length) {
+      if (relevanceIssues({ ...assessmentDriver(driver), relevance: reviewed }, RELEVANCE_ASSESSMENT_VERSION).length) {
         throw new RelevanceAssessmentValidationError("The relevance assessment did not satisfy the evidence rubric.");
       }
       if (input.language && input.language !== "English") {
@@ -635,13 +661,13 @@ export function needsRelevanceAssessment(
   // queue attempt even if an older valid score was accidentally retained on
   // the same object; the scorer must clear that failure only after success.
   if (driver.relevanceFailure) return true;
-  if (!driver.relevance || driver.relevance.policyVersion !== DRIVER_SELECTION_POLICY) return true;
-  if (driver.relevance.evidenceFingerprint !== relevanceEvidenceFingerprint(driver, input)) return true;
+  if (!driver.relevance || driver.relevance.policyVersion !== DRIVER_SELECTION_POLICY || driver.relevance.assessmentVersion !== RELEVANCE_ASSESSMENT_VERSION) return true;
+  if (driver.relevance.evidenceFingerprint !== relevanceEvidenceFingerprint(driver, input, RELEVANCE_ASSESSMENT_VERSION)) return true;
   // Urgency is time-sensitive even when the cited wording is unchanged. Keep
   // same-UTC-day retries idempotent, but refresh a durable score on a later
   // day so a deadline cannot remain silently stale.
   if (input.assessmentDate && utcDay(input.assessmentDate) !== utcDay(driver.relevance.assessedAt)) return true;
-  return relevanceIssues(driver).length > 0;
+  return relevanceIssues(driver, RELEVANCE_ASSESSMENT_VERSION).length > 0;
 }
 
 /** Attach a score only to a supported row, preserving an existing valid score. */
@@ -656,11 +682,13 @@ export async function ensureDriverRelevance(
   // otherwise stale row label from being reused for the canonical definition.
   const canonicalForReuse = { ...driver, ...canonicalDriver };
   if (!needsRelevanceAssessment(canonicalForReuse, input)) return driver;
+  const scoringDriver: RelevanceAssessmentDriver = {
+    ...canonicalDriver,
+    evidenceStatus: normalizeRelevanceEvidenceStatus(canonicalForReuse.evidenceStatus),
+    citations: driver.citations,
+  };
   return {
     ...driver,
-    relevance: await assessDriverRelevance({
-      ...canonicalDriver,
-      citations: driver.citations,
-    }, input),
+    relevance: await assessDriverRelevance(scoringDriver, input),
   };
 }

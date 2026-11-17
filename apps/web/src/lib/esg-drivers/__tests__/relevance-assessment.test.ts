@@ -44,6 +44,7 @@ import {
   RelevanceAssessmentEvidenceBindingError,
   RelevanceAssessmentRejectedError,
 } from "../relevance-assessment";
+import { relevanceEvidenceFingerprint } from "../relevance-evidence";
 import type { EsgDriver } from "../types";
 
 const input = {
@@ -66,6 +67,7 @@ const baseDriver: EsgDriver = {
   confidence: 0,
   lastChecked: "2026-09-15T00:00:00.000Z",
   generationStatus: "verified",
+  evidenceStatus: "framework-reference",
   citations: [{
     sourceId: "source-1",
     passageId: "passage-1",
@@ -137,6 +139,7 @@ describe("evidence-grounded relevance assessment", () => {
       country: "UAE",
       sector: "Banking",
       assessmentDate: "2026-09-15T00:00:00.000Z",
+      evidenceStatus: "framework-reference",
       citedPassages: [{
         sourceId: "source-1",
         passageId: "passage-1",
@@ -151,7 +154,7 @@ describe("evidence-grounded relevance assessment", () => {
   it("computes the weighted integer score and preserves evidence IDs", async () => {
     const result = await assessDriverRelevance(baseDriver, input);
     expect(result).toMatchObject({
-      assessmentVersion: "driver-specific-v2",
+      assessmentVersion: "driver-specific-v3",
       policyVersion: "relevance-top15-v1",
       score: 75,
       band: "medium",
@@ -165,6 +168,8 @@ describe("evidence-grounded relevance assessment", () => {
     const scoringPayload = JSON.parse((mocks.calls[0].messages[1] as { content: string }).content);
     expect(scoringPayload).not.toHaveProperty("language");
     expect(scoringPayload).not.toHaveProperty("driverText");
+    expect(scoringPayload.evidenceStatus).toBe("framework-reference");
+    expect(scoringPayload).not.toHaveProperty("statusReason");
     expect(scoringPayload.citedPassages[0].passageId).toBe("passage-1");
     const reviewPayload = JSON.parse((mocks.calls[1].messages[1] as { content: string }).content);
     expect(reviewPayload).toMatchObject({
@@ -175,6 +180,64 @@ describe("evidence-grounded relevance assessment", () => {
     });
     expect(reviewPayload).not.toHaveProperty("language");
     expect(reviewPayload).not.toHaveProperty("driverText");
+    expect(reviewPayload.evidenceStatus).toBe("framework-reference");
+    expect(reviewPayload).not.toHaveProperty("statusReason");
+  });
+
+  it("accepts urgency 2 for a verified status-unresolved driver", async () => {
+    const result = await assessDriverRelevance({ ...baseDriver, evidenceStatus: "status-unresolved" }, input);
+    expect(result.dimensions.urgency.rating).toBe(2);
+    expect(result.score).toBe(75);
+    expect(result.evidenceFingerprint).toBeTruthy();
+    const scoringPayload = JSON.parse((mocks.calls[0].messages[1] as { content: string }).content);
+    expect(scoringPayload.evidenceStatus).toBe("status-unresolved");
+  });
+
+  it("rejects localized or missing status prose instead of treating it as the verified enum", () => {
+    expect(() => buildRelevanceScoringPayload({ ...baseDriver, evidenceStatus: undefined, statusReason: "الحالة غير مؤكدة" } as any, input)).toThrow("verified evidence status enum");
+  });
+
+  it("repairs and then fails honestly when a status-unresolved scorer ignores the urgency cap", async () => {
+    const response = scoredResponse();
+    const tooUrgent = {
+      ...response,
+      dimensions: {
+        ...response.dimensions,
+        urgency: { rating: 4, reason: "The old dated requirement creates immediate pressure.", passageIds: ["passage-1"] },
+      },
+    };
+    mocks.assessment.mockReturnValue(tooUrgent);
+
+    let failure: unknown;
+    try {
+      await assessDriverRelevance({ ...baseDriver, evidenceStatus: "status-unresolved" }, input);
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toBeInstanceOf(RelevanceAssessmentEvidenceBindingError);
+    expect((failure as RelevanceAssessmentEvidenceBindingError).failure).toMatchObject({
+      assessmentVersion: "driver-specific-v3",
+      attempts: 2,
+      failedDimensions: ["urgency"],
+      reasons: ["The verified status-unresolved evidence status caps urgency at 2."],
+    });
+    expect(mocks.calls.filter(({ name }) => name === "esg_driver_relevance_assessment")).toHaveLength(2);
+    expect(mocks.calls.filter(({ name }) => name === "esg_driver_relevance_review")).toHaveLength(0);
+  });
+
+  it.each(["historical", "dated-update"] as const)("allows a high urgency score for %s evidence when its supplied evidence supports it", async (evidenceStatus) => {
+    const response = scoredResponse();
+    mocks.assessment.mockReturnValue({
+      ...response,
+      dimensions: {
+        ...response.dimensions,
+        urgency: { rating: 5, reason: "The cited historical implementation record establishes a material deadline.", passageIds: ["passage-1"] },
+      },
+    });
+    const result = await assessDriverRelevance({ ...baseDriver, evidenceStatus }, input);
+    expect(result.dimensions.urgency.rating).toBe(5);
+    expect(result.score).toBe(84);
+    expect(result.band).toBe("high");
   });
 
   it("accepts a justified zero urgency rating without inventing a deadline", async () => {
@@ -273,7 +336,7 @@ describe("evidence-grounded relevance assessment", () => {
     expect(evidenceFailure).toMatchObject({
       kind: "evidence-binding",
       policyVersion: "relevance-top15-v1",
-      assessmentVersion: "driver-specific-v2",
+      assessmentVersion: "driver-specific-v3",
       attempts: 2,
       failedDimensions: ["urgency"],
       assessor: { model: "gpt-5.6-luna", responseId: "esg_driver_relevance_assessment-response" },
@@ -422,7 +485,7 @@ describe("evidence-grounded relevance assessment", () => {
       .mockReturnValueOnce(reviewResponse());
 
     const result = await assessDriverRelevance(baseDriver, input);
-    expect(result.assessmentVersion).toBe("driver-specific-v2");
+    expect(result.assessmentVersion).toBe("driver-specific-v3");
     expect(result.score).toBe(51);
     expect(result.dimensions.urgency).toEqual({ rating: 0, reason: "The cited passage does not establish an implementation deadline for this exact framework.", passageIds: [] });
     expect(result.review?.checks).toEqual(reviewResponse().checks);
@@ -485,6 +548,16 @@ describe("evidence-grounded relevance assessment", () => {
     };
     expect(needsRelevanceAssessment(saved, sameDayInput)).toBe(false);
     expect(needsRelevanceAssessment(saved, nextDayInput)).toBe(true);
+    const legacySaved = {
+      ...saved,
+      relevance: {
+        ...relevance,
+        assessmentVersion: "driver-specific-v2" as const,
+        evidenceFingerprint: relevanceEvidenceFingerprint(saved, input, "driver-specific-v2"),
+      },
+    };
+    expect(needsRelevanceAssessment(legacySaved, sameDayInput)).toBe(true);
+    expect(needsRelevanceAssessment({ ...saved, evidenceStatus: "status-unresolved" }, sameDayInput)).toBe(true);
     expect(needsRelevanceAssessment(baseDriver, input)).toBe(true);
     expect(needsRelevanceAssessment({
       ...saved,

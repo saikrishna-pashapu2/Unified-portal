@@ -29,6 +29,7 @@ describe('September workbook fidelity', () => {
   });
   it('pins an isolated copy of the selection and exact allowlist for retry', () => {
     const checkpoint = createWorkbookCheckpoint({ country: 'UAE', sector: 'Banking', language: 'Arabic' });
+    expect(checkpoint.relevanceAssessmentVersion).toBe('driver-specific-v3');
     checkpoint.definitions[0].name = 'mutated'; checkpoint.allowedSources.pop();
     expect(ESG_DRIVER_WORKBOOK.sheets[0].drivers[0].name).toBe('Paris Agreement');
     expect(checkpoint.allowedSources.length).toBeLessThan(ESG_DRIVER_WORKBOOK.sheets[0].sources.length);

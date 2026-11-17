@@ -29,7 +29,9 @@ import { ESG_DRIVER_QUALITY_POLICY } from './quality-policy';
 import {
   CATEGORY_SELECTION_POLICY,
   DRIVER_SELECTION_POLICY,
+  LEGACY_RELEVANCE_ASSESSMENT_VERSION,
   RELEVANCE_ASSESSMENT_VERSION,
+  isRelevanceAssessmentVersion,
   isRankedSelectionPolicy,
 } from './ranking-policy';
 
@@ -167,7 +169,9 @@ export async function createEsgDriverJob(
     // this same transaction as the domain and queue inserts. A supplied
     // checkpoint is an internal/legacy pinned retry and must never resolve a
     // newer active catalog.
-    let checkpoint = options.checkpoint;
+    // Keep caller-owned pinned checkpoints immutable while allowing this new
+    // queue row to receive the current contract marker below.
+    let checkpoint = options.checkpoint ? structuredClone(options.checkpoint) : undefined;
     let canonicalInput: GenerateEsgDriversInput;
     if (!checkpoint) {
       const active = await getActiveDriverCatalog(transaction);
@@ -205,10 +209,20 @@ export async function createEsgDriverJob(
         throw new EsgDriverScopeValidationError();
       }
     }
+    if (checkpoint.version === 2 && checkpoint.relevanceAssessmentVersion !== undefined && !isRelevanceAssessmentVersion(checkpoint.relevanceAssessmentVersion)) {
+      throw new Error('Unsupported relevance assessment version.');
+    }
+    // Every newly enqueued category-balanced job uses the v8 worker fence and
+    // therefore must carry the status-bound v3 marker. The source checkpoint
+    // is cloned above, so upgrading a supplied legacy pin does not mutate the
+    // caller's immutable historical object.
+    if (checkpoint.version === 2 && checkpoint.selectionPolicy === CATEGORY_SELECTION_POLICY) {
+      checkpoint.relevanceAssessmentVersion = RELEVANCE_ASSESSMENT_VERSION;
+    }
     if (checkpoint.version === 2 && checkpoint.selectionPolicy && !isRankedSelectionPolicy(checkpoint.selectionPolicy)) {
       throw new Error(`Unsupported driver selection policy: ${String(checkpoint.selectionPolicy)}`);
     }
-    // New category-balanced checkpoints use the current v7 fence. Older pinned
+    // New category-balanced checkpoints use the current v8 fence. Older pinned
     // checkpoints retain their queue version so automatic retries stay on the
     // policy and worker contract they were created with.
     const queueType = checkpoint.version === 2
@@ -318,6 +332,10 @@ export async function createEsgDriverResumeJob(
     }
     checkpoint.evidenceContract = ESG_EVIDENCE_CONTRACT;
     checkpoint.qualityPolicy = ESG_DRIVER_QUALITY_POLICY;
+    // A resume is a new generation boundary. Validate the parent under its
+    // pinned legacy/current contract above, then require the child to score
+    // every retained/retried row under the current status-bound v3 contract.
+    checkpoint.relevanceAssessmentVersion = RELEVANCE_ASSESSMENT_VERSION;
     // An explicit retry is the opt-in point for upgrading an older ranked
     // checkpoint to the latest category-balanced selection policy. Automatic
     // queue retries never rewrite this pinned checkpoint.
@@ -407,7 +425,7 @@ export async function updateEsgDriverJobProgress(
           lease_expires_at = now() + (90 * INTERVAL '1 second'),
           updated_at = now()
       WHERE id = ${id}::uuid
-        AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6', 'esg_driver_excel_v7')
+        AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6', 'esg_driver_excel_v7', 'esg_driver_excel_v8')
         AND status = 'processing'
         AND lease_owner = ${leaseOwner}
         AND lease_expires_at >= now()
@@ -450,6 +468,9 @@ export async function updateEsgDriverJobCheckpoint(
   checkpoint: AnyEsgDriverCheckpoint,
 ): Promise<void> {
   await ensureEsgDriverJobsTable();
+  if (checkpoint.version === 2 && checkpoint.relevanceAssessmentVersion !== undefined && !isRelevanceAssessmentVersion(checkpoint.relevanceAssessmentVersion)) {
+    throw new Error('Unsupported relevance assessment version.');
+  }
 
   const rows = await esgPrisma.$queryRaw<Array<{ id: string }>>`
     WITH owned_queue AS (
@@ -458,7 +479,7 @@ export async function updateEsgDriverJobCheckpoint(
           lease_expires_at = now() + (90 * INTERVAL '1 second'),
           updated_at = now()
       WHERE id = ${id}::uuid
-        AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6', 'esg_driver_excel_v7')
+        AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6', 'esg_driver_excel_v7', 'esg_driver_excel_v8')
         AND status = 'processing'
         AND lease_owner = ${leaseOwner}
         AND lease_expires_at >= now()
@@ -483,6 +504,13 @@ export async function updateEsgDriverJobCheckpoint(
           AND domain.checkpoint_json->>'workbook' = ${checkpoint.version === 2 ? checkpoint.workbook : null}
           AND domain.checkpoint_json->>'selectionPolicy' IS NOT DISTINCT FROM ${checkpoint.version === 2 ? checkpoint.selectionPolicy ?? null : null}
           AND (domain.checkpoint_json->>'evidenceContract' IS NULL OR domain.checkpoint_json->>'evidenceContract' = ${checkpoint.version === 2 ? checkpoint.evidenceContract ?? null : null})
+          AND (
+            domain.checkpoint_json->>'relevanceAssessmentVersion' IS NOT DISTINCT FROM ${checkpoint.version === 2 ? checkpoint.relevanceAssessmentVersion ?? null : null}
+            OR (
+              ${checkpoint.version === 2 && checkpoint.relevanceAssessmentVersion === RELEVANCE_ASSESSMENT_VERSION}
+              AND COALESCE(domain.checkpoint_json->>'relevanceAssessmentVersion', ${LEGACY_RELEVANCE_ASSESSMENT_VERSION}) = ${LEGACY_RELEVANCE_ASSESSMENT_VERSION}
+            )
+          )
         )
       )
     RETURNING domain.id::text
@@ -515,7 +543,7 @@ export async function completeEsgDriverJob(
       SELECT user_id, status, attempts, max_attempts, cancel_requested,
              lease_owner, lease_expires_at >= now() AS lease_valid
       FROM background_jobs
-      WHERE id = ${id}::uuid AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6', 'esg_driver_excel_v7')
+      WHERE id = ${id}::uuid AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6', 'esg_driver_excel_v7', 'esg_driver_excel_v8')
       FOR UPDATE
     `;
     const queue = queueRows[0];
@@ -569,7 +597,7 @@ export async function completeEsgDriverJob(
           lease_owner = NULL, lease_expires_at = NULL,
           heartbeat_at = now(), completed_at = now(), updated_at = now()
       WHERE id = ${id}::uuid
-        AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6', 'esg_driver_excel_v7')
+        AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6', 'esg_driver_excel_v7', 'esg_driver_excel_v8')
         AND status = 'processing'
         AND lease_owner = ${leaseOwner}
         AND lease_expires_at >= now()
@@ -596,7 +624,7 @@ export async function failEsgDriverJob(
       SELECT user_id, status, attempts, max_attempts, cancel_requested,
              lease_owner, lease_expires_at >= now() AS lease_valid
       FROM background_jobs
-      WHERE id = ${job.id}::uuid AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6', 'esg_driver_excel_v7')
+      WHERE id = ${job.id}::uuid AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6', 'esg_driver_excel_v7', 'esg_driver_excel_v8')
       FOR UPDATE
     `;
     const queue = queueRows[0];
@@ -636,7 +664,7 @@ export async function failEsgDriverJob(
           completed_at = CASE WHEN ${retry} THEN NULL ELSE now() END,
           updated_at = now()
       WHERE id = ${job.id}::uuid
-        AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6', 'esg_driver_excel_v7')
+        AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6', 'esg_driver_excel_v7', 'esg_driver_excel_v8')
         AND status = 'processing'
         AND lease_owner = ${job.leaseOwner}
         AND lease_expires_at >= now()
@@ -680,7 +708,7 @@ export async function markEsgDriverJobCancelled(
       SELECT user_id, status, attempts, max_attempts, cancel_requested,
              lease_owner, lease_expires_at >= now() AS lease_valid
       FROM background_jobs
-      WHERE id = ${id}::uuid AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6', 'esg_driver_excel_v7')
+      WHERE id = ${id}::uuid AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6', 'esg_driver_excel_v7', 'esg_driver_excel_v8')
       FOR UPDATE
     `;
     const queue = queueRows[0];
@@ -700,7 +728,7 @@ export async function markEsgDriverJobCancelled(
           lease_owner = NULL, lease_expires_at = NULL,
           completed_at = now(), updated_at = now()
       WHERE id = ${id}::uuid
-        AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6', 'esg_driver_excel_v7')
+        AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6', 'esg_driver_excel_v7', 'esg_driver_excel_v8')
         AND status = 'processing'
         AND lease_owner = ${leaseOwner}
         AND lease_expires_at >= now()
@@ -757,12 +785,12 @@ export async function getEsgDriverJob(
         'candidateAssessedCount', (SELECT COUNT(*)::int FROM jsonb_array_elements(checkpoint_json->'slots') AS assessed(slot)
           WHERE assessed.slot->'driver'->>'generationStatus' = 'unavailable'
              OR (assessed.slot->'driver'->'relevance'->>'policyVersion' = ${DRIVER_SELECTION_POLICY}
-                 AND assessed.slot->'driver'->'relevance'->>'assessmentVersion' = ${RELEVANCE_ASSESSMENT_VERSION})
+                 AND assessed.slot->'driver'->'relevance'->>'assessmentVersion' = COALESCE(checkpoint_json->>'relevanceAssessmentVersion', ${LEGACY_RELEVANCE_ASSESSMENT_VERSION}))
              OR (assessed.slot->'driver'->'relevanceFailure'->>'kind' = 'evidence-binding'
                  AND assessed.slot->'driver'->'relevanceFailure'->>'policyVersion' = ${DRIVER_SELECTION_POLICY}
-                 AND assessed.slot->'driver'->'relevanceFailure'->>'assessmentVersion' = ${RELEVANCE_ASSESSMENT_VERSION})
+                 AND assessed.slot->'driver'->'relevanceFailure'->>'assessmentVersion' = COALESCE(checkpoint_json->>'relevanceAssessmentVersion', ${LEGACY_RELEVANCE_ASSESSMENT_VERSION}))
              OR (assessed.slot->'driver'->'relevanceFailure'->'assessment'->>'policyVersion' = ${DRIVER_SELECTION_POLICY}
-                 AND assessed.slot->'driver'->'relevanceFailure'->'assessment'->>'assessmentVersion' = ${RELEVANCE_ASSESSMENT_VERSION}))
+                 AND assessed.slot->'driver'->'relevanceFailure'->'assessment'->>'assessmentVersion' = COALESCE(checkpoint_json->>'relevanceAssessmentVersion', ${LEGACY_RELEVANCE_ASSESSMENT_VERSION})))
       ) END AS checkpoint_summary,
       catalog_version,
       checkpoint_json->>'catalogVersion' AS checkpoint_catalog_version,
@@ -810,12 +838,12 @@ export async function listEsgDriverJobsPage(
                  'candidateAssessedCount', (SELECT COUNT(*)::int FROM jsonb_array_elements(checkpoint_json->'slots') AS assessed(slot)
                    WHERE assessed.slot->'driver'->>'generationStatus' = 'unavailable'
                       OR (assessed.slot->'driver'->'relevance'->>'policyVersion' = ${DRIVER_SELECTION_POLICY}
-                          AND assessed.slot->'driver'->'relevance'->>'assessmentVersion' = ${RELEVANCE_ASSESSMENT_VERSION})
+                          AND assessed.slot->'driver'->'relevance'->>'assessmentVersion' = COALESCE(checkpoint_json->>'relevanceAssessmentVersion', ${LEGACY_RELEVANCE_ASSESSMENT_VERSION}))
                       OR (assessed.slot->'driver'->'relevanceFailure'->>'kind' = 'evidence-binding'
                           AND assessed.slot->'driver'->'relevanceFailure'->>'policyVersion' = ${DRIVER_SELECTION_POLICY}
-                          AND assessed.slot->'driver'->'relevanceFailure'->>'assessmentVersion' = ${RELEVANCE_ASSESSMENT_VERSION})
+                          AND assessed.slot->'driver'->'relevanceFailure'->>'assessmentVersion' = COALESCE(checkpoint_json->>'relevanceAssessmentVersion', ${LEGACY_RELEVANCE_ASSESSMENT_VERSION}))
                       OR (assessed.slot->'driver'->'relevanceFailure'->'assessment'->>'policyVersion' = ${DRIVER_SELECTION_POLICY}
-                          AND assessed.slot->'driver'->'relevanceFailure'->'assessment'->>'assessmentVersion' = ${RELEVANCE_ASSESSMENT_VERSION}))
+                          AND assessed.slot->'driver'->'relevanceFailure'->'assessment'->>'assessmentVersion' = COALESCE(checkpoint_json->>'relevanceAssessmentVersion', ${LEGACY_RELEVANCE_ASSESSMENT_VERSION})))
                ) END AS checkpoint_summary,
                created_at, updated_at, completed_at
         FROM esg_driver_jobs
@@ -843,12 +871,12 @@ export async function listEsgDriverJobsPage(
                  'candidateAssessedCount', (SELECT COUNT(*)::int FROM jsonb_array_elements(checkpoint_json->'slots') AS assessed(slot)
                    WHERE assessed.slot->'driver'->>'generationStatus' = 'unavailable'
                       OR (assessed.slot->'driver'->'relevance'->>'policyVersion' = ${DRIVER_SELECTION_POLICY}
-                          AND assessed.slot->'driver'->'relevance'->>'assessmentVersion' = ${RELEVANCE_ASSESSMENT_VERSION})
+                          AND assessed.slot->'driver'->'relevance'->>'assessmentVersion' = COALESCE(checkpoint_json->>'relevanceAssessmentVersion', ${LEGACY_RELEVANCE_ASSESSMENT_VERSION}))
                       OR (assessed.slot->'driver'->'relevanceFailure'->>'kind' = 'evidence-binding'
                           AND assessed.slot->'driver'->'relevanceFailure'->>'policyVersion' = ${DRIVER_SELECTION_POLICY}
-                          AND assessed.slot->'driver'->'relevanceFailure'->>'assessmentVersion' = ${RELEVANCE_ASSESSMENT_VERSION})
+                          AND assessed.slot->'driver'->'relevanceFailure'->>'assessmentVersion' = COALESCE(checkpoint_json->>'relevanceAssessmentVersion', ${LEGACY_RELEVANCE_ASSESSMENT_VERSION}))
                       OR (assessed.slot->'driver'->'relevanceFailure'->'assessment'->>'policyVersion' = ${DRIVER_SELECTION_POLICY}
-                          AND assessed.slot->'driver'->'relevanceFailure'->'assessment'->>'assessmentVersion' = ${RELEVANCE_ASSESSMENT_VERSION}))
+                          AND assessed.slot->'driver'->'relevanceFailure'->'assessment'->>'assessmentVersion' = COALESCE(checkpoint_json->>'relevanceAssessmentVersion', ${LEGACY_RELEVANCE_ASSESSMENT_VERSION})))
                ) END AS checkpoint_summary,
                created_at, updated_at, completed_at
         FROM esg_driver_jobs
@@ -902,7 +930,7 @@ export async function deleteEsgDriverJob(
     // cannot acquire this job until the cancellation or deletion commits.
     const queueRows = await transaction.$queryRaw<Array<{ status: BackgroundJobStatus }>>`
       SELECT status FROM background_jobs
-      WHERE id = ${id}::uuid AND user_id = ${userId} AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6', 'esg_driver_excel_v7')
+      WHERE id = ${id}::uuid AND user_id = ${userId} AND job_type IN ('esg_driver', 'esg_driver_excel_v3', 'esg_driver_excel_v4', 'esg_driver_excel_v5', 'esg_driver_excel_v6', 'esg_driver_excel_v7', 'esg_driver_excel_v8')
       FOR UPDATE
     `;
     const queue = queueRows[0];
@@ -1001,6 +1029,7 @@ function decodeJobsCursor(
 
 function mapJobRow(row: EsgDriverJobRow): EsgDriverJob {
   const checkpoint = row.checkpoint_json?.version === 2 ? row.checkpoint_json : undefined;
+  const expectedRelevanceVersion = checkpoint?.relevanceAssessmentVersion ?? LEGACY_RELEVANCE_ASSESSMENT_VERSION;
   const selectionPolicyValue = checkpoint?.selectionPolicy || row.checkpoint_summary?.selectionPolicy || row.result_json?.selection?.policyVersion;
   const selectionPolicy = isRankedSelectionPolicy(selectionPolicyValue) ? selectionPolicyValue : undefined;
   const pinnedCatalog = row.checkpoint_catalog_version || row.catalog_version;
@@ -1016,7 +1045,7 @@ function mapJobRow(row: EsgDriverJobRow): EsgDriverJob {
     ...(selectionPolicy ? {
       selectionPolicy,
       candidateCount: checkpoint?.definitions.length ?? row.checkpoint_summary?.candidateCount ?? row.result_json?.selection?.candidateCount ?? 0,
-      candidateAssessedCount: checkpoint?.slots.filter((slot) => slot.driver.generationStatus === 'unavailable' || (slot.driver.relevance?.policyVersion === DRIVER_SELECTION_POLICY && slot.driver.relevance.assessmentVersion === RELEVANCE_ASSESSMENT_VERSION) || (slot.driver.relevanceFailure?.kind === 'evidence-binding' && slot.driver.relevanceFailure.policyVersion === DRIVER_SELECTION_POLICY && slot.driver.relevanceFailure.assessmentVersion === RELEVANCE_ASSESSMENT_VERSION) || (slot.driver.relevanceFailure?.kind !== 'evidence-binding' && slot.driver.relevanceFailure?.assessment?.policyVersion === DRIVER_SELECTION_POLICY && slot.driver.relevanceFailure?.assessment?.assessmentVersion === RELEVANCE_ASSESSMENT_VERSION)).length ?? row.checkpoint_summary?.candidateAssessedCount ?? row.result_json?.candidatePool?.length ?? 0,
+      candidateAssessedCount: checkpoint?.slots.filter((slot) => slot.driver.generationStatus === 'unavailable' || (slot.driver.relevance?.policyVersion === DRIVER_SELECTION_POLICY && slot.driver.relevance.assessmentVersion === expectedRelevanceVersion) || (slot.driver.relevanceFailure?.kind === 'evidence-binding' && slot.driver.relevanceFailure.policyVersion === DRIVER_SELECTION_POLICY && slot.driver.relevanceFailure.assessmentVersion === expectedRelevanceVersion) || (slot.driver.relevanceFailure?.kind !== 'evidence-binding' && slot.driver.relevanceFailure?.assessment?.policyVersion === DRIVER_SELECTION_POLICY && slot.driver.relevanceFailure?.assessment?.assessmentVersion === expectedRelevanceVersion)).length ?? row.checkpoint_summary?.candidateAssessedCount ?? row.result_json?.candidatePool?.length ?? 0,
       publishedDriverCount: integrityError ? 0 : row.result_json?.drivers.length ?? 0,
       expectedDriverCount: 15,
     } : {}),

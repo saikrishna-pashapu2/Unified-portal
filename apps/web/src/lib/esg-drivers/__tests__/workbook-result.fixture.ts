@@ -48,13 +48,14 @@ export function workbookResultFixture(count = 2, unavailable = false) {
 export function rankedWorkbookResultFixture(count = 52, unavailable = false) {
   const fixture = workbookResultFixture(count, unavailable);
   fixture.checkpoint.selectionPolicy = DRIVER_SELECTION_POLICY;
+  fixture.checkpoint.relevanceAssessmentVersion = 'driver-specific-v3';
   const candidates = fixture.result.drivers;
   for (const driver of candidates.filter((d) => d.generationStatus === 'verified')) {
     const dimension = { rating: 4, reason: 'The cited framework supports this assessment.', passageIds: ['passage'] };
     const dimensions = { country: { ...dimension }, sector: { ...dimension }, businessImpact: { ...dimension }, urgency: { ...dimension } };
     const score = computeRelevanceScore(dimensions);
     driver.relevance = {
-      assessmentVersion: 'driver-specific-v2',
+      assessmentVersion: 'driver-specific-v3',
       review: { reviewer: { model: 'gpt-5.6-luna', responseId: 'relevance-reviewer' }, checks: { exactDriverSupport: true, noBorrowedObligations: true, urgencySupported: true, ratingsProportionate: true } },
       policyVersion: DRIVER_SELECTION_POLICY, score, band: relevanceBand(score), dimensions,
       rationale: 'Relevant to the selected country and sector.', assessedAt: fixture.result.generatedAt,
