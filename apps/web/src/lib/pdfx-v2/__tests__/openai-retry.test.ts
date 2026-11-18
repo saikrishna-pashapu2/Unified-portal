@@ -345,6 +345,53 @@ describe('PDF Translator OpenAI retry ladder', () => {
     expect(mergePageTranslation(source, result.translation)).toEqual(source);
   });
 
+  it('preserves source array order, amounts, IDs and protected text in an identity result', async () => {
+    const source = alreadyRussianPage();
+    source.elements[0].text += ' Сумма 123 456,78 UZS, ID 991.';
+    source.elements.push({
+      ...source.elements[0], id: 'english', order: 2, translate: false,
+      text: 'This English policy must remain unchanged.',
+    });
+    source.elements.reverse(); // Source array order is authoritative, not `order`.
+    const original = structuredClone(source);
+    const mock = requester({ translate: vi.fn(), validate: vi.fn() });
+    const result = await translatePageWithOpenAi(source, context, 'Russian', mock);
+
+    expect(result.responseId).toBe('target-language-source-only');
+    expect(validateTranslatedPage(source, result.translation, 'Russian').valid).toBe(true);
+    expect(mergePageTranslation(source, result.translation)).toEqual(original);
+    expect(source).toEqual(original);
+    expect(mock.translate).not.toHaveBeenCalled();
+    expect(mock.validate).not.toHaveBeenCalled();
+  });
+
+  it('does not erase English text whose translate flag is protected only at runtime', async () => {
+    const source = sourcePage();
+    source.elements[0].text = 'This English policy text must remain exactly unchanged.';
+    expect(source.elements[0].translate).toBe(true);
+    const original = structuredClone(source);
+    const mock = requester({ translate: vi.fn(), validate: vi.fn() });
+    const result = await translatePageWithOpenAi(source, context, 'Russian', mock);
+
+    expect(result.responseId).toBe('protected-source-only');
+    expect(mergePageTranslation(source, result.translation)).toEqual(original);
+    expect(source).toEqual(original);
+    expect(mock.translate).not.toHaveBeenCalled();
+    expect(mock.validate).not.toHaveBeenCalled();
+  });
+
+  it.each(['BAJARISH', 'Ушбу қарор билан амалга оширилсин.'])(
+    'still requests translation for mixed-language content: %s', async (action) => {
+      const source = alreadyRussianPage();
+      source.elements[0].text += ` ${action}`;
+      const failure = Object.assign(new Error('Diagnostic provider blocked'), { status: 403 });
+      const translate = vi.fn().mockRejectedValue(failure);
+      await expect(translatePageWithOpenAi(source, context, 'Russian', requester({ translate })))
+        .rejects.toThrow();
+      expect(translate).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('retries when the independent semantic reviewer rejects a fluent but incorrect page', async () => {
     const source = sourcePage();
     const first = {
