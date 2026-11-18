@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import type { PdfPageLayout, PdfPageTranslation } from '../schemas';
 import type { PdfxV2OpenAiRequester } from '../openai';
 import { extractPageWithOpenAi, translatePageWithOpenAi } from '../openai';
+import { mergePageTranslation } from '../serialize';
+import { validateTranslatedPage } from '../validation';
 
 function sourcePage(): PdfPageLayout {
   return {
@@ -17,6 +19,39 @@ function sourcePage(): PdfPageLayout {
       text: 'Ушбу қарор 2026 йилда кучга киради.', bbox: [50, 50, 950, 200],
       columnCount: 0, rowCount: 0, rows: [],
     }],
+  };
+}
+
+function alreadyRussianPage(): PdfPageLayout {
+  return {
+    pageNumber: 10,
+    width: 1000,
+    height: 1000,
+    orientation: 'portrait',
+    sourceLanguage: 'Russian',
+    sourceScript: 'Cyrillic and Latin',
+    warnings: [],
+    elements: [
+      {
+        id: 'e001', kind: 'paragraph', order: 0, level: 0, translate: true,
+        text: 'Настоящий документ содержит требования организации и управления.',
+        bbox: [50, 50, 950, 150], columnCount: 0, rowCount: 0, rows: [],
+      },
+      {
+        id: 'e002', kind: 'table', order: 1, level: 0, translate: true,
+        text: '', bbox: [50, 200, 950, 500], columnCount: 1, rowCount: 2,
+        rows: [
+          { rowIndex: 0, cells: [{
+            id: 'e002-r0-c0', rowIndex: 0, columnIndex: 0, rowSpan: 1, columnSpan: 1,
+            isHeader: true, translate: true, text: 'Наименование участника', bbox: [50, 200, 950, 300],
+          }] },
+          { rowIndex: 1, cells: [{
+            id: 'e002-r1-c0', rowIndex: 1, columnIndex: 0, rowSpan: 1, columnSpan: 1,
+            isHeader: false, translate: true, text: 'ООО ALPHA CONSULTING', bbox: [50, 300, 950, 500],
+          }] },
+        ],
+      },
+    ],
   };
 }
 
@@ -260,6 +295,54 @@ describe('PDF Translator OpenAI retry ladder', () => {
     expect(result.attempts).toBe(0);
     expect(translate).not.toHaveBeenCalled();
     expect(validate).not.toHaveBeenCalled();
+  });
+
+  it('preserves an already-Russian page as an identity translation before fragment recovery', async () => {
+    const source = alreadyRussianPage();
+    const translate = vi.fn();
+    const validate = vi.fn();
+    const result = await translatePageWithOpenAi(
+      source,
+      context,
+      'Russian',
+      requester({
+        translate,
+        validate,
+        remainingTranslationRequests: () => 0,
+      }),
+      {
+        // A prior rejected candidate and an explicit rerun must not force a
+        // paid correction when the persisted source is already Russian.
+        resume: {
+          version: 'page-translation-v1',
+          fingerprint: 'stale-fingerprint',
+          retryRequested: true,
+          passes: {
+            whole: {
+              attempts: 2,
+              candidate: {
+                pageNumber: source.pageNumber,
+                warnings: [],
+                elements: [{ id: 'e001', text: 'Другой текст', cells: [] }],
+              },
+            },
+          },
+        } as never,
+        save: vi.fn(async () => undefined),
+      },
+    );
+
+    expect(translate).not.toHaveBeenCalled();
+    expect(validate).not.toHaveBeenCalled();
+    expect(result.attempts).toBe(0);
+    expect(result.inputTokens).toBe(0);
+    expect(result.outputTokens).toBe(0);
+    expect(result.responseId).toBe('target-language-source-only');
+    expect(validateTranslatedPage(source, result.translation, 'Russian')).toMatchObject({
+      valid: true,
+      failures: [],
+    });
+    expect(mergePageTranslation(source, result.translation)).toEqual(source);
   });
 
   it('retries when the independent semantic reviewer rejects a fluent but incorrect page', async () => {

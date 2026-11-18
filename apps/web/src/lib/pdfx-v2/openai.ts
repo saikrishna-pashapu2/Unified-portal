@@ -49,6 +49,7 @@ import type {
   TranslatedPageResult,
 } from './types';
 import {
+  isAlreadyWrittenInTargetLanguage,
   PdfxV2ValidationError,
   validateExtractedPage,
   validateTranslatedPage,
@@ -679,6 +680,26 @@ function orderedTranslatableElements(source: PdfPageLayout): PdfElement[] {
   return source.elements
     .filter(isTranslatableElement)
     .sort((left, right) => left.order - right.order || left.id.localeCompare(right.id));
+}
+
+/**
+ * Return an identity translation for a page whose printed text is already in
+ * the requested language.  The caller's pipeline merges translations into the
+ * original source layout, so this must include every original translatable
+ * element and every cell (including protected cells); returning only the
+ * still-eligible elements after language protection would blank those regions
+ * during mergePageTranslation.
+ */
+function preservedSourceTranslation(source: PdfPageLayout): PdfPageTranslation {
+  return {
+    pageNumber: source.pageNumber,
+    warnings: [],
+    elements: source.elements.filter(isTranslatableElement).map((element) => ({
+      id: element.id,
+      text: element.text,
+      cells: allCells(element).map((cell) => ({ id: cell.id, text: cell.text })),
+    })),
+  };
 }
 
 function tableRowCharacters(row: PdfElement['rows'][number]): number {
@@ -1344,11 +1365,45 @@ export async function translatePageWithOpenAi(
   requester: PdfxV2OpenAiRequester = defaultPdfxV2Requester,
   recoveryOptions: {resume?:unknown;save?:(state:TranslationRecovery)=>Promise<void>} = {},
 ): Promise<TranslatedPageResult> {
+  // Keep the persisted extraction as the identity source. The protection pass
+  // below intentionally changes translate flags for English/target-language
+  // regions; using that reduced view to build an identity result would cause
+  // mergePageTranslation to erase those original regions.
+  const originalSource = source;
+  const preservedTranslation = preservedSourceTranslation(originalSource);
+  const alreadyWrittenInTargetLanguage = isAlreadyWrittenInTargetLanguage(
+    originalSource,
+    targetLanguage,
+  );
+  if (alreadyWrittenInTargetLanguage) {
+    const validation = validateTranslatedPage(
+      originalSource,
+      preservedTranslation,
+      targetLanguage,
+    );
+    // The classifier is deliberately conservative. If the exact identity
+    // result cannot pass the ordinary structural/language checks, fall back to
+    // the normal bounded translation path rather than accepting a bad page.
+    if (validation.valid) {
+      return {
+        translation: preservedTranslation,
+        layout: originalSource,
+        attempts: 0,
+        validation,
+        model: PDFX_V2_MODEL,
+        responseId: 'target-language-source-only',
+        inputTokens: 0,
+        outputTokens: 0,
+      };
+    }
+  }
   source = enforceEnglishProtection(source, targetLanguage);
   if (!hasTranslatableText(source)) {
     return {
-      translation: { pageNumber: source.pageNumber, elements: [], warnings: [] },
-      layout: source,
+      // Preserve the complete original translatable shape. The caller merges
+      // this result into originalSource, not the protected local copy.
+      translation: preservedTranslation,
+      layout: originalSource,
       attempts: 0,
       validation: {
         valid: true,
