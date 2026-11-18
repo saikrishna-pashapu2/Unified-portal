@@ -393,7 +393,7 @@ function translatablePageText(layout: PdfPageLayout): string {
   return blocks.join('\n').trim();
 }
 
-function isAlreadyWrittenInTargetLanguage(
+export function isAlreadyWrittenInTargetLanguage(
   source: PdfPageLayout,
   targetLanguage: string,
 ): boolean {
