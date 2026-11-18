@@ -9,6 +9,7 @@ import {
 import { cellTranslationReason } from "./cell-feedback";
 import { getExcelDownloadState } from "./download-state";
 import WorkbookInspection from "./WorkbookInspection";
+import { translatorDisplayMessage } from "@/lib/document-translator/display-message";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -185,7 +186,7 @@ export default function ExcelTranslationClient({ jobId }: { jobId: string }) {
             ?.name || p.inspection.sheets[0].name,
         );
       })
-      .catch((e) => live && setError(e.message));
+      .catch((e) => live && setError(translatorDisplayMessage(e instanceof Error ? e.message : "Request failed.")));
     return () => {
       live = false;
       controller.abort();
@@ -388,7 +389,7 @@ export default function ExcelTranslationClient({ jobId }: { jobId: string }) {
           "The response was interrupted. Checking the saved job before allowing another action; no translation request will be repeated automatically.",
         );
         setStatusUncertain(true);
-      } else setError(e instanceof Error ? e.message : "Request failed.");
+      } else setError(translatorDisplayMessage(e instanceof Error ? e.message : "Request failed."));
     } finally {
       setBusy(false);
     }
@@ -454,7 +455,7 @@ export default function ExcelTranslationClient({ jobId }: { jobId: string }) {
         }),
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not review selection.");
+      setError(translatorDisplayMessage(e instanceof Error ? e.message : "Could not review selection."));
     } finally {
       setBusy(false);
     }
@@ -508,7 +509,7 @@ export default function ExcelTranslationClient({ jobId }: { jobId: string }) {
         );
         setStatusUncertain(true);
       } else
-        setError(e instanceof Error ? e.message : "Could not add translation.");
+        setError(translatorDisplayMessage(e instanceof Error ? e.message : "Could not add translation."));
     } finally {
       setBusy(false);
     }
@@ -612,7 +613,7 @@ export default function ExcelTranslationClient({ jobId }: { jobId: string }) {
                   ? `Partial draft ready: ${partialDraftText}`
                   : downloadState?.hasUnexplainedPreviewGaps
                     ? "Saved results are incomplete. The complete download is unavailable until the missing cells are resolved."
-                    : job.message}
+                    : translatorDisplayMessage(job.message)}
               </p>
               {active && (
                 <button
@@ -1233,7 +1234,7 @@ export default function ExcelTranslationClient({ jobId }: { jobId: string }) {
               role="alert"
               className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
             >
-              {preview.translationWarning}
+              {translatorDisplayMessage(preview.translationWarning)}
             </p>
           ) : null}
           {!hasTranslation ? (

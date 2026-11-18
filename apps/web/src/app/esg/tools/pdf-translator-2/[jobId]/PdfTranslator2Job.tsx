@@ -19,6 +19,7 @@ import {
   ZoomOut,
 } from 'lucide-react';
 import { PdfLayoutCanvas } from '@/components/pdfx-v2/PdfLayoutCanvas';
+import { translatorDisplayMessage } from '@/lib/document-translator/display-message';
 import {
   clampLayoutZoomPercent,
   DEFAULT_LAYOUT_ZOOM_PERCENT,
@@ -103,7 +104,7 @@ export default function PdfTranslator2Job({ jobId }: { jobId: string }) {
         if (!stopped && ACTIVE.has(current.status)) timer = setTimeout(() => void poll(), 1800);
       } catch (caught) {
         if (!stopped) {
-          setError(caught instanceof Error ? caught.message : 'Unable to load translation');
+          setError(translatorDisplayMessage(caught instanceof Error ? caught.message : 'Unable to load translation'));
           timer = setTimeout(() => void poll(), 4000);
         }
       }
@@ -122,7 +123,7 @@ export default function PdfTranslator2Job({ jobId }: { jobId: string }) {
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({})) as { error?: string };
-        setError(payload.error ?? 'Unable to rerun this page');
+        setError(translatorDisplayMessage(payload.error ?? 'Unable to rerun this page'));
       } else {
         setError('');
         setPollNonce((nonce) => nonce + 1);
@@ -141,7 +142,7 @@ export default function PdfTranslator2Job({ jobId }: { jobId: string }) {
     });
     if (!response.ok) {
       const payload = await response.json().catch(() => ({})) as { error?: string };
-      setError(payload.error ?? 'Unable to cancel');
+      setError(translatorDisplayMessage(payload.error ?? 'Unable to cancel'));
     }
     setCancelling(false);
     void refresh();
@@ -187,7 +188,7 @@ export default function PdfTranslator2Job({ jobId }: { jobId: string }) {
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex min-w-0 items-center gap-4">
               <Link href="/esg/tools/pdf-translator-2" aria-label="Back to PDF Translator" className="rounded-full border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"><ArrowLeft className="h-4 w-4" /></Link>
-              <div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-[.18em] text-amber-700">OpenAI PDF Translator</p><h1 className="truncate font-serif text-2xl">{job?.filename ?? 'Loading translation…'}</h1></div>
+              <div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-[.18em] text-amber-700">PDF Translator</p><h1 className="truncate font-serif text-2xl">{job?.filename ?? 'Loading translation…'}</h1></div>
             </div>
             <div className="flex items-center gap-2">
               {isActive && <button type="button" disabled={cancelling} onClick={() => void cancel()} className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-50"><StopCircle className="h-4 w-4" />Cancel</button>}
@@ -198,7 +199,7 @@ export default function PdfTranslator2Job({ jobId }: { jobId: string }) {
           {job && (
             <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
               <div>
-                <div className="mb-2 flex justify-between gap-4 text-xs"><span className="font-medium text-slate-700">{job.message ?? job.stage}</span><span className="font-mono font-bold">{job.progress}%</span></div>
+                <div className="mb-2 flex justify-between gap-4 text-xs"><span className="font-medium text-slate-700">{translatorDisplayMessage(job.message) || job.stage}</span><span className="font-mono font-bold">{job.progress}%</span></div>
                 <div className="h-2 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-gradient-to-r from-amber-500 to-emerald-600 transition-all duration-500" style={{ width: `${Math.max(0, Math.min(100, job.progress))}%` }} /></div>
               </div>
               <div className="text-xs text-slate-500">Page {job.currentPage || '—'} / {job.totalPages} · attempt {Math.max(job.attempts, 1)} of {job.maxAttempts || 3}</div>
@@ -230,7 +231,7 @@ export default function PdfTranslator2Job({ jobId }: { jobId: string }) {
                         {flagged.failedStage === 'extraction' ? 'OCR failed' : 'Translation failed'}
                       </span>
                     </p>
-                    {flagged.error && <p className="mt-1 line-clamp-2 text-xs text-amber-800" title={flagged.error}>{flagged.error}</p>}
+                    {flagged.error && <p className="mt-1 line-clamp-2 text-xs text-amber-800" title={translatorDisplayMessage(flagged.error)}>{translatorDisplayMessage(flagged.error)}</p>}
                   </div>
                   <button
                     type="button"
@@ -250,7 +251,7 @@ export default function PdfTranslator2Job({ jobId }: { jobId: string }) {
             </ul>
           </div>
         )}
-        {job?.status === 'error' && <div className="mb-4 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><span><strong>Translation stopped safely.</strong> {job.message} {job.completedPages > 0 ? `${job.completedPages} completed ${job.completedPages === 1 ? 'page was' : 'pages were'} retained.` : 'No page reached a completed checkpoint.'}</span></div>}
+        {job?.status === 'error' && <div className="mb-4 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><span><strong>Translation stopped safely.</strong> {translatorDisplayMessage(job.message)} {job.completedPages > 0 ? `${job.completedPages} completed ${job.completedPages === 1 ? 'page was' : 'pages were'} retained.` : 'No page reached a completed checkpoint.'}</span></div>}
 
         <div className="sticky top-[65px] z-30 mb-4 rounded-xl border border-slate-200 bg-white/95 p-3 shadow-sm backdrop-blur" aria-label="Document review controls">
           <div className="flex flex-wrap items-center justify-between gap-3">

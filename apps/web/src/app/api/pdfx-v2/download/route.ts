@@ -4,6 +4,7 @@ import { requirePdfxUser } from '@/lib/pdfx-v2/auth';
 import { isUuid } from '@/lib/jobs/queue';
 import {
   buildPdfContentDisposition,
+  buildTranslatedPdfFilename,
   PDFX_V2_RENDERER_VERSION,
 } from '@/lib/pdfx-v2/constants';
 import { makeTranslatedPdfBytes } from '@/lib/pdfx-v2/makeTranslatedPdf';
@@ -53,7 +54,7 @@ export async function GET(request: Request) {
         const rendered = await makeTranslatedPdfBytes(
           layouts,
           Buffer.from(renderSource.input_pdf),
-          'OpenAI PDF Translator',
+          'PDF Translator',
         );
         buffer = rendered.bytes;
         const metrics = {
@@ -72,12 +73,14 @@ export async function GET(request: Request) {
       }
     }
   }
-  const basename = row.filename.replace(/\.[^.]+$/, '') || 'document';
   return new Response(new Uint8Array(buffer), {
     headers: {
       'Content-Type': 'application/pdf',
       'Content-Length': String(buffer.length),
-      'Content-Disposition': buildPdfContentDisposition('attachment', `openai_translated_${basename}.pdf`),
+      'Content-Disposition': buildPdfContentDisposition(
+        'attachment',
+        buildTranslatedPdfFilename(row.filename),
+      ),
       'Cache-Control': 'private, no-store',
       'X-Content-Type-Options': 'nosniff',
     },

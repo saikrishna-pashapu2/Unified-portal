@@ -11,6 +11,6 @@ export async function renderPdfxV2Document(
     translatedPages,
     sourcePdf,
     outputPath,
-    'OpenAI PDF Translator',
+    'PDF Translator',
   );
 }

@@ -18,6 +18,7 @@ import type {
   AdminTranslatorJobStatus,
   AdminTranslatorJobsResponse,
 } from '@/lib/document-translator/admin-jobs';
+import { translatorDisplayMessage } from '@/lib/document-translator/display-message';
 
 type JobKindFilter = AdminTranslatorJobKind;
 type JobStatusFilter = AdminTranslatorJobStatus;
@@ -108,7 +109,7 @@ function JobErrorDetails({ job }: { job: AdminTranslatorJob }) {
       </summary>
       <div className="space-y-2 border-t border-rose-200 px-3 py-2.5">
         {jobFailed && (job.error ? (
-          <p className="whitespace-pre-wrap leading-5" style={{ overflowWrap: 'anywhere' }}>{job.error}</p>
+          <p className="whitespace-pre-wrap leading-5" style={{ overflowWrap: 'anywhere' }}>{translatorDisplayMessage(job.error)}</p>
         ) : (
           <p className="font-medium">No stored error detail is available for this job.</p>
         ))}
@@ -118,7 +119,7 @@ function JobErrorDetails({ job }: { job: AdminTranslatorJob }) {
         {jobFailed && !job.error && job.message && (
           <p className="border-t border-rose-200 pt-2 leading-5">
             <span className="font-semibold">Latest status message (not the stored error): </span>
-            <span style={{ overflowWrap: 'anywhere' }}>{job.message}</span>
+            <span style={{ overflowWrap: 'anywhere' }}>{translatorDisplayMessage(job.message)}</span>
           </p>
         )}
         {flaggedCount > 0 && (
@@ -131,7 +132,7 @@ function JobErrorDetails({ job }: { job: AdminTranslatorJob }) {
               <div key={page.pageNumber} className="border-t border-rose-200 pt-2">
                 <p className="font-semibold">Page {page.pageNumber} · {page.failedStage === 'extraction' ? 'OCR failed' : 'Translation failed'}</p>
                 <p className="mt-1 whitespace-pre-wrap leading-5" style={{ overflowWrap: 'anywhere' }}>
-                  {page.error || 'No stored error detail is available for this page.'}
+                  {translatorDisplayMessage(page.error) || 'No stored error detail is available for this page.'}
                 </p>
                 {page.errorTruncated && <p className="mt-1 font-medium text-rose-700">The stored page error was truncated.</p>}
               </div>
@@ -222,7 +223,7 @@ export default function AdminTranslatorJobs({
         setRequest({
           key: query,
           phase: 'error',
-          message: loadError instanceof Error ? loadError.message : 'Unable to load translator jobs.',
+          message: translatorDisplayMessage(loadError instanceof Error ? loadError.message : 'Unable to load translator jobs.'),
         });
       }
     }

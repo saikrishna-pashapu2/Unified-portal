@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildPdfContentDisposition,
+  buildTranslatedPdfFilename,
   MAX_PDF_REQUEST_BYTES,
   MAX_PDF_UPLOAD_BYTES,
   PDFX_V2_MODEL,
@@ -43,6 +44,15 @@ describe('PDF translator support contracts', () => {
     expect(header).toContain('%D8%AA%D9%82%D8%B1%D9%8A%D8%B1');
     expect(header).not.toContain('\r');
     expect(header).not.toContain('\n');
+    expect(buildTranslatedPdfFilename('openai_translated_report.pdf')).toBe(
+      'translated_report.pdf',
+    );
+    expect(buildTranslatedPdfFilename('openai_transalted_report.pdf')).toBe(
+      'translated_report.pdf',
+    );
+    expect(buildTranslatedPdfFilename('openair.pdf')).toBe('translated_openair.pdf');
+    expect(buildTranslatedPdfFilename('OpenAI source.pdf')).toBe('translated_OpenAI source.pdf');
+    expect(buildTranslatedPdfFilename('translated_openai_translated_Отчёт.pdf')).toBe('translated_Отчёт.pdf');
   });
 
   it('uses the Translator API pageSize parameter and rejects unsafe values', () => {

@@ -105,7 +105,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'PDF must contain at least one page' }, { status: 422 });
     }
 
-    const filename = normalizePdfDisplayName(file.name, 'openai-translation');
+    const filename = normalizePdfDisplayName(file.name, 'translation');
     const jobId = await startPdfTranslationV2Job({
       userId: auth.userId,
       filename,

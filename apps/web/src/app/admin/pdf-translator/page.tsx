@@ -2,6 +2,7 @@
 
 import ExcelUsageCard from '@/components/xlsx-translator/ExcelUsageCard';
 import AdminTranslatorJobs from '@/components/document-translator/AdminTranslatorJobs';
+import { translatorDisplayMessage } from '@/lib/document-translator/display-message';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -211,7 +212,7 @@ export default function PdfTranslatorAdminPage() {
       setError(null);
     } catch (loadError) {
       if (requestId !== statsRequestId.current) return;
-      setError(loadError instanceof Error ? loadError.message : 'Unable to load analytics');
+      setError(translatorDisplayMessage(loadError instanceof Error ? loadError.message : 'Unable to load analytics'));
     } finally {
       if (requestId === statsRequestId.current) {
         setLoading(false);
@@ -438,7 +439,7 @@ export default function PdfTranslatorAdminPage() {
           </article>
 
           <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="mb-5 flex items-center gap-3"><Cpu className="h-5 w-5 text-cyan-700" /><div><p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">PDF OpenAI passes</p><h2 className="text-lg font-semibold">PDF model execution</h2></div></div>
+            <div className="mb-5 flex items-center gap-3"><Cpu className="h-5 w-5 text-cyan-700" /><div><p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">PDF translation passes</p><h2 className="text-lg font-semibold">PDF model execution</h2></div></div>
             {displayStats.modelBreakdown.length ? <div className="space-y-3">{displayStats.modelBreakdown.map((item) => <div key={`${item.role}-${item.model}`} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-700">{item.role}</p><p className="mt-1 font-mono text-sm text-slate-700">{item.model}</p></div><div className="text-right"><p className="font-semibold">{formatNumber(item.pages)} PDF pages</p><p className="text-xs text-slate-500">{formatNumber(item.attempts)} attempts</p></div></div>)}</div> : <EmptyState label="No PDF model usage in this period" />}
           </article>
         </section>

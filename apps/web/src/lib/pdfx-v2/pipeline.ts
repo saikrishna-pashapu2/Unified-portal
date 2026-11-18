@@ -241,7 +241,7 @@ export async function startPdfTranslationV2Job(params: {
           target_lang: params.targetLang,
           status: 'queued',
           stage: 'queued',
-          message: 'Queued for OpenAI page analysis',
+          message: 'Queued for page analysis',
           progress: 0,
           total_pages: params.pageCount,
           current_page: 0,
@@ -491,7 +491,7 @@ export async function processPdfTranslationV2Job(
       await reportProgress(
         5 + Math.round((index / Math.max(1, pagePdfs.length)) * 40),
         'extracting',
-        `OpenAI is reading source page ${pageNumber}/${pagePdfs.length}…`,
+        `Reading source page ${pageNumber}/${pagePdfs.length}…`,
         pageNumber,
       );
       let extracted: Awaited<ReturnType<typeof extractPageWithOpenAi>>;

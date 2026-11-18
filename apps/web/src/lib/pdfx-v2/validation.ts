@@ -1,4 +1,5 @@
 import { validateTranslationResult } from './language-validation';
+import { looksDefinitelyRussian } from './language-protection';
 import { numberPlaceholderFailure } from './number-placeholders';
 import type { PdfPageLayout, PdfPageTranslation } from './schemas';
 import {
@@ -392,6 +393,50 @@ function translatablePageText(layout: PdfPageLayout): string {
   return blocks.join('\n').trim();
 }
 
+function isAlreadyWrittenInTargetLanguage(
+  source: PdfPageLayout,
+  targetLanguage: string,
+): boolean {
+  if (targetLanguage.trim().toLowerCase() !== 'russian') return false;
+  const normalize = (text: string) => text.replace(/\s+/g, ' ').trim();
+  const companyNames = new Set<string>();
+  for (const table of source.elements.filter(element => element.kind === 'table')) {
+    const cells = allCells(table);
+    const nameHeaders = cells.filter(cell =>
+      /^наименование (?:участника|организации|компании|поставщика)$/i.test(normalize(cell.text)));
+    for (const cell of cells) {
+      if (!nameHeaders.some(header => cell.rowIndex >= header.rowIndex + header.rowSpan &&
+          cell.columnIndex === header.columnIndex && cell.columnSpan <= header.columnSpan)) continue;
+      const name = normalize(cell.text);
+      // A name field plus a legal business marker is required. Never discard
+      // arbitrary capitalized prose (e.g. Uzbek actions) for language detection.
+      const withoutLegalForm = name.replace(/(?:^|\s)(?:ООО|ОАО|ЗАО|АО|АУДИТ[.\s]*ОРГ)(?=\s|$)/g, ' ')
+        .replace(/\b(?:LLC|LTD|LIMITED|INC|DMCC|LLP|PLC)\b/g, ' ');
+      if (withoutLegalForm !== name && /[A-Z]{2,}/.test(withoutLegalForm) &&
+          /^[A-Z0-9\s&.,'"()/-]+$/.test(withoutLegalForm)) companyNames.add(name);
+    }
+  }
+  // Classification-only view: original text, IDs, numbers, translations and
+  // checkpoints are untouched. Repeated names retain exact normalized identity.
+  const prose = companyNames.size ? {
+    ...source,
+    elements: source.elements.map(element => ({
+      ...element,
+      rows: element.rows.map(row => ({ ...row, cells: row.cells.map(cell => ({
+        ...cell, text: companyNames.has(normalize(cell.text)) ? '' : cell.text,
+      })) })),
+    })),
+  } : source;
+  const proseText = translatablePageText(prose);
+  // Do not treat every short uppercase word as an acronym: Uzbek actions
+  // such as BAJARISH must still require translation, even on Russian pages.
+  const identifiers = new Set(['UZS', 'USD', 'EUR', 'RUB', 'GBP', 'AED', 'KZT', 'CNY', 'JPY',
+    'ESG', 'IFRS', 'GAAP', 'GRI', 'SASB', 'TCFD', 'ISSB', 'ISO', 'KPI', 'IT', 'ID']);
+  if ((proseText.match(/[A-Za-z]+/g) ?? []).some(word => !identifiers.has(word))) return false;
+  // Page-level sourceLanguage metadata alone is never sufficient evidence.
+  return looksDefinitelyRussian(proseText);
+}
+
 export function validateTranslatedPage(
   source: PdfPageLayout,
   translation: PdfPageTranslation,
@@ -467,7 +512,8 @@ export function validateTranslatedPage(
   if (languageFailure) failures.push(languageFailure);
   if (
     translatableSourceText &&
-    looksEffectivelyUnchanged(translatableSourceText, translatableTranslatedText)
+    looksEffectivelyUnchanged(translatableSourceText, translatableTranslatedText) &&
+    !isAlreadyWrittenInTargetLanguage(source, targetLanguage)
   ) {
     failures.push(
       `page ${source.pageNumber} is effectively unchanged from ${source.sourceLanguage}; ` +

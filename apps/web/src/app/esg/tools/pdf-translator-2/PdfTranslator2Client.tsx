@@ -39,6 +39,7 @@ import {
   type HistoryKind,
   type HistoryResponse,
 } from "@/lib/document-translator/history";
+import { translatorDisplayMessage } from "@/lib/document-translator/display-message";
 import styles from "./TranslatorHome.module.css";
 
 type Query = {
@@ -207,7 +208,7 @@ export default function PdfTranslator2Client() {
           encodeURIComponent(payload.jobId),
       );
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Upload failed");
+      setError(translatorDisplayMessage(caught instanceof Error ? caught.message : "Upload failed"));
       uploadGuard.current = false;
       setSubmitting(false);
     }
@@ -241,9 +242,9 @@ export default function PdfTranslator2Client() {
       refresh(); // The next read clamps the page if its last item was removed.
     } catch (caught) {
       setDeleteError(
-        caught instanceof Error
+        translatorDisplayMessage(caught instanceof Error
           ? caught.message
-          : "Unable to delete this translation.",
+          : "Unable to delete this translation."),
       );
     } finally {
       deleteGuard.current = false;
@@ -796,7 +797,7 @@ function HistoryRow({
                   : "")}
             {item.status === "draft" && <span> · Choose your content</span>}
           </p>
-          {item.message && <small title={item.message}>{item.message}</small>}
+          {item.message && <small title={translatorDisplayMessage(item.message)}>{translatorDisplayMessage(item.message)}</small>}
         </div>
       </td>
       <td className={styles.languageCell}>
