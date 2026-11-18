@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 type CreditArticlesHeaderProps = {
   regionLabel: string;
   dateLabel: string;
-  total: number;
+  total: number | null;
   page: number;
   pageCount: number;
   title?: string;
@@ -22,8 +22,8 @@ export default function CreditArticlesHeader({
   showAllRegions = false,
 }: CreditArticlesHeaderProps) {
   // Check if showing today's articles
-  const today = new Date().toISOString().slice(0, 10);
   const todayFormatted = new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -52,14 +52,14 @@ export default function CreditArticlesHeader({
             )}
           </div>
         </div>
-        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+        {total !== null && <div className="flex items-center gap-4 text-sm text-muted-foreground">
           <div className="rounded-lg border border-border bg-muted/40 px-3 py-2">
             <span className="font-semibold text-card-foreground">{total}</span> articles
           </div>
           <div className="rounded-lg border border-border bg-muted/40 px-3 py-2">
             Page {page} of {pageCount}
           </div>
-        </div>
+        </div>}
       </div>
 
       {filters ? <div className="pt-2">{filters}</div> : null}

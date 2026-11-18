@@ -38,13 +38,26 @@ const SUGGESTION_LIMIT = 6;
 type EsgArticleSearchProps = {
   filters: ArticleSearchFilters;
   sources: string[];
+  /** Optional domain adapter used by the Credit Rating archive. */
+  apiPath?: string;
+  basePath?: string;
+  archiveLabel?: string;
+  placeholder?: string;
+  searchParamsBuilder?: (filters: ArticleSearchFilters) => URLSearchParams;
+  itemPathBuilder?: (item: EsgArticleSearchItem, filters: ArticleSearchFilters, typedQuery: string) => string;
+  extraQueryParams?: Record<string, string | undefined>;
+  testId?: string;
 };
 
 type SuggestionState = "idle" | "loading" | "ready" | "error";
 
-function searchPath(filters: ArticleSearchFilters) {
-  const query = articleSearchParams(filters).toString();
-  return `/esg/articles${query ? `?${query}` : ""}`;
+function searchPath(
+  filters: ArticleSearchFilters,
+  basePath = "/esg/articles",
+  searchParamsBuilder: (filters: ArticleSearchFilters) => URLSearchParams = articleSearchParams,
+) {
+  const query = searchParamsBuilder(filters).toString();
+  return `${basePath}${query ? `?${query}` : ""}`;
 }
 
 function dateLabel(value: string | null) {
@@ -58,13 +71,19 @@ function dateLabel(value: string | null) {
   }).format(date);
 }
 
-function itemHref(item: EsgArticleSearchItem, filters: ArticleSearchFilters, typedQuery: string) {
+function itemHref(
+  item: EsgArticleSearchItem,
+  filters: ArticleSearchFilters,
+  typedQuery: string,
+  basePath = "/esg/articles",
+  searchParamsBuilder: (filters: ArticleSearchFilters) => URLSearchParams = articleSearchParams,
+) {
   const backUrl = searchPath({
     ...filters,
     q: typedQuery,
     page: 1,
-  });
-  return `/esg/articles/${encodeURIComponent(String(item.id))}?back=${encodeURIComponent(backUrl)}`;
+  }, basePath, searchParamsBuilder);
+  return `${basePath}/${encodeURIComponent(String(item.id))}?back=${encodeURIComponent(backUrl)}`;
 }
 
 function suggestionMeta(item: EsgArticleSearchItem) {
@@ -75,9 +94,17 @@ function suggestionMeta(item: EsgArticleSearchItem) {
 export default function EsgArticleSearch({
   filters,
   sources,
+  apiPath = "/api/esg/articles/search",
+  basePath = "/esg/articles",
+  archiveLabel = "ESG archive",
+  placeholder = "Try climate disclosure, carbon markets, or governance",
+  searchParamsBuilder = articleSearchParams,
+  itemPathBuilder,
+  extraQueryParams,
+  testId = "esg-article-search",
 }: EsgArticleSearchProps) {
   const router = useRouter();
-  const pathname = usePathname() || "/esg/articles";
+  const pathname = usePathname() || basePath;
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const requestGeneration = useRef(0);
@@ -191,9 +218,12 @@ export default function EsgArticleSearch({
       if (source) params.set("source", source);
       if (from) params.set("from", from);
       if (to) params.set("to", to);
+      Object.entries(extraQueryParams ?? {}).forEach(([key, extraValue]) => {
+        if (extraValue) params.set(key, extraValue);
+      });
 
       try {
-        const response = await fetch(`/api/esg/articles/search?${params.toString()}`, {
+        const response = await fetch(`${apiPath}?${params.toString()}`, {
           signal: controller.signal,
           headers: { Accept: "application/json" },
         });
@@ -225,7 +255,7 @@ export default function EsgArticleSearch({
       window.clearTimeout(timeout);
       controllerAbort(abortController, generation, requestGeneration);
     };
-  }, [compositionEndNonce, from, query, retryNonce, source, to]);
+  }, [apiPath, compositionEndNonce, extraQueryParams, from, query, retryNonce, source, to]);
 
   const currentFilters = useMemo<ArticleSearchFilters>(
     () => ({
@@ -250,9 +280,9 @@ export default function EsgArticleSearch({
       abortController.current?.abort();
       abortController.current = null;
       closeSuggestions();
-      router.push(searchPath(nextFilters));
+      router.push(searchPath(nextFilters, basePath, searchParamsBuilder));
     },
-    [closeSuggestions, router],
+    [basePath, closeSuggestions, router, searchParamsBuilder],
   );
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -276,7 +306,11 @@ export default function EsgArticleSearch({
 
   const selectSuggestion = (item: EsgArticleSearchItem) => {
     closeSuggestions();
-    router.push(itemHref(item, { ...currentFilters, q: query }, query));
+    router.push(
+      itemPathBuilder
+        ? itemPathBuilder(item, { ...currentFilters, q: query }, query)
+        : itemHref(item, { ...currentFilters, q: query }, query, basePath, searchParamsBuilder),
+    );
   };
 
   const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -353,7 +387,7 @@ export default function EsgArticleSearch({
   };
 
   return (
-    <div ref={rootRef} className="relative" data-testid="esg-article-search">
+    <div ref={rootRef} className="relative" data-testid={testId}>
       <form
         method="get"
         action={pathname}
@@ -364,7 +398,7 @@ export default function EsgArticleSearch({
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
           <div className="min-w-0 flex-1">
             <label htmlFor={queryId} className="mb-2 block text-sm font-semibold text-slate-900">
-              Search the ESG archive
+              Search the {archiveLabel}
             </label>
             <div className="relative">
               <Search
@@ -379,7 +413,7 @@ export default function EsgArticleSearch({
                 value={query}
                 maxLength={MAX_QUERY_LENGTH}
                 autoComplete="off"
-                placeholder="Try climate disclosure, carbon markets, or governance"
+                placeholder={placeholder}
                 role="combobox"
                 aria-autocomplete="list"
                 aria-controls={hasSuggestionOptions ? listboxId : undefined}
@@ -460,7 +494,11 @@ export default function EsgArticleSearch({
                                 id={`${listboxId}-option-${item.id}`}
                                 role="option"
                                 aria-selected={index === activeSuggestion}
-                                href={itemHref(item, { ...currentFilters, q: query }, query)}
+                                href={
+                                  itemPathBuilder
+                                    ? itemPathBuilder(item, { ...currentFilters, q: query }, query)
+                                    : itemHref(item, { ...currentFilters, q: query }, query, basePath, searchParamsBuilder)
+                                }
                                 onPointerDown={(event) => {
                                   if (event.pointerType === "touch") {
                                     event.preventDefault();

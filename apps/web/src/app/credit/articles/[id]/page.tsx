@@ -7,6 +7,7 @@ import { getLikeCounts, getUserLikedSet, getLikers } from "@/lib/likes";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/nextauth-options";
 import { parseKeywords } from "@/lib/keywords";
+import { creditArticleBackPath } from "@/lib/credit-article-search/query";
 import Link from "next/link";
 import { ArrowLeft, ExternalLink, Calendar, Building2, Heart, Users, Sparkles, TrendingUp, Award, User2, Clock, DollarSign, LineChart } from "lucide-react";
 import SafeHTMLContent from "@/components/SafeHTMLContent";
@@ -61,7 +62,7 @@ export default async function ArticleDetail({
   }
 
   // Determine the back URL - use the one from query params if available, otherwise default
-  const backUrl = resolvedSearchParams.back || `/credit/articles`;
+  const backUrl = creditArticleBackPath(resolvedSearchParams.back);
 
   // Use content first, fallback to summary
   const body = (item as any).content ?? (item as any).summary ?? "";
