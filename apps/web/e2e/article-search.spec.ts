@@ -161,3 +161,60 @@ test('mobile suggestions fit the viewport and treat article markup as text', asy
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath('mobile-search.png'), fullPage: true });
 });
+
+test('Reset filters returns ESG to the full archive and lets a new search start from relevance', async ({ page }) => {
+  await page.route(endpoint, (route) => route.fulfill({ json: response('governance') }));
+  await page.goto('/esg/articles?q=climate&source=Climate+Journal&from=2023-01-01&to=2023-12-31&sort=relevance&page=9');
+
+  await expect(searchInput(page)).toHaveValue('climate');
+  await expect(page.getByLabel('Source')).toHaveValue('Climate Journal');
+  await expect(page.getByLabel('From date')).toHaveValue('2023-01-01');
+  await expect(page.getByLabel('To date')).toHaveValue('2023-12-31');
+  await expect(page.getByLabel('Sort')).toHaveValue('relevance');
+
+  await page.getByRole('button', { name: 'Reset filters', exact: true }).click();
+  await expect(page).toHaveURL(/\/esg\/articles$/);
+  await expect(searchInput(page)).toHaveValue('');
+  await expect(page.getByLabel('Source')).toHaveValue('');
+  await expect(page.getByLabel('From date')).toHaveValue('');
+  await expect(page.getByLabel('To date')).toHaveValue('');
+  await expect(page.getByLabel('Sort')).toHaveValue('newest');
+
+  await searchInput(page).fill('governance');
+  await searchInput(page).press('Enter');
+  await expect.poll(() => new URL(page.url()).searchParams.get('q')).toBe('governance');
+  const params = new URL(page.url()).searchParams;
+  expect(params.get('sort')).toBe('relevance');
+  expect(params.get('page')).toBe('1');
+  expect(params.has('source')).toBe(false);
+  expect(params.has('from')).toBe(false);
+  expect(params.has('to')).toBe(false);
+});
+
+test('Reset filters clears unsubmitted dates and cancels an in-flight suggestion without adding history', async ({ page }) => {
+  let release!: () => void;
+  const hold = new Promise<void>(resolve => { release = resolve; });
+  await page.route(endpoint, async route => {
+    await hold;
+    await route.fulfill({ json: response('climate') });
+  });
+  await page.goto('/esg/articles');
+  const historyLength = await page.evaluate(() => history.length);
+  await page.getByLabel('From date').fill('2021-05-01');
+  await page.getByLabel('To date').fill('2021-06-30');
+  await page.getByLabel('Source').selectOption('Policy Review');
+  const pending = page.waitForRequest(endpoint);
+  await searchInput(page).fill('climate');
+  await pending;
+  const reset = page.getByRole('button', { name: 'Reset filters', exact: true });
+  await reset.focus();
+  await reset.press('Enter');
+  release();
+  await expect(page).toHaveURL(/\/esg\/articles$/);
+  await expect(searchInput(page)).toHaveValue('');
+  await expect(page.getByLabel('From date')).toHaveValue('');
+  await expect(page.getByLabel('To date')).toHaveValue('');
+  await expect(page.getByLabel('Source')).toHaveValue('');
+  await expect(page.getByRole('listbox')).toHaveCount(0);
+  expect(await page.evaluate(() => history.length)).toBe(historyLength);
+});

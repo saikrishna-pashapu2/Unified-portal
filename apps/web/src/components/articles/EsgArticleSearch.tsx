@@ -8,6 +8,7 @@ import {
   ChevronDown,
   Loader2,
   RefreshCw,
+  RotateCcw,
   Search,
   X,
 } from "lucide-react";
@@ -145,12 +146,6 @@ export default function EsgArticleSearch({
   const hasSuggestionOptions = suggestionsOpen && suggestionState === "ready" && suggestions.length > 0;
 
   useEffect(() => {
-    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).has("sort")) {
-      sortTouched.current = true;
-    }
-  }, []);
-
-  useEffect(() => {
     const wasEmpty = previousQuery.current.trim().length === 0;
     if (wasEmpty && query.trim() && !sortTouched.current && filters.sort === "newest") {
       setSort("relevance");
@@ -159,6 +154,9 @@ export default function EsgArticleSearch({
   }, [filters.sort, query]);
 
   useEffect(() => {
+    // Browser Back can restore a previously chosen sort after a reset.
+    sortTouched.current = new URLSearchParams(window.location.search).has("sort");
+    previousQuery.current = filters.q;
     setQuery(filters.q);
     setSource(filters.source);
     setFrom(filters.from);
@@ -274,15 +272,19 @@ export default function EsgArticleSearch({
     setActiveSuggestion(-1);
   }, []);
 
+  const cancelSuggestions = useCallback(() => {
+    requestGeneration.current += 1;
+    abortController.current?.abort();
+    abortController.current = null;
+    closeSuggestions();
+  }, [closeSuggestions]);
+
   const navigateToSearch = useCallback(
     (nextFilters: ArticleSearchFilters) => {
-      requestGeneration.current += 1;
-      abortController.current?.abort();
-      abortController.current = null;
-      closeSuggestions();
+      cancelSuggestions();
       router.push(searchPath(nextFilters, basePath, searchParamsBuilder));
     },
-    [basePath, closeSuggestions, router, searchParamsBuilder],
+    [basePath, cancelSuggestions, router, searchParamsBuilder],
   );
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -302,6 +304,29 @@ export default function EsgArticleSearch({
     setSuggestionState("idle");
     navigateToSearch({ ...currentFilters, q: "", page: 1 });
     inputRef.current?.focus();
+  };
+
+  const resetFilters = () => {
+    cancelSuggestions();
+    escapedQuery.current = null;
+    dismissedQuery.current = null;
+    forceRetryRequest.current = false;
+    isComposing.current = false;
+    sortTouched.current = false;
+    previousQuery.current = "";
+    setSuggestions([]);
+    setSuggestionState("idle");
+    setSuggestionError(null);
+    setQuery("");
+    setSource("");
+    setFrom("");
+    setTo("");
+    setSort("newest");
+
+    // The bare archive clears pagination, legacy dates and Credit's section
+    // filters too. Back restores an applied search, but not an unsubmitted draft.
+    if (window.location.search) router.push(basePath);
+    else router.replace(basePath);
   };
 
   const selectSuggestion = (item: EsgArticleSearchItem) => {
@@ -645,8 +670,16 @@ export default function EsgArticleSearch({
               className="h-11 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 text-sm text-slate-900 outline-none transition focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-100"
             />
           </div>
-          <p className="text-xs leading-5 text-slate-500 sm:max-w-[15rem]">
-            Leave dates blank to search the full archive. Filters apply when you submit.
+          <button
+            type="button"
+            onClick={resetFilters}
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-emerald-600 hover:text-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"
+          >
+            <RotateCcw className="h-4 w-4" aria-hidden="true" />
+            Reset filters
+          </button>
+          <p className="text-xs leading-5 text-slate-500 sm:col-span-full">
+            Leave dates blank for all dates. Reset filters returns to the full archive.
           </p>
           <input type="hidden" name="page" value="1" />
         </div>
