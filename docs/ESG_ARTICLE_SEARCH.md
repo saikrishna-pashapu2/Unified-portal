@@ -15,6 +15,8 @@ from the ESG schema. There are no embedding, LLM, or other paid API calls.
 - A new query defaults to relevance. Users can select newest first instead.
 - Source and inclusive date-range filters apply to both suggestions and results.
   Blank dates mean all dates. Old `?date=YYYY-MM-DD` links remain supported.
+- **Reset filters** clears the search, source, dates, and sort in one click.
+  It returns to the first page of the full archive; Back restores an applied search.
 - Query, filters, sort, and pagination are URL state. Article links include a
   back link to the result state. Existing likes and Article AI controls remain.
 - Snippets and highlights render plain text, never untrusted article HTML.

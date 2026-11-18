@@ -60,3 +60,43 @@ test('Credit mobile search distinguishes an unavailable service from no matches 
   expect(params.has('region')).toBe(false);
   expect((await new AxeBuilder({page}).analyze()).violations).toEqual([]);
 });
+
+test('Credit Reset filters clears rating, section, source, dates and paging', async ({ page }) => {
+  await page.route('**/api/credit/articles/search?**', (route) => route.fulfill({ json: {
+    items: [], page: 1, pageSize: 6, total: null, hasMore: false, typoTolerance: false, query: 'rating',
+  }}));
+  await page.goto('/credit/articles?q=AA%2B&region=CentralAsia&sector=banksRACS&source=Fitch&from=2020-01-01&to=2020-12-31&sort=newest&page=7');
+
+  const input = page.getByRole('combobox', { name: /Search the Credit Rating archive/i });
+  await expect(input).toHaveValue('AA+');
+  await expect(page.getByLabel('Source')).toHaveValue('Fitch');
+  await expect(page.getByLabel('From date')).toHaveValue('2020-01-01');
+  await expect(page.getByLabel('To date')).toHaveValue('2020-12-31');
+  await expect(page.getByLabel('Sort')).toHaveValue('newest');
+
+  await page.getByRole('button', { name: 'Reset filters', exact: true }).click();
+  await expect(page).toHaveURL(/\/credit\/articles$/);
+  await expect(input).toHaveValue('');
+  await expect(page.getByLabel('Source')).toHaveValue('');
+  await expect(page.getByLabel('From date')).toHaveValue('');
+  await expect(page.getByLabel('To date')).toHaveValue('');
+  await expect(page.getByLabel('Sort')).toHaveValue('newest');
+
+  const params = new URL(page.url()).searchParams;
+  expect(params.has('q')).toBe(false);
+  expect(params.has('region')).toBe(false);
+  expect(params.has('sector')).toBe(false);
+  expect(params.has('source')).toBe(false);
+  expect(params.has('from')).toBe(false);
+  expect(params.has('to')).toBe(false);
+  expect(params.has('page')).toBe(false);
+
+  await page.goBack();
+  await expect(input).toHaveValue('AA+');
+  await expect(page.getByLabel('Sort')).toHaveValue('newest');
+  await expect(page.getByLabel('From date')).toHaveValue('2020-01-01');
+  const restored = new URL(page.url()).searchParams;
+  expect(restored.get('region')).toBe('CentralAsia');
+  expect(restored.get('sector')).toBe('banksRACS');
+  expect(restored.get('page')).toBe('7');
+});

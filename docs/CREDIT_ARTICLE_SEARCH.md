@@ -6,6 +6,10 @@ use the arrow keys to pick one or press Enter to see all results. Region,
 sector, source, and inclusive date filters apply to both. Opening an article
 and choosing its back link restores the search.
 
+Choose **Reset filters** beside the dates to return to page one of the full
+archive, newest first. It clears the query, dates, source, region, and sector,
+including edits you have not submitted. Back restores the previous applied search.
+
 The search uses the Credit database only. It matches all query terms against
 stored titles, summaries, matched keywords, and source names. Signed ratings
 are distinct: `AA+` does not match `AA-` or `AAA+`. Search is literal, not
