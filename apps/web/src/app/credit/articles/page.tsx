@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import {
   ArrowLeft,
   ArrowRight,
@@ -13,25 +14,31 @@ import {
   Scale,
   ChevronDown,
 } from "lucide-react";
+import { type CreditRegion, type CreditSector } from "@/lib/credit-articles";
+import { searchCreditArticles } from "@/lib/credit-article-search/repository";
 import {
-  listCreditArticles,
-  type CreditRegion,
-  type CreditSector,
-} from "@/lib/credit-articles";
+  creditArticleSearchParams,
+  parseCreditArticleSearchParams,
+} from "@/lib/credit-article-search/query";
+import type { CreditArticleSearchFilters } from "@/lib/credit-article-search/types";
 import { fetchCreditSources } from "@/lib/articles";
 import CreditArticlesHeader from "@/components/articles/CreditArticlesHeader";
 import CreditArticleRowCard from "@/components/articles/CreditArticleRowCard";
+import CreditArticleSearch from "@/components/articles/CreditArticleSearch";
 import ArticleAiProvider from "@/components/articles/ArticleAiProvider";
 import ArticleAiControls from "@/components/articles/ArticleAiControls";
 import { getLikeCounts, getUserLikedSet } from "@/lib/likes";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/nextauth-options";
+import { requireUserSession } from "@/lib/api-auth";
 
 type SearchParams = {
+  q?: string;
   region?: string;
   sector?: string;
   source?: string;
   page?: string;
+  from?: string;
+  to?: string;
+  sort?: string;
   date?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -93,6 +100,7 @@ function getRegionMeta(region: CreditRegion | undefined) {
 export const revalidate = 0;
 
 const articleDateFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: "UTC",
   year: "numeric",
   month: "short",
   day: "numeric",
@@ -110,65 +118,91 @@ export default async function CreditArticlesPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
+  const auth = await requireUserSession();
+  if (auth.response) {
+    redirect(`/signin?callbackUrl=${encodeURIComponent("/credit/articles")}`);
+  }
   const resolvedSearchParams = await searchParams;
-  const selectedRegion = resolveRegion(resolvedSearchParams.region);
-  const rawSector = resolveSector(resolvedSearchParams.sector);
-  const selectedSector =
-    selectedRegion === "MiddleEast" || selectedRegion === "CentralAsia"
-      ? rawSector
-      : undefined;
-  const page = Math.max(1, Number(resolvedSearchParams.page ?? "1") || 1);
-  const date = resolvedSearchParams.date;
-  const dateFrom = resolvedSearchParams.dateFrom;
-  const dateTo = resolvedSearchParams.dateTo;
+  const userId = auth.userId;
+  const parsedSearch = parseCreditArticleSearchParams(resolvedSearchParams);
+  const searchFilters: CreditArticleSearchFilters = parsedSearch.ok ? parsedSearch.filters : {
+    q: "", region: "", sector: "", source: "", from: "", to: "", sort: "newest", page: 1,
+  };
+  const selectedRegion = searchFilters.region || undefined;
+  const selectedSector = searchFilters.sector || undefined;
+  const selectedSource = searchFilters.source || undefined;
+  const { page, from: selectedDateFrom, to: selectedDateTo } = searchFilters;
+  const [sourceData, archive] = await Promise.allSettled([
+    parsedSearch.ok ? fetchCreditSources({ region: selectedRegion, sector: selectedSector }) : Promise.resolve([]),
+    parsedSearch.ok ? searchCreditArticles(searchFilters) : Promise.resolve(null),
+  ]);
+  const sourcesUnavailable = sourceData.status === "rejected";
+  const sources = sourceData.status === "fulfilled" ? sourceData.value : [];
+  const sourceOptions = Array.from(
+    new Set([...sources, ...(selectedSource ? [selectedSource] : [])]),
+  ).sort((a, b) => a.localeCompare(b));
 
-  // Fetch sources filtered by region and sector
-  const sources = await fetchCreditSources({
-    region: selectedRegion,
-    sector: selectedSector,
-  });
-  const rawSource = resolvedSearchParams.source?.trim() ?? "";
-  const sourceOptions = [...sources].sort((a, b) => a.localeCompare(b));
-  const selectedSource = sourceOptions.includes(rawSource) ? rawSource : undefined;
-
-  const { items, total, pageSize } = await listCreditArticles({
-    region: selectedRegion,
-    sector: selectedSector,
-    source: selectedSource,
-    page,
-    date,
-    dateFrom,
-    dateTo,
-  });
+  const searchResult = archive.status === "fulfilled" ? archive.value : null;
+  const searchUnavailable = archive.status === "rejected"
+    ? "The Credit Rating archive is temporarily unavailable. Please try again in a moment." : null;
+  const searchError = parsedSearch.ok ? null : parsedSearch.error;
+  const items = searchResult
+    ? searchResult.items.map((item) => ({
+        id: item.id,
+        title: item.title,
+        source: item.source,
+        date: item.published ? new Date(item.published) : null,
+        link: item.url,
+        snippet: item.snippet,
+        // Keep null/unknown values neutral instead of inferring a default
+        // region or sector from the active sidebar filter.
+        region: resolveRegion(item.region ?? undefined),
+        sector: resolveSector(item.sector ?? undefined),
+        matched_keywords: item.matched_keywords,
+      }))
+    : [];
+  const total = searchResult?.total ?? 0;
+  const pageSize = searchResult?.pageSize ?? 15;
 
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
 
-  // Like system setup
-  const session = await getServerSession(authOptions);
-  const userId = Number((session?.user as any)?.id || 0);
   const articleIds = items
     .map((article) => Number(article.id))
     .filter((id) => Number.isFinite(id));
 
-  const [likeCounts, userLikedSet] = await Promise.all([
-    getLikeCounts("credit", "article", articleIds),
-    getUserLikedSet("credit", userId, "article", articleIds),
-  ]);
-  const today = new Date().toISOString().slice(0, 10);
-  const selectedDateValue = date ?? today;
-  const selectedDateFrom = dateFrom ?? "";
-  const selectedDateTo = dateTo ?? "";
+  let likeCounts: Record<number, number> = {};
+  let userLikedSet = new Set<number>();
+  try {
+    [likeCounts, userLikedSet] = await Promise.all([
+      getLikeCounts("credit", "article", articleIds),
+      getUserLikedSet("credit", userId, "article", articleIds),
+    ]);
+  } catch {
+    // Like metadata is ancillary; keep the archive readable if it is down.
+  }
+  const canonicalSearchParams = creditArticleSearchParams({
+    ...searchFilters,
+    page: 1,
+  });
+  const searchStateParams = {
+    q: canonicalSearchParams.get("q") ?? undefined,
+    from: canonicalSearchParams.get("from") ?? undefined,
+    to: canonicalSearchParams.get("to") ?? undefined,
+    sort: canonicalSearchParams.get("sort") ?? undefined,
+  };
   
   // Create display label for the date(s)
   let selectedDateLabel: string;
-  if (dateFrom && dateTo) {
-    selectedDateLabel = `${formatDisplayDate(dateFrom) ?? dateFrom} - ${formatDisplayDate(dateTo) ?? dateTo}`;
-  } else if (dateFrom) {
-    selectedDateLabel = formatDisplayDate(dateFrom) ?? dateFrom;
-  } else if (dateTo) {
-    selectedDateLabel = `Up to ${formatDisplayDate(dateTo) ?? dateTo}`;
+  if (selectedDateFrom && selectedDateFrom === selectedDateTo) {
+    selectedDateLabel = formatDisplayDate(selectedDateFrom) ?? selectedDateFrom;
+  } else if (selectedDateFrom && selectedDateTo) {
+    selectedDateLabel = `${formatDisplayDate(selectedDateFrom) ?? selectedDateFrom} - ${formatDisplayDate(selectedDateTo) ?? selectedDateTo}`;
+  } else if (selectedDateFrom) {
+    selectedDateLabel = `From ${formatDisplayDate(selectedDateFrom) ?? selectedDateFrom}`;
+  } else if (selectedDateTo) {
+    selectedDateLabel = `Up to ${formatDisplayDate(selectedDateTo) ?? selectedDateTo}`;
   } else {
-    selectedDateLabel = formatDisplayDate(today) ?? today;
+    selectedDateLabel = "All dates";
   }
   
   const regionMeta = getRegionMeta(selectedRegion);
@@ -178,85 +212,7 @@ export default async function CreditArticlesPage({
   const prevDisabled = page <= 1;
   const nextDisabled = page >= pageCount;
 
-  const filtersNode = (
-    <>
-    <form
-      method="get"
-      action="/credit/articles"
-      className="grid w-full gap-3 md:grid-cols-[repeat(3,minmax(0,1fr))_auto_auto] md:items-end"
-    >
-      {selectedRegion ? <input type="hidden" name="region" value={selectedRegion} /> : null}
-      {selectedSector ? <input type="hidden" name="sector" value={selectedSector} /> : null}
-      <input type="hidden" name="page" value="1" />
-
-      <label className="flex flex-col text-sm font-medium text-card-foreground">
-        <span className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">From Date</span>
-        <div className="relative">
-          <input
-            type="date"
-            name="dateFrom"
-            defaultValue={selectedDateFrom}
-            placeholder="Select date"
-            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm transition-all duration-200 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 hover:border-primary/50 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:rounded [&::-webkit-calendar-picker-indicator]:p-1 [&::-webkit-calendar-picker-indicator]:opacity-60 [&::-webkit-calendar-picker-indicator]:transition-opacity [&::-webkit-calendar-picker-indicator]:hover:bg-primary/10 [&::-webkit-calendar-picker-indicator]:hover:opacity-100"
-            style={{
-              colorScheme: 'light dark'
-            }}
-          />
-        </div>
-      </label>
-
-      <label className="flex flex-col text-sm font-medium text-card-foreground">
-        <span className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">To Date</span>
-        <div className="relative">
-          <input
-            type="date"
-            name="dateTo"
-            defaultValue={selectedDateTo}
-            placeholder="Select date"
-            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm transition-all duration-200 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 hover:border-primary/50 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:rounded [&::-webkit-calendar-picker-indicator]:p-1 [&::-webkit-calendar-picker-indicator]:opacity-60 [&::-webkit-calendar-picker-indicator]:transition-opacity [&::-webkit-calendar-picker-indicator]:hover:bg-primary/10 [&::-webkit-calendar-picker-indicator]:hover:opacity-100"
-            style={{
-              colorScheme: 'light dark'
-            }}
-          />
-        </div>
-      </label>
-
-      <label className="flex flex-col text-sm font-medium text-card-foreground">
-        <span className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">Source</span>
-        <select
-          name="source"
-          defaultValue={selectedSource ?? ""}
-          className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm transition-all duration-200 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 hover:border-primary/50"
-        >
-          <option value="">All sources</option>
-          {sourceOptions.map((source) => (
-            <option key={source} value={source}>
-              {source}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <button
-        type="submit"
-        className="h-full rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-all duration-200 hover:bg-primary/90 hover:shadow-md active:scale-95"
-      >
-        Apply
-      </button>
-
-      <Link
-        href={href("/credit/articles", {
-          region: selectedRegion,
-          sector: selectedSector,
-        })}
-        className="flex h-full items-center justify-center rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground transition-all duration-200 hover:bg-muted hover:border-primary/50 active:scale-95"
-      >
-        Reset
-      </Link>
-    </form>
-    <ArticleAiControls domain="credit" className="mt-4" />
-    </>
-  );
+  const filtersNode = <ArticleAiControls domain="credit" className="mt-4" />;
 
   return (
     <ArticleAiProvider
@@ -283,8 +239,7 @@ export default async function CreditArticlesPage({
                 }`}
                 href={href("/credit/articles", {
                   source: selectedSource,
-                  dateFrom,
-                  dateTo,
+                  ...searchStateParams,
                 })}
               >
                 <Globe2 className="h-4 w-4" aria-hidden="true" />
@@ -303,8 +258,7 @@ export default async function CreditArticlesPage({
                       href={href("/credit/articles", {
                         region: region.key,
                         source: selectedSource,
-                        dateFrom,
-                        dateTo,
+                        ...searchStateParams,
                       })}
                     >
                       {region.icon}
@@ -339,8 +293,7 @@ export default async function CreditArticlesPage({
                           href={href("/credit/articles", {
                             region: region.key,
                             source: selectedSource,
-                            dateFrom,
-                            dateTo,
+                            ...searchStateParams,
                           })}
                         >
                           View all {region.label}
@@ -357,8 +310,7 @@ export default async function CreditArticlesPage({
                               region: region.key,
                               sector: sector.key,
                               source: selectedSource,
-                              dateFrom,
-                              dateTo,
+                              ...searchStateParams,
                             })}
                           >
                             {sector.icon}
@@ -375,17 +327,33 @@ export default async function CreditArticlesPage({
         </aside>
 
         <main className="col-span-12 md:col-span-9">
+          <CreditArticleSearch filters={searchFilters} sources={sourceOptions} />
+          <div className="h-5" aria-hidden="true" />
           <CreditArticlesHeader
             regionLabel={regionMeta.label}
             dateLabel={selectedDateLabel}
-            total={total}
+            total={searchResult ? total : null}
             page={page}
             pageCount={pageCount}
             filters={filtersNode}
             showAllRegions={!selectedRegion}
           />
 
-          {items.length === 0 ? (
+          {sourcesUnavailable && searchResult ? (
+            <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900" role="status">
+              Source filters are temporarily unavailable. The archive results are still available; please try again later for the full source list.
+            </div>
+          ) : null}
+
+          {searchUnavailable ? (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-900" role="alert">
+              {searchUnavailable}
+            </div>
+          ) : searchError ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900" role="alert">
+              {searchError}
+            </div>
+          ) : items.length === 0 ? (
             <div className="rounded-2xl border border-border bg-card p-10 text-center text-base text-card-foreground">
               No articles found for the selected filters.
             </div>
@@ -393,9 +361,12 @@ export default async function CreditArticlesPage({
             <div className="space-y-4">
               {items.map((article) => {
                 const dateLabel = formatDisplayDate(article.date) ?? "No date";
-                const regionLabel = getRegionMeta(article.region).label;
+                const regionLabel = article.region
+                  ? getRegionMeta(article.region).label
+                  : "Region unavailable";
                 const sectorLabel =
-                  SECTORS.find((sector) => sector.key === article.sector)?.label ?? article.sector;
+                  SECTORS.find((sector) => sector.key === article.sector)?.label ??
+                  (article.sector ? article.sector : "Sector unavailable");
                 
                 const articleId = Number(article.id);
                 const isValidId = Number.isFinite(articleId);
@@ -404,8 +375,9 @@ export default async function CreditArticlesPage({
                 if (selectedRegion) backParams.set('region', selectedRegion);
                 if (selectedSector) backParams.set('sector', selectedSector);
                 if (selectedSource) backParams.set('source', selectedSource);
-                if (dateFrom) backParams.set('dateFrom', dateFrom);
-                if (dateTo) backParams.set('dateTo', dateTo);
+                Object.entries(searchStateParams).forEach(([key, value]) => {
+                  if (value) backParams.set(key, value);
+                });
                 if (page > 1) backParams.set('page', String(page));
                 const backQuery = backParams.toString();
                 const articleDetailHref = backQuery 
@@ -423,6 +395,8 @@ export default async function CreditArticlesPage({
                     regionLabel={regionLabel}
                     sectorLabel={sectorLabel}
                     matchedKeywords={article.matched_keywords}
+                    highlightQuery={searchFilters.q}
+                    snippet={article.snippet}
                     articleId={isValidId ? articleId : undefined}
                     initialLiked={isValidId ? userLikedSet.has(articleId) : false}
                     initialLikeCount={isValidId ? likeCounts[articleId] ?? 0 : 0}
@@ -440,8 +414,7 @@ export default async function CreditArticlesPage({
                   sector: selectedSector,
                   source: selectedSource,
                   page: prevPage,
-                  dateFrom,
-                  dateTo,
+                  ...searchStateParams,
                 })}
                 className={`flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm ${
                   prevDisabled
@@ -462,8 +435,7 @@ export default async function CreditArticlesPage({
                   sector: selectedSector,
                   source: selectedSource,
                   page: nextPage,
-                  dateFrom,
-                  dateTo,
+                  ...searchStateParams,
                 })}
                 className={`flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm ${
                   nextDisabled

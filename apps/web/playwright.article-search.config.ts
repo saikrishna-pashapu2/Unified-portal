@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
-  testMatch: 'article-search.spec.ts',
+  testMatch: ['article-search.spec.ts', 'credit-article-search.spec.ts'],
   workers: 1,
   timeout: 30_000,
   use: { baseURL: 'http://127.0.0.1:4183', trace: 'retain-on-failure' },

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CalendarDays, ExternalLink, MapPin, Newspaper, Tag } from "lucide-react";
 import LikeButton from "@/components/LikeButton";
 import ArticleAiSelection from "@/components/articles/ArticleAiSelection";
+import ArticleSearchHighlight from "@/components/articles/ArticleSearchHighlight";
 import { parseKeywords } from "@/lib/keywords";
 
 type CreditArticleRowCardProps = {
@@ -17,6 +18,8 @@ type CreditArticleRowCardProps = {
   articleId?: number;
   initialLiked?: boolean;
   initialLikeCount?: number;
+  highlightQuery?: string;
+  snippet?: string | null;
 };
 
 export default function CreditArticleRowCard({
@@ -31,6 +34,8 @@ export default function CreditArticleRowCard({
   articleId,
   initialLiked = false,
   initialLikeCount = 0,
+  highlightQuery = "",
+  snippet = null,
 }: CreditArticleRowCardProps) {
   const keywords = parseKeywords(matchedKeywords);
 
@@ -40,9 +45,15 @@ export default function CreditArticleRowCard({
         <div className="flex-1 space-y-3">
           <h2 className="text-lg font-semibold leading-snug">
             <Link href={detailHref} className="hover:underline">
-              {title}
+              <ArticleSearchHighlight text={title} query={highlightQuery} />
             </Link>
           </h2>
+
+          {snippet ? (
+            <p className="line-clamp-2 text-sm leading-6 text-muted-foreground">
+              <ArticleSearchHighlight text={snippet} query={highlightQuery} />
+            </p>
+          ) : null}
 
           <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
             <span className="inline-flex items-center gap-2">
