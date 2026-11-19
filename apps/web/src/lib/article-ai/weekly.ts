@@ -244,6 +244,36 @@ function inputSize(inputs: ArticleAiWeeklyInputSnapshot[], fragments: ArticleAiW
   }), "utf8");
 }
 
+/**
+ * Measure the exact bounded request shape used by the provider, including the
+ * keyed structured-output schema. The previous planner measured only the JSON
+ * payload and a fixed allowance, which could undercount candidate schemas as
+ * the cohort grew and fail later in preflight.
+ */
+export function estimateArticleAiWeeklyProviderRequestBytes(
+  phase: Extract<ArticleAiWeeklyBatchPhase, "history_profile" | "candidate_evaluation">,
+  inputs: ArticleAiWeeklyInputSnapshot[],
+  fragments: ArticleAiWeeklyTextFragment[],
+): number {
+  const providerInputs = inputs.map(providerInput);
+  const common = {
+    domain: "credit" as const,
+    policyVersion: policyVersion(),
+    model: ARTICLE_AI_WEEKLY_MODEL,
+    runId: "00000000-0000-0000-0000-000000000000",
+    batchId: "00000000-0000-0000-0000-000000000000",
+    inputHash: "0".repeat(64),
+    fragments,
+  };
+  return phase === "history_profile"
+    ? buildWeeklyHistoryProviderRequest({ ...common, articles: providerInputs }).inputBytes
+    : buildWeeklyCandidateProviderRequest({
+        ...common,
+        profile: "p".repeat(16_000),
+        candidates: providerInputs,
+      }).inputBytes;
+}
+
 function estimatedStructuredOutputBytes(
   phase: ArticleAiWeeklyBatchPhase,
   inputs: ArticleAiWeeklyInputSnapshot[],
@@ -507,7 +537,7 @@ async function getManifest(
 }
 
 function prepareBatches(
-  phase: ArticleAiWeeklyBatchPhase,
+  phase: Extract<ArticleAiWeeklyBatchPhase, "history_profile" | "candidate_evaluation">,
   inputs: ArticleAiWeeklyInputSnapshot[],
   maxBytes: number,
 ): PreparedBatch[] {
@@ -542,7 +572,7 @@ function prepareBatches(
     currentFragments = [];
   };
   for (const input of usable) {
-    const fragments = splitText(input, Math.max(4_096, Math.floor(maxBytes / 2)));
+    const fragments = splitText(input, Math.max(4_096, Math.floor(maxBytes / 3)));
     if (!fragments.length) continue;
     for (const fragment of fragments) {
       const candidateInputs = currentInputs.some((row) => row.manifestId === input.manifestId)
@@ -550,8 +580,9 @@ function prepareBatches(
         : [...currentInputs, input];
       const candidateFragments = [...currentFragments, fragment];
       const exceedsInput = inputSize(candidateInputs, candidateFragments) > maxBytes;
+      const exceedsProviderInput = estimateArticleAiWeeklyProviderRequestBytes(phase, candidateInputs, candidateFragments) > maxBytes;
       const exceedsOutput = estimatedStructuredOutputBytes(phase, candidateInputs, candidateFragments) > MAX_MERGE_OUTPUT_BYTES;
-      if (currentFragments.length && (exceedsInput || exceedsOutput)) {
+      if (currentFragments.length && (exceedsInput || exceedsProviderInput || exceedsOutput)) {
         flush();
         currentInputs = [input];
         currentFragments = [fragment];
@@ -562,6 +593,9 @@ function prepareBatches(
       if (inputSize(currentInputs, currentFragments) > maxBytes) {
         throw new WeeklyCoverageError(`Weekly ${phase} fragment exceeds the configured request bound`);
       }
+      if (estimateArticleAiWeeklyProviderRequestBytes(phase, currentInputs, currentFragments) > maxBytes) {
+        throw new WeeklyCoverageError(`Weekly ${phase} provider request exceeds the configured input bound`);
+      }
       if (estimatedStructuredOutputBytes(phase, currentInputs, currentFragments) > MAX_MERGE_OUTPUT_BYTES) {
         throw new WeeklyCoverageError(`Weekly ${phase} batch cannot fit the structured output coverage bound`);
       }
@@ -569,6 +603,19 @@ function prepareBatches(
   }
   flush();
   return batches;
+}
+
+/** Pure planning view used by regression tests and operator sizing checks. */
+export function planArticleAiWeeklyLeafBatches(
+  phase: Extract<ArticleAiWeeklyBatchPhase, "history_profile" | "candidate_evaluation">,
+  inputs: ArticleAiWeeklyInputSnapshot[],
+  maxBytes: number,
+): Array<{ inputCount: number; fragmentCount: number; providerInputBytes: number }> {
+  return prepareBatches(phase, inputs, maxBytes).map((plan) => ({
+    inputCount: plan.providerInputs.length,
+    fragmentCount: plan.fragments.length,
+    providerInputBytes: estimateArticleAiWeeklyProviderRequestBytes(phase, plan.providerInputs, plan.fragments),
+  }));
 }
 
 async function ensureBatch(
@@ -1584,8 +1631,12 @@ export async function runArticleAiAssessmentWithRuntime(
     const candidateUsable = manifest.candidates.filter((input) => !input.exclusionReason && fullText(input).length > 0);
     const batchBytes = getArticleAiConfig().weeklyBatchInputBytes;
     // Leave room for the structured envelope/system prompt and the full merged profile.
-    const historyPlans = prepareBatches("history_profile", historyUsable, Math.max(8_192, batchBytes - WEEKLY_STRUCTURED_SCHEMA_OVERHEAD_BYTES - 4_000));
-    const candidatePlans = prepareBatches("candidate_evaluation", candidateUsable, Math.max(8_192, batchBytes - WEEKLY_STRUCTURED_SCHEMA_OVERHEAD_BYTES - 20_000));
+    // Leaf planning measures the exact provider request, including the
+    // candidate keyed response schema and worst-case merged profile. Keep the
+    // configured bound as the ceiling; fixed overhead subtraction was not
+    // sufficient for a 40+ candidate schema.
+    const historyPlans = prepareBatches("history_profile", historyUsable, batchBytes);
+    const candidatePlans = prepareBatches("candidate_evaluation", candidateUsable, batchBytes);
     if (!historyPlans.length) {
       await markInsufficient(assessment.id, assessmentToken, manifest.coverage);
       return { status: "insufficient", domain, targetWeekKey: calendar.targetWeekKey,
