@@ -18,7 +18,7 @@ import {
   requestWeeklyCandidateBatch,
   requestWeeklyMerge,
 } from "./weekly-provider";
-import type { ArticleAiWeeklyHistoryBatchRequest } from "./types";
+import type { ArticleAiWeeklyHistoryBatchRequest, ArticleAiWeeklyMergeResult } from "./types";
 
 const history: ArticleAiWeeklyHistoryBatchRequest = {
   domain: "esg", policyVersion: 3, model: "gpt-6-luna", runId: "run", batchId: "batch", inputHash: "hash",
@@ -66,6 +66,21 @@ const candidateMergeWire = {
     c1: { action: "select", reason: "Strong domain evidence." },
     c2: { action: "eliminate", reason: "The stronger child survivor is preferred." },
     c3: { action: "select", reason: "Distinct useful evidence." },
+  },
+};
+const historyMergeRequest = {
+  ...history,
+  mergeKind: "history" as const,
+  childOutputs: [
+    { batchId: "history-leaf-a", outputHash: "history-hash-a", output: { ...historyOutput, coveredManifestIds: ["h1"] } },
+    { batchId: "history-leaf-b", outputHash: "history-hash-b", output: { ...historyOutput, coveredManifestIds: ["h2"] } },
+  ],
+};
+const historyMergeWire = {
+  status: "complete", coverage: "complete", mergedProfile: "Aggregate domain profile.",
+  children: {
+    "history-leaf-a": { outputHash: "history-hash-a" },
+    "history-leaf-b": { outputHash: "history-hash-b" },
   },
 };
 function response(output: unknown, extra: Record<string, unknown> = {}) {
@@ -132,8 +147,9 @@ describe("weekly gpt-6-luna provider contract", () => {
     expect(candidatePrompt.instructions).toContain("at most 20 action=select");
 
     expect(historyMergePrompt.instructions).toBe(ARTICLE_AI_WEEKLY_PHASE_INSTRUCTIONS.history_merge);
-    expect(historyMergePrompt.instructions).toContain("direct child batch IDs");
-    expect(historyMergePrompt.instructions).toContain("Never enumerate nested descendant IDs or hashes");
+    expect(historyMergePrompt.instructions).toContain("Do not select, rank, eliminate");
+    expect(historyMergePrompt.instructions).toContain("one required property for every direct child batch ID");
+    expect(historyMergePrompt.instructions).toContain("never enumerate nested descendant IDs or hashes");
 
     expect(candidateMergePrompt.instructions).toBe(ARTICLE_AI_WEEKLY_PHASE_INSTRUCTIONS.candidate_merge);
     expect(candidateMergePrompt.instructions).toContain("direct child batch ID");
@@ -181,6 +197,48 @@ describe("weekly gpt-6-luna provider contract", () => {
     expect(result.eliminated).toEqual([{ manifestId: "c2", reason: "The stronger child survivor is preferred." }]);
     expect(result.coveredChildBatchIds).toEqual(["leaf-a", "leaf-b"]);
     expect(result.childOutputHashes).toEqual(["hash-a", "hash-b"]);
+  });
+
+  it("normalizes history profile merges without asking the model to select articles", async () => {
+    sdk.create.mockResolvedValue(response(historyMergeWire));
+    const result = await requestWeeklyMerge(historyMergeRequest);
+    expect(result.mergedProfile).toBe("Aggregate domain profile.");
+    expect(result.selectedManifestIds).toEqual([]);
+    expect(result.rationale).toEqual([]);
+    expect(result.eliminated).toEqual([]);
+    expect(result.coveredChildBatchIds).toEqual(["history-leaf-a", "history-leaf-b"]);
+    expect(result.childOutputHashes).toEqual(["history-hash-a", "history-hash-b"]);
+    expect((result as ArticleAiWeeklyMergeResult & { coveredManifestIds: string[] }).coveredManifestIds).toEqual(["h1", "h2"]);
+    const sent = sdk.create.mock.calls[0][0];
+    expect(sent.text.format.schema.properties).not.toHaveProperty("selectedManifestIds");
+    expect(sent.text.format.schema.properties).not.toHaveProperty("rationale");
+    expect(sent.text.format.schema.properties).not.toHaveProperty("eliminated");
+  });
+
+  it("requires exact keyed history child hashes and rejects selection fields", async () => {
+    const format = buildWeeklyMergeResponseFormat(historyMergeRequest);
+    const formatSchema = format.schema as unknown as {
+      properties: Record<string, {
+        required?: unknown;
+        properties?: Record<string, { properties?: Record<string, unknown> }>;
+        additionalProperties?: unknown;
+      }>;
+    };
+    expect(format.strict).toBe(true);
+    expect(formatSchema.properties.children.required).toEqual(["history-leaf-a", "history-leaf-b"]);
+    expect(formatSchema.properties.children.properties?.["history-leaf-a"]?.properties?.outputHash)
+      .toMatchObject({ const: "history-hash-a" });
+    expect(formatSchema.properties.children.additionalProperties).toBe(false);
+    for (const output of [
+      { ...historyMergeWire, children: { "history-leaf-a": historyMergeWire.children["history-leaf-a"] } },
+      { ...historyMergeWire, children: { ...historyMergeWire.children, foreign: { outputHash: "history-hash-a" } } },
+      { ...historyMergeWire, children: { ...historyMergeWire.children, "history-leaf-a": { outputHash: "wrong" } } },
+      { ...historyMergeWire, selectedManifestIds: ["foreign"] },
+    ]) {
+      sdk.create.mockResolvedValueOnce(response(output));
+      await expect(requestWeeklyMerge(historyMergeRequest)).rejects.toThrow();
+    }
+    expect(sdk.create).toHaveBeenCalledTimes(4);
   });
 
   it("requires exact keyed child hashes and distinct survivor coverage", async () => {

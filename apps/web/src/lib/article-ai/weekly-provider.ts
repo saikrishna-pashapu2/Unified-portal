@@ -93,26 +93,9 @@ export function buildWeeklyCandidateResponseFormat(request: ArticleAiWeeklyCandi
 }
 
 export function buildWeeklyMergeResponseFormat(request: ArticleAiWeeklyMergeRequest) {
-  const schema = request.mergeKind === "candidate" ? candidateMergeResponseSchema(request) : mergeSchema;
+  const schema = request.mergeKind === "candidate" ? candidateMergeResponseSchema(request) : historyMergeResponseSchema(request);
   return zodTextFormat(schema, "article_ai_weekly_merge");
 }
-
-const mergeSchema = z.object({
-  status: z.literal("complete"),
-  coverage: z.literal("complete"),
-  mergedProfile: z.string().max(16_000),
-  selectedManifestIds: z.array(z.string()),
-  rationale: z.array(z.object({
-    manifestId: z.string(),
-    reason: z.string().trim().min(1).max(600),
-  })),
-  eliminated: z.array(z.object({
-    manifestId: z.string(),
-    reason: z.string().trim().min(1).max(600),
-  })),
-  coveredChildBatchIds: z.array(z.string()),
-  childOutputHashes: z.array(z.string()),
-});
 
 function candidateMergeSurvivorIds(childOutputs: ArticleAiWeeklyMergeRequest["childOutputs"]): string[] {
   const ids = new Set<string>();
@@ -172,6 +155,25 @@ function candidateMergeResponseSchema(request: ArticleAiWeeklyMergeRequest) {
   }).strict();
 }
 
+function historyMergeResponseSchema(request: ArticleAiWeeklyMergeRequest) {
+  const childIds = request.childOutputs.map((child) => child.batchId);
+  if (request.childOutputs.some((child) => typeof child.outputHash !== "string" || !child.outputHash)) {
+    throw new Error("Weekly history merge child output hash is invalid");
+  }
+  return z.object({
+    status: z.literal("complete"),
+    coverage: z.literal("complete"),
+    mergedProfile: z.string().trim().min(1).max(16_000),
+    children: z.object(keyedShape(
+      childIds,
+      (batchId) => z.object({
+        outputHash: z.literal(request.childOutputs.find((child) => child.batchId === batchId)!.outputHash),
+      }).strict(),
+      "history merge child",
+    )).strict(),
+  }).strict();
+}
+
 export interface WeeklyProviderRequest {
   prompt: string;
   inputBytes: number;
@@ -203,8 +205,9 @@ export const ARTICLE_AI_WEEKLY_PHASE_INSTRUCTIONS: Readonly<Record<ArticleAiWeek
   ].join(" "),
   history_merge: [
     "Preserve every supported child theme, evidence pattern, minority signal, and useful distinction; do not collapse a valid minority signal merely because it is less frequent.",
-    "This merge covers direct child outputs only: coveredChildBatchIds must exactly equal the direct child batch IDs, and childOutputHashes must exactly equal the direct child output hashes.",
-    "Never enumerate nested descendant IDs or hashes in those direct-child coverage arrays.",
+    "Return only a mergedProfile and a children object. Do not select, rank, eliminate, or return article or manifest IDs while synthesizing history.",
+    "The children object must have one required property for every direct child batch ID and no other property; each outputHash must match that child's supplied hash exactly.",
+    "The service derives empty selection, rationale, and elimination arrays plus direct child coverage after validation; never enumerate nested descendant IDs or hashes.",
   ].join(" "),
   candidate_evaluation: [
     "Assess semantic usefulness against the aggregate profile, abstain when evidence is weak, and return one short concrete reason for every supplied candidate.",
@@ -402,13 +405,59 @@ export async function requestWeeklyCandidateBatch(
   };
 }
 
+function historyMergeCoveredManifestIds(
+  childOutputs: ArticleAiWeeklyMergeRequest["childOutputs"],
+): string[] {
+  const ids = new Set<string>();
+  for (const child of childOutputs) {
+    if (!child.output || typeof child.output !== "object" || Array.isArray(child.output)) {
+      throw new Error("Weekly history merge child output is invalid");
+    }
+    const value = child.output as Record<string, unknown>;
+    const coveredManifestIds = Array.isArray(value.coveredManifestIds)
+      ? value.coveredManifestIds
+      : Array.isArray(value.rationale)
+        ? (value.rationale as Array<{ manifestId?: unknown }>).map((item) => item?.manifestId)
+        : [];
+    for (const manifestId of coveredManifestIds) {
+      if (typeof manifestId === "string" && manifestId) ids.add(manifestId);
+    }
+  }
+  return Array.from(ids).sort();
+}
+
 export async function requestWeeklyMerge(
   request: ArticleAiWeeklyMergeRequest,
 ): Promise<ArticleAiWeeklyMergeResult> {
   const providerRequest = buildWeeklyMergeProviderRequest(request);
   if (request.mergeKind === "history") {
-    const result = await requestStructured(providerRequest, mergeSchema, "article_ai_weekly_merge");
-    return { ...result.value, model: result.model, inputTokens: result.inputTokens, outputTokens: result.outputTokens };
+    const result = await requestStructured(
+      providerRequest,
+      historyMergeResponseSchema(request),
+      "article_ai_weekly_merge",
+    );
+    const wire = result.value as {
+      status: "complete";
+      coverage: "complete";
+      mergedProfile: string;
+      children: Record<string, { outputHash: string }>;
+    };
+    const coveredManifestIds = historyMergeCoveredManifestIds(request.childOutputs);
+    const normalized: ArticleAiWeeklyMergeResult & { coveredManifestIds: string[] } = {
+      status: wire.status,
+      coverage: wire.coverage,
+      mergedProfile: wire.mergedProfile,
+      selectedManifestIds: [],
+      rationale: [],
+      eliminated: [],
+      coveredChildBatchIds: Object.keys(wire.children),
+      childOutputHashes: Object.values(wire.children).map((child) => child.outputHash),
+      coveredManifestIds,
+      model: result.model,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+    };
+    return normalized;
   }
   const result = await requestStructured(providerRequest, candidateMergeResponseSchema(request), "article_ai_weekly_merge");
   const wire = result.value as {
