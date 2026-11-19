@@ -140,7 +140,7 @@ export default async function CreditArticlesPage({
     parsedSearch.ok ? fetchCreditSources({ region: selectedRegion, sector: selectedSector }) : Promise.resolve([]),
     parsedSearch.ok
       ? aiOnly
-        ? getDailyArticlePickIds("credit").then((dailyPickIds) =>
+        ? getDailyArticlePickIds("credit", auth.userId).then((dailyPickIds) =>
             searchCreditArticles(searchFilters, { articleIds: dailyPickIds }),
           )
         : searchCreditArticles(searchFilters)

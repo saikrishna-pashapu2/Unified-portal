@@ -11,9 +11,9 @@ export const dynamic = "force-dynamic";
 
 const EMPTY_FEED: DailyArticlePickFeed = { runs: [], picks: [] };
 
-async function loadFeed(domain: "esg" | "credit") {
+async function loadFeed(viewerId: number, domain: "esg" | "credit") {
   try {
-    const feed = await getDailyArticlePickFeed(domain, { limit: 6 });
+    const feed = await getDailyArticlePickFeed(domain, { viewerId, limit: 6 });
     return { ...feed, runs: feed.runs.slice(0, 7) };
   } catch (error) {
     console.error(`Error fetching ${domain} daily AI picks for admin dashboard:`, error);
@@ -25,9 +25,10 @@ export default async function AdminDashboardPage() {
   const auth = await requireAdminSession();
   if (auth.response) redirect("/");
 
+  const viewerId = Number(auth.session.user.id);
   const [esgFeed, creditFeed] = await Promise.all([
-    loadFeed("esg"),
-    loadFeed("credit"),
+    loadFeed(viewerId, "esg"),
+    loadFeed(viewerId, "credit"),
   ]);
 
   return (

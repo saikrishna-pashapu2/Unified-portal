@@ -151,7 +151,7 @@ export default async function CreditCommunityPage({
   let dailyAi: Awaited<ReturnType<typeof getDailyArticlePickFeed>> = { runs: [], picks: [] };
   if (tab === "daily-ai") {
     try {
-      dailyAi = await getDailyArticlePickFeed(domain, { limit: 20 });
+      dailyAi = await getDailyArticlePickFeed(domain, { viewerId: userId, limit: 20 });
     } catch (error) {
       console.error("Error fetching credit daily AI picks:", error);
     }

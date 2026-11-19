@@ -85,7 +85,7 @@ describe("GET /api/esg/articles/search", () => {
   it("scopes suggestions to shared daily picks before applying the limit", async () => {
     const response = await GET(request("?q=climat&suggest=1&ai=1"));
     expect(response.status).toBe(200);
-    expect(mocks.dailyPickIds).toHaveBeenCalledWith("esg");
+    expect(mocks.dailyPickIds).toHaveBeenCalledWith("esg", 7);
     expect(mocks.search).toHaveBeenCalledWith(
       expect.objectContaining({ q: "climat", sort: "relevance", page: 1 }),
       { suggest: true, articleIds: [101, 202] },

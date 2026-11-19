@@ -20,8 +20,14 @@ interface DailyRun {
   pickCount: number;
 }
 
-export async function getDailyArticlePickIds(domain: ArticleAiDomain): Promise<number[]> {
-  if (!isArticleAiEnabled()) return [];
+async function canReadDailyPicks(viewerId: number): Promise<boolean> {
+  if (!isArticleAiEnabled() || !Number.isSafeInteger(viewerId) || viewerId <= 0) return false;
+  const user = await esgPrisma.users.findUnique({ where: { id: viewerId }, select: { is_active_db: true } });
+  return user?.is_active_db === true;
+}
+
+export async function getDailyArticlePickIds(domain: ArticleAiDomain, viewerId: number): Promise<number[]> {
+  if (!await canReadDailyPicks(viewerId)) return [];
   const rows = await esgPrisma.$queryRaw<{ article_id: number; content_hash: string }[]>`
     SELECT DISTINCT ON (s.article_id) s.article_id, s.content_hash
     FROM article_ai_domain_assessments a
@@ -45,9 +51,9 @@ export async function getDailyArticlePickIds(domain: ArticleAiDomain): Promise<n
 
 export async function getDailyArticlePickFeed(
   domain: ArticleAiDomain,
-  { limit = 20, sourceDay }: { limit?: number; sourceDay?: string } = {},
+  { viewerId, limit = 20, sourceDay }: { viewerId: number; limit?: number; sourceDay?: string },
 ): Promise<{ runs: DailyRun[]; picks: DailyArticlePick[] }> {
-  if (!isArticleAiEnabled()) return { runs: [], picks: [] };
+  if (!await canReadDailyPicks(viewerId)) return { runs: [], picks: [] };
   // Compare a requested day as text, so even a malformed URL cannot cause a date-cast error.
   const maxRows = Number.isFinite(limit) ? Math.max(1, Math.min(600, Math.trunc(limit))) : 20;
   const [runs, picks] = await esgPrisma.$transaction([

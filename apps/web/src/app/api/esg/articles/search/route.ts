@@ -46,7 +46,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   try {
     const articleIds = isEnabledFlag(params.get("ai"))
-      ? await getDailyArticlePickIds("esg")
+      ? await getDailyArticlePickIds("esg", auth.userId)
       : undefined;
     const result = articleIds
       ? await searchEsgArticles(parsed.filters, { suggest, articleIds })

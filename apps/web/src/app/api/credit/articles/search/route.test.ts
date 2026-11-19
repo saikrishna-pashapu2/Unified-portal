@@ -52,7 +52,7 @@ describe("GET /api/credit/articles/search", () => {
   it("scopes suggestions to shared daily picks before applying the limit", async () => {
     const response = await GET(request("?q=BBB-&suggest=1&ai=true"));
     expect(response.status).toBe(200);
-    expect(mocks.dailyPickIds).toHaveBeenCalledWith("credit");
+    expect(mocks.dailyPickIds).toHaveBeenCalledWith("credit", 7);
     expect(mocks.search).toHaveBeenCalledWith(
       expect.objectContaining({ q: "BBB-", sort: "relevance", page: 1 }),
       { suggest: true, articleIds: [101, 202] },

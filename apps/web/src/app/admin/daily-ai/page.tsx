@@ -16,13 +16,13 @@ function parseSourceDay(value: string | string[] | undefined) {
   return candidate && /^\d{4}-\d{2}-\d{2}$/.test(candidate) ? candidate : undefined;
 }
 
-async function loadFeed(domain: "esg" | "credit", sourceDay?: string) {
+async function loadFeed(viewerId: number, domain: "esg" | "credit", sourceDay?: string) {
   try {
-    const allDays = await getDailyArticlePickFeed(domain, { limit: 30 });
+    const allDays = await getDailyArticlePickFeed(domain, { viewerId, limit: 30 });
     if (!sourceDay) return allDays;
 
     const selectedDay = await getDailyArticlePickFeed(domain, {
-      sourceDay,
+      viewerId,      sourceDay,
       limit: 30,
     });
     return { runs: allDays.runs, picks: selectedDay.picks };
@@ -41,9 +41,10 @@ export default async function DailyAiAdminPage({
   if (auth.response) redirect("/");
 
   const sourceDay = parseSourceDay((await searchParams)?.sourceDay);
+  const viewerId = Number(auth.session.user.id);
   const [esgFeed, creditFeed] = await Promise.all([
-    loadFeed("esg", sourceDay),
-    loadFeed("credit", sourceDay),
+    loadFeed(viewerId, "esg", sourceDay),
+    loadFeed(viewerId, "credit", sourceDay),
   ]);
 
   return (

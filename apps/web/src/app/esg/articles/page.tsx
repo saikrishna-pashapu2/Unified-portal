@@ -258,7 +258,7 @@ export default async function EsgArticlesPage({
   if (parsed.ok) {
     try {
       if (aiOnly) {
-        const dailyPickIds = await getDailyArticlePickIds("esg");
+        const dailyPickIds = await getDailyArticlePickIds("esg", auth.userId);
         searchResult = await searchEsgArticles(filters, { articleIds: dailyPickIds });
       } else {
         searchResult = await searchEsgArticles(filters);

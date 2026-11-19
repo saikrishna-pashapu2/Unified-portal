@@ -31,7 +31,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   try {
     const suggest = params.get("suggest") === "1" || params.get("suggest") === "true";
     const articleIds = params.get("ai") === "1" || params.get("ai") === "true"
-      ? await getDailyArticlePickIds("credit")
+      ? await getDailyArticlePickIds("credit", auth.userId)
       : undefined;
     const result = articleIds
       ? await searchCreditArticles(parsed.filters, { suggest, articleIds })

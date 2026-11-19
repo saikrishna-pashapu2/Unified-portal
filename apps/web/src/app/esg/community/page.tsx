@@ -151,7 +151,7 @@ export default async function CommunityPage({
   let dailyAi: Awaited<ReturnType<typeof getDailyArticlePickFeed>> = { runs: [], picks: [] };
   if (tab === "daily-ai") {
     try {
-      dailyAi = await getDailyArticlePickFeed(domain, { limit: 20 });
+      dailyAi = await getDailyArticlePickFeed(domain, { viewerId: userId, limit: 20 });
     } catch (error) {
       console.error("Error fetching ESG daily AI picks:", error);
     }

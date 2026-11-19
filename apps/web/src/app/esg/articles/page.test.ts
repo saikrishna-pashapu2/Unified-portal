@@ -63,7 +63,7 @@ describe('ESG article search page', () => {
   it('uses the shared daily pick ids for the server-side AI-only filter', async () => {
     await Page({ searchParams: Promise.resolve({ ai: '1', q: 'climate', page: '2' }) });
 
-    expect(mocks.dailyPickIds).toHaveBeenCalledWith('esg');
+    expect(mocks.dailyPickIds).toHaveBeenCalledWith('esg', 17);
     expect(mocks.search).toHaveBeenCalledWith(
       expect.objectContaining({ q: 'climate', page: 2 }),
       { articleIds: [101] },

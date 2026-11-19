@@ -177,7 +177,7 @@ describe("Credit article search page", () => {
   it("uses the shared daily pick ids for the server-side AI-only filter", async () => {
     await Page({ searchParams: Promise.resolve({ ai: "1", region: "MiddleEast", page: "2" }) });
 
-    expect(mocks.dailyPickIds).toHaveBeenCalledWith("credit");
+    expect(mocks.dailyPickIds).toHaveBeenCalledWith("credit", 17);
     expect(mocks.search).toHaveBeenCalledWith(
       expect.objectContaining({ region: "MiddleEast", page: 2 }),
       { articleIds: [101] },
