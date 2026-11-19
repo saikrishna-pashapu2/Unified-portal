@@ -57,7 +57,9 @@ export function getArticleAiConfig(): ArticleAiConfig {
     maxCandidates: positiveInt(process.env.ARTICLE_AI_MAX_CANDIDATES, 40, 100),
     dailyRequestLimit: positiveInt(process.env.ARTICLE_AI_DAILY_REQUEST_LIMIT, 2, 10),
     dailyTokenLimit: positiveInt(process.env.ARTICLE_AI_DAILY_TOKEN_LIMIT, 12_000, 100_000),
-    selectionTtlDays: positiveInt(process.env.ARTICLE_AI_SELECTION_TTL_DAYS, 8, 31),
+    // Daily shared picks stay visible in the article/community feeds for the
+    // rolling month. This is independent of the weekly email's cohort TTL.
+    selectionTtlDays: positiveInt(process.env.ARTICLE_AI_SELECTION_TTL_DAYS, 30, 31),
     maxHistoryExamples: positiveInt(process.env.ARTICLE_AI_MAX_HISTORY_EXAMPLES, 200, 200),
   };
 }

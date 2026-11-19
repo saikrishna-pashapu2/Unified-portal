@@ -112,7 +112,7 @@ function isRatingToken(value: string): boolean {
   return /^[a-z]{1,5}[+-]$/i.test(value);
 }
 
-function buildWhere(filters: CreditArticleSearchFilters) {
+function buildWhere(filters: CreditArticleSearchFilters, articleIds?: readonly number[]) {
   const params: unknown[] = [];
   const add = (value: unknown) => { params.push(value); return `$${params.length}`; };
   const terms = creditArticleSearchTerms(filters.q.toLowerCase());
@@ -137,6 +137,7 @@ function buildWhere(filters: CreditArticleSearchFilters) {
   if (filters.sector) conditions.push(`a.sector = ${add(filters.sector)}`);
   if (filters.from) conditions.push(`COALESCE(a.date, a.save_time::date) >= ${add(filters.from)}::date`);
   if (filters.to) conditions.push(`COALESCE(a.date, a.save_time::date) <= ${add(filters.to)}::date`);
+  if (articleIds !== undefined) conditions.push(`a.id = ANY(${add(articleIds)}::int[])`);
   return { where: conditions.join(" AND "), params, titleHits };
 }
 
@@ -149,13 +150,14 @@ const fromSql = `FROM credit_articles AS a
 async function executeSearch(
   filters: CreditArticleSearchFilters,
   suggest: boolean,
+  articleIds?: readonly number[],
 ): Promise<CreditArticleSearchResponse> {
   const pageSize = suggest ? CREDIT_ARTICLE_SEARCH_SUGGEST_PAGE_SIZE : CREDIT_ARTICLE_SEARCH_PAGE_SIZE;
   const limit = pageSize + (suggest ? 1 : 0);
   const offset = suggest ? 0 : (filters.page - 1) * CREDIT_ARTICLE_SEARCH_PAGE_SIZE;
 
   return withReadOnlyTransaction(async (tx) => {
-    const built = buildWhere(filters);
+    const built = buildWhere(filters, articleIds);
     const phraseParam = filters.q ? built.params.push(filters.q.toLowerCase()) : 0;
     const relevance = phraseParam
       ? `(CASE WHEN position($${phraseParam} in lower(COALESCE(a.title, ''))) > 0 THEN 12 ELSE 0 END
@@ -175,7 +177,7 @@ async function executeSearch(
       return { items: rows.slice(0, pageSize).map(mapRow), total: null, page: filters.page, pageSize,
         hasMore: rows.length > pageSize, query: filters.q, typoTolerance: false };
     }
-    const countBuilt = buildWhere(filters);
+    const countBuilt = buildWhere(filters, articleIds);
     const countRows = await tx.$queryRawUnsafe<CountRow[]>(`SELECT COUNT(*)::bigint AS total ${fromSql} WHERE ${countBuilt.where}`, ...countBuilt.params);
     const total = countValue(countRows[0]);
     return { items: rows.map(mapRow), total, page: filters.page, pageSize,
@@ -183,7 +185,9 @@ async function executeSearch(
   });
 }
 
-function cacheKey(filters: CreditArticleSearchFilters): string { return JSON.stringify(filters); }
+function cacheKey(filters: CreditArticleSearchFilters, articleIds?: readonly number[]): string {
+  return JSON.stringify([filters, articleIds ?? null]);
+}
 function cloneResponse(response: CreditArticleSearchResponse): CreditArticleSearchResponse {
   return { ...response, items: response.items.map((item) => ({ ...item })) };
 }
@@ -200,11 +204,23 @@ function trimCache(now: number): void {
 
 export async function searchCreditArticles(
   filters: CreditArticleSearchFilters,
-  options?: { suggest?: boolean },
+  options?: { suggest?: boolean; articleIds?: readonly number[] },
 ): Promise<CreditArticleSearchResponse> {
   const suggest = options?.suggest === true;
-  if (!suggest) return executeSearch(filters, false);
-  const key = cacheKey(filters);
+  const articleIds = options?.articleIds;
+  if (articleIds?.length === 0) {
+    return {
+      items: [],
+      total: 0,
+      page: filters.page,
+      pageSize: suggest ? CREDIT_ARTICLE_SEARCH_SUGGEST_PAGE_SIZE : CREDIT_ARTICLE_SEARCH_PAGE_SIZE,
+      hasMore: false,
+      query: filters.q,
+      typoTolerance: false,
+    };
+  }
+  if (!suggest) return executeSearch(filters, false, articleIds);
+  const key = cacheKey(filters, articleIds);
   const now = Date.now();
   trimCache(now);
   const cached = suggestionCache.get(key);
@@ -212,7 +228,7 @@ export async function searchCreditArticles(
   const existing = suggestionInFlight.get(key);
   if (existing) return cloneResponse(await existing);
   if (suggestionInFlight.size >= SUGGESTION_CACHE_MAX_ENTRIES) throw new Error("Credit suggestions are busy");
-  const promise = executeSearch(filters, true).then((response) => {
+  const promise = executeSearch(filters, true, articleIds).then((response) => {
     trimCache(Date.now());
     suggestionCache.set(key, { expiresAt: Date.now() + SUGGESTION_CACHE_TTL_MS, response });
     return response;

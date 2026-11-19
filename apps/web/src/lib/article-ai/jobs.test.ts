@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   esgQuery: vi.fn(), esgExecute: vi.fn(), esgTransaction: vi.fn(), creditExecute: vi.fn(),
-  enqueue: vi.fn(), cancelled: vi.fn(), enabled: vi.fn(), weekly: vi.fn(),
+  enqueue: vi.fn(), cancelled: vi.fn(), enabled: vi.fn(), weekly: vi.fn(), daily: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
@@ -11,6 +11,7 @@ vi.mock("@esgcredit/db-credit", () => ({ creditPrisma: { $executeRaw: mocks.cred
 vi.mock("@/lib/jobs/queue", () => ({ enqueueBackgroundJob: mocks.enqueue, throwIfJobCancelled: mocks.cancelled }));
 vi.mock("./config", () => ({ isArticleAiEnabled: mocks.enabled }));
 vi.mock("./weekly", () => ({ runArticleAiWeeklyAssessment: mocks.weekly }));
+vi.mock("./daily", () => ({ runArticleAiDailyAssessment: mocks.daily }));
 
 import { queueDueArticleAiJobs, reconcileArticleAiFeedback, runArticleAiJob } from "./jobs";
 
@@ -27,18 +28,18 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-describe("article AI weekly jobs", () => {
-  it("enqueues one shared v3 job per domain for the due Dubai cohort", async () => {
+describe("article AI daily jobs", () => {
+  it("enqueues one shared v4 job per domain for the due Dubai source day", async () => {
     mocks.esgQuery.mockResolvedValue([{ id: 7 }]);
     expect(await queueDueArticleAiJobs()).toBe(2);
     expect(mocks.esgQuery).toHaveBeenCalledTimes(1);
-    expect(mocks.enqueue).toHaveBeenNthCalledWith(1, expect.objectContaining({ jobType: "article_ai_esg_v3", userId: 7,
-      idempotencyKey: "article-ai:v3:esg:2026-11-23:3", payload: { domain: "esg", targetWeekKey: "2026-11-23", policyVersion: 3 } }));
-    expect(mocks.enqueue).toHaveBeenNthCalledWith(2, expect.objectContaining({ jobType: "article_ai_credit_v3", userId: 7,
-      idempotencyKey: "article-ai:v3:credit:2026-11-23:3", payload: { domain: "credit", targetWeekKey: "2026-11-23", policyVersion: 3 } }));
+    expect(mocks.enqueue).toHaveBeenNthCalledWith(1, expect.objectContaining({ jobType: "article_ai_esg_v4", userId: 7,
+      idempotencyKey: "article-ai:v4:esg:2026-11-20:4", payload: { domain: "esg", sourceDayKey: "2026-11-20", policyVersion: 4 } }));
+    expect(mocks.enqueue).toHaveBeenNthCalledWith(2, expect.objectContaining({ jobType: "article_ai_credit_v4", userId: 7,
+      idempotencyKey: "article-ai:v4:credit:2026-11-20:4", payload: { domain: "credit", sourceDayKey: "2026-11-20", policyVersion: 4 } }));
   });
 
-  it("does not query an owner outside the Saturday-to-Monday window", async () => {
+  it("does not query an owner before the daily Dubai cutoff", async () => {
     vi.setSystemTime(new Date("2026-11-20T20:14:59Z"));
     expect(await queueDueArticleAiJobs()).toBe(0); expect(mocks.esgQuery).not.toHaveBeenCalled();
   });
@@ -64,6 +65,13 @@ describe("article AI weekly jobs", () => {
     const result = await runArticleAiJob(fakeJob("article_ai_credit_v3", { domain: "credit", targetWeekKey: "2026-11-23", policyVersion: 3 }));
     expect(result.result).toMatchObject({ status: "ready", domain: "credit", targetWeekKey: "2026-11-23" });
     expect(mocks.weekly).toHaveBeenCalledWith(expect.anything(), { domain: "credit", targetWeekKey: "2026-11-23", policyVersion: 3 });
+  });
+
+  it("passes the exact daily payload to the shared complete-manifest runner", async () => {
+    mocks.daily.mockResolvedValue({ status: "ready", domain: "credit", sourceDayKey: "2026-11-20", selectionCount: 2, coverage: {}, model: "gpt-6-luna" });
+    const result = await runArticleAiJob(fakeJob("article_ai_credit_v4", { domain: "credit", sourceDayKey: "2026-11-20", policyVersion: 4 }));
+    expect(result.result).toMatchObject({ status: "ready", domain: "credit", sourceDayKey: "2026-11-20" });
+    expect(mocks.daily).toHaveBeenCalledWith(expect.anything(), { domain: "credit", sourceDayKey: "2026-11-20", policyVersion: 4 });
   });
 
   it("keeps the legacy Credit confirmation outbox fence", async () => {

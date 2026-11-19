@@ -56,8 +56,14 @@ function searchPath(
   filters: ArticleSearchFilters,
   basePath = "/esg/articles",
   searchParamsBuilder: (filters: ArticleSearchFilters) => URLSearchParams = articleSearchParams,
+  extraQueryParams?: Record<string, string | undefined>,
 ) {
-  const query = searchParamsBuilder(filters).toString();
+  const params = searchParamsBuilder(filters);
+  Object.entries(extraQueryParams ?? {}).forEach(([key, value]) => {
+    if (value) params.set(key, value);
+    else params.delete(key);
+  });
+  const query = params.toString();
   return `${basePath}${query ? `?${query}` : ""}`;
 }
 
@@ -78,12 +84,13 @@ function itemHref(
   typedQuery: string,
   basePath = "/esg/articles",
   searchParamsBuilder: (filters: ArticleSearchFilters) => URLSearchParams = articleSearchParams,
+  extraQueryParams?: Record<string, string | undefined>,
 ) {
   const backUrl = searchPath({
     ...filters,
     q: typedQuery,
     page: 1,
-  }, basePath, searchParamsBuilder);
+  }, basePath, searchParamsBuilder, extraQueryParams);
   return `${basePath}/${encodeURIComponent(String(item.id))}?back=${encodeURIComponent(backUrl)}`;
 }
 
@@ -282,9 +289,9 @@ export default function EsgArticleSearch({
   const navigateToSearch = useCallback(
     (nextFilters: ArticleSearchFilters) => {
       cancelSuggestions();
-      router.push(searchPath(nextFilters, basePath, searchParamsBuilder));
+      router.push(searchPath(nextFilters, basePath, searchParamsBuilder, extraQueryParams));
     },
-    [basePath, cancelSuggestions, router, searchParamsBuilder],
+    [basePath, cancelSuggestions, extraQueryParams, router, searchParamsBuilder],
   );
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -334,7 +341,7 @@ export default function EsgArticleSearch({
     router.push(
       itemPathBuilder
         ? itemPathBuilder(item, { ...currentFilters, q: query }, query)
-        : itemHref(item, { ...currentFilters, q: query }, query, basePath, searchParamsBuilder),
+        : itemHref(item, { ...currentFilters, q: query }, query, basePath, searchParamsBuilder, extraQueryParams),
     );
   };
 
@@ -522,7 +529,7 @@ export default function EsgArticleSearch({
                                 href={
                                   itemPathBuilder
                                     ? itemPathBuilder(item, { ...currentFilters, q: query }, query)
-                                    : itemHref(item, { ...currentFilters, q: query }, query, basePath, searchParamsBuilder)
+                                    : itemHref(item, { ...currentFilters, q: query }, query, basePath, searchParamsBuilder, extraQueryParams)
                                 }
                                 onPointerDown={(event) => {
                                   if (event.pointerType === "touch") {
@@ -682,6 +689,9 @@ export default function EsgArticleSearch({
             Leave dates blank for all dates. Reset filters returns to the full archive.
           </p>
           <input type="hidden" name="page" value="1" />
+          {Object.entries(extraQueryParams ?? {}).map(([key, value]) =>
+            value ? <input key={key} type="hidden" name={key} value={value} /> : null,
+          )}
         </div>
       </form>
 

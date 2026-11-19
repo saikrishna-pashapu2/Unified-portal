@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createHash, randomUUID } from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
 
 import { esgPrisma } from "@esgcredit/db-esg";
 
@@ -38,6 +39,37 @@ import {
 import { loadWeeklyManifestInputs, weeklyArticleContentHash } from "./weekly-inputs";
 
 const LEASE_DURATION_SECONDS = 300;
+
+/**
+ * The durable DAG is shared by weekly v3 and daily v4. AsyncLocalStorage
+ * keeps the policy/cache scope isolated when ESG and Credit jobs run
+ * concurrently in the same worker process.
+ */
+export interface ArticleAiEngineRuntime {
+  policyVersion: number;
+  promptVersion: string;
+  manifestLoader: (
+    domain: ArticleAiDomain,
+    calendar: ArticleAiWeeklyCalendar,
+    observedAt: Date,
+  ) => Promise<ArticleAiWeeklyManifestResult>;
+}
+
+const runtimeStorage = new AsyncLocalStorage<ArticleAiEngineRuntime>();
+const defaultRuntime = (): ArticleAiEngineRuntime => ({
+  policyVersion: ARTICLE_AI_WEEKLY_POLICY_VERSION,
+  promptVersion: ARTICLE_AI_WEEKLY_PROMPT_VERSION,
+  manifestLoader: loadWeeklyManifestInputs,
+});
+function runtime(): ArticleAiEngineRuntime {
+  return runtimeStorage.getStore() ?? defaultRuntime();
+}
+function policyVersion(): number {
+  return runtime().policyVersion;
+}
+function promptVersion(): string {
+  return runtime().promptVersion;
+}
 
 export interface ArticleAiWeeklyRunResult {
   status: string;
@@ -263,7 +295,7 @@ async function ensureAssessment(
       request_limit, token_limit, source_start_at, source_cutoff_at,
       processing_at, email_at, valid_until, phase, updated_at
     ) VALUES (
-      ${domain}, ${calendar.targetWeekKey}::date, ${ARTICLE_AI_WEEKLY_POLICY_VERSION},
+      ${domain}, ${calendar.targetWeekKey}::date, ${policyVersion()},
       'queued', 'insufficient', ${config.weeklyRequestLimit}, ${config.weeklyTokenLimit},
       ${calendar.sourceStart}, ${calendar.sourceEnd}, ${calendar.processingAt},
       ${calendar.emailAt}, ${calendar.validUntil}, 'manifest', now()
@@ -275,7 +307,7 @@ async function ensureAssessment(
     FROM article_ai_domain_assessments
     WHERE domain = ${domain}
       AND assessment_date = ${calendar.targetWeekKey}::date
-      AND policy_version = ${ARTICLE_AI_WEEKLY_POLICY_VERSION}
+      AND policy_version = ${policyVersion()}
     LIMIT 1
   `;
   const id = rows[0]?.id;
@@ -470,7 +502,7 @@ async function getManifest(
     `;
     if (!rows.length) throw new JobLeaseLostError();
   }
-  const generated = await loadWeeklyManifestInputs(domain, calendar, cutoff);
+  const generated = await runtime().manifestLoader(domain, calendar, cutoff);
   return persistManifest(assessment.id, generated, leaseToken);
 }
 
@@ -488,9 +520,9 @@ function prepareBatches(
     if (!currentFragments.length) return;
     const providerInputs = currentInputs.map(providerInput);
     const inputHash = hashValue({
-      promptVersion: ARTICLE_AI_WEEKLY_PROMPT_VERSION,
+      promptVersion: promptVersion(),
       model: ARTICLE_AI_WEEKLY_MODEL,
-      policyVersion: ARTICLE_AI_WEEKLY_POLICY_VERSION,
+      policyVersion: policyVersion(),
       phase,
       inputs: providerInputs.map((input) => ({ id: input.manifestId, contentHash: input.contentHash })),
       fragments: currentFragments.map((fragment) => ({ id: fragment.fragmentId, hash: fragment.contentHash })),
@@ -606,7 +638,7 @@ async function readCachedBatch(
   const rows = await esgPrisma.$queryRaw<Array<{ output_json: unknown; output_hash: string }>>`
     SELECT output_json, output_hash
     FROM article_ai_weekly_batch_cache
-    WHERE domain = ${domain} AND policy_version = ${ARTICLE_AI_WEEKLY_POLICY_VERSION}
+    WHERE domain = ${domain} AND policy_version = ${policyVersion()}
       AND model = ${ARTICLE_AI_WEEKLY_MODEL} AND phase = ${phase} AND input_hash = ${inputHash}
     LIMIT 1
   `;
@@ -652,7 +684,7 @@ async function reusableMerge(
   batchIndex: number,
   children: MergeChild[],
 ): Promise<{ child: MergeChild | null; inputHash: string; inputBytes: number }> {
-  const inputHash = hashValue({ promptVersion: ARTICLE_AI_WEEKLY_PROMPT_VERSION, mergeKind,
+  const inputHash = hashValue({ promptVersion: promptVersion(), mergeKind,
     children: children.map((child) => ({ id: child.stableBatchId, hash: child.outputHash })) });
   const phase = mergeKind === "history" ? "history_merge" : "candidate_merge" as const;
   const request = buildMergeRequestInput(domain, assessmentId, "preflight", inputHash, mergeKind, children);
@@ -808,7 +840,7 @@ async function completeBatch(
         domain, policy_version, model, phase, input_hash, input_count,
         output_json, output_hash, created_at, updated_at
       ) VALUES (
-        ${domain}, ${ARTICLE_AI_WEEKLY_POLICY_VERSION}, ${ARTICLE_AI_WEEKLY_MODEL}, ${phase},
+        ${domain}, ${policyVersion()}, ${ARTICLE_AI_WEEKLY_MODEL}, ${phase},
         ${inputHash}, ${processedCount}, ${JSON.stringify(output)}::jsonb,
         ${outputHash}, now(), now()
       )
@@ -849,7 +881,7 @@ function parseOutput<T>(output: unknown, label: string): T {
 
 function effectiveWeeklyPlan(plan: PreparedBatch, profile: string | null): PreparedBatch {
   return plan.phase === "candidate_evaluation"
-    ? { ...plan, inputHash: hashValue({ promptVersion: ARTICLE_AI_WEEKLY_PROMPT_VERSION, baseInputHash: plan.inputHash, profileHash: hashValue(profile ?? "") }) }
+    ? { ...plan, inputHash: hashValue({ promptVersion: promptVersion(), baseInputHash: plan.inputHash, profileHash: hashValue(profile ?? "") }) }
     : plan;
 }
 
@@ -1019,7 +1051,7 @@ function buildMergeRequestInput(
 ) {
   return buildWeeklyMergeProviderRequest({
     domain,
-    policyVersion: ARTICLE_AI_WEEKLY_POLICY_VERSION,
+    policyVersion: policyVersion(),
     model: ARTICLE_AI_WEEKLY_MODEL,
     runId,
     batchId,
@@ -1110,9 +1142,9 @@ async function executeLeafBatch(
     await assertAssessmentLease(assessment.id, assessmentToken);
     await throwIfJobCancelled(job.id, job.leaseOwner);
     const request = effectivePlan.phase === "history_profile"
-      ? buildWeeklyHistoryProviderRequest({ domain, policyVersion: ARTICLE_AI_WEEKLY_POLICY_VERSION, model: ARTICLE_AI_WEEKLY_MODEL,
+      ? buildWeeklyHistoryProviderRequest({ domain, policyVersion: policyVersion(), model: ARTICLE_AI_WEEKLY_MODEL,
           runId: assessment.id, batchId: row.id, inputHash: effectivePlan.inputHash, articles: effectivePlan.providerInputs, fragments: effectivePlan.fragments })
-      : buildWeeklyCandidateProviderRequest({ domain, policyVersion: ARTICLE_AI_WEEKLY_POLICY_VERSION, model: ARTICLE_AI_WEEKLY_MODEL,
+      : buildWeeklyCandidateProviderRequest({ domain, policyVersion: policyVersion(), model: ARTICLE_AI_WEEKLY_MODEL,
           runId: assessment.id, batchId: row.id, inputHash: effectivePlan.inputHash, profile: profile ?? "",
           candidates: effectivePlan.providerInputs, fragments: effectivePlan.fragments });
     await assertWeeklyWindow(assessment.id, assessmentToken);
@@ -1121,9 +1153,9 @@ async function executeLeafBatch(
     await assertAssessmentLease(assessment.id, assessmentToken);
     await assertWeeklyWindow(assessment.id, assessmentToken);
     const response = effectivePlan.phase === "history_profile"
-      ? await requestWeeklyHistoryProfile({ domain, policyVersion: ARTICLE_AI_WEEKLY_POLICY_VERSION, model: ARTICLE_AI_WEEKLY_MODEL,
+      ? await requestWeeklyHistoryProfile({ domain, policyVersion: policyVersion(), model: ARTICLE_AI_WEEKLY_MODEL,
           runId: assessment.id, batchId: row.id, inputHash: effectivePlan.inputHash, articles: effectivePlan.providerInputs, fragments: effectivePlan.fragments })
-      : await requestWeeklyCandidateBatch({ domain, policyVersion: ARTICLE_AI_WEEKLY_POLICY_VERSION, model: ARTICLE_AI_WEEKLY_MODEL,
+      : await requestWeeklyCandidateBatch({ domain, policyVersion: policyVersion(), model: ARTICLE_AI_WEEKLY_MODEL,
           runId: assessment.id, batchId: row.id, inputHash: effectivePlan.inputHash, profile: profile ?? "",
           candidates: effectivePlan.providerInputs, fragments: effectivePlan.fragments });
     await throwIfJobCancelled(job.id, job.leaseOwner);
@@ -1170,7 +1202,7 @@ async function executeMergeNode(
   if (children.some((child) => Buffer.byteLength(JSON.stringify(child.output), "utf8") > MAX_MERGE_OUTPUT_BYTES)) {
     throw new WeeklyCoverageError("Weekly merge child output exceeds the bounded merge contract");
   }
-  const inputHash = hashValue({ promptVersion: ARTICLE_AI_WEEKLY_PROMPT_VERSION, mergeKind,
+  const inputHash = hashValue({ promptVersion: promptVersion(), mergeKind,
     children: children.map((child) => ({ id: child.stableBatchId, hash: child.outputHash })) });
   const stableBatchId = `${mergeKind}_merge:${level}:${batchIndex}:${inputHash.slice(0, 16)}`;
   const plan: PreparedBatch = {
@@ -1216,7 +1248,7 @@ async function executeMergeNode(
     await assertAssessmentLease(assessment.id, assessmentToken);
     await assertWeeklyWindow(assessment.id, assessmentToken);
     const response = await requestWeeklyMerge({
-      domain, policyVersion: ARTICLE_AI_WEEKLY_POLICY_VERSION, model: ARTICLE_AI_WEEKLY_MODEL,
+      domain, policyVersion: policyVersion(), model: ARTICLE_AI_WEEKLY_MODEL,
       runId: assessment.id, batchId: row.id, inputHash, mergeKind,
       childOutputs: children.map((child) => ({ batchId: child.stableBatchId, outputHash: child.outputHash, output: child.output })),
     });
@@ -1291,7 +1323,7 @@ async function preflightDag(
       historyChildren.push(reusable);
       continue;
     }
-    const request = buildWeeklyHistoryProviderRequest({ domain, policyVersion: ARTICLE_AI_WEEKLY_POLICY_VERSION,
+    const request = buildWeeklyHistoryProviderRequest({ domain, policyVersion: policyVersion(),
       model: ARTICLE_AI_WEEKLY_MODEL, runId: assessmentIdForPrompt, batchId: "preflight", inputHash: plan.inputHash,
       articles: plan.providerInputs, fragments: plan.fragments });
     if (request.inputBytes > config.weeklyBatchInputBytes) throw new WeeklyCoverageError("Weekly history batch exceeds the configured input bound");
@@ -1306,7 +1338,7 @@ async function preflightDag(
       candidateChildren.push(reusable);
       continue;
     }
-    const request = buildWeeklyCandidateProviderRequest({ domain, policyVersion: ARTICLE_AI_WEEKLY_POLICY_VERSION,
+    const request = buildWeeklyCandidateProviderRequest({ domain, policyVersion: policyVersion(),
       model: ARTICLE_AI_WEEKLY_MODEL, runId: assessmentIdForPrompt, batchId: "preflight", inputHash: plan.inputHash,
       profile: "p".repeat(16_000), candidates: plan.providerInputs, fragments: plan.fragments });
     if (request.inputBytes > config.weeklyBatchInputBytes) throw new WeeklyCoverageError("Weekly candidate batch exceeds the configured input bound");
@@ -1521,30 +1553,32 @@ function coverageFromAssessment(row: AssessmentRow): ArticleAiWeeklyCoverage {
   }) as ArticleAiWeeklyCoverage;
 }
 
-export async function runArticleAiWeeklyAssessment(
+export async function runArticleAiAssessmentWithRuntime(
   job: ClaimedBackgroundJob,
-  payload: ArticleAiWeeklyJobPayload,
+  domain: ArticleAiDomain,
+  calendar: ArticleAiWeeklyCalendar,
+  engine: ArticleAiEngineRuntime,
 ): Promise<ArticleAiWeeklyRunResult> {
-  const calendar = getArticleAiWeeklyCalendar(payload.targetWeekKey);
+  return runtimeStorage.run(engine, async () => {
   const now = new Date();
-  const assessment = await ensureAssessment(payload.domain, calendar);
+  const assessment = await ensureAssessment(domain, calendar);
   if (isTerminal(assessment.status)) {
-    return { status: assessment.status, domain: payload.domain, targetWeekKey: calendar.targetWeekKey,
+    return { status: assessment.status, domain, targetWeekKey: calendar.targetWeekKey,
       selectionCount: 0, coverage: coverageFromAssessment(assessment), model: ARTICLE_AI_WEEKLY_MODEL };
   }
   if (now < calendar.processingAt || now >= calendar.emailAt) {
-    return { status: "expired", domain: payload.domain, targetWeekKey: calendar.targetWeekKey,
+    return { status: "expired", domain, targetWeekKey: calendar.targetWeekKey,
       selectionCount: 0, coverage: coverageFromAssessment(assessment), model: ARTICLE_AI_WEEKLY_MODEL };
   }
   const assessmentToken = await claimAssessment(assessment.id, job);
   try {
     const claimed = await readAssessment(assessment.id);
     if (!claimed) throw new Error("Weekly Article AI assessment disappeared after claim");
-    const manifest = await getManifest(claimed, getArticleAiWeeklyCalendar(payload.targetWeekKey), payload.domain, assessmentToken);
+    const manifest = await getManifest(claimed, calendar, domain, assessmentToken);
     const historyUsable = manifest.history.filter((input) => !input.exclusionReason && fullText(input).length > 0);
     if (manifest.coverage.historyResolved < 1 || historyUsable.length < 1) {
       await markInsufficient(assessment.id, assessmentToken, manifest.coverage);
-      return { status: "insufficient", domain: payload.domain, targetWeekKey: calendar.targetWeekKey,
+      return { status: "insufficient", domain, targetWeekKey: calendar.targetWeekKey,
         selectionCount: 0, coverage: { ...manifest.coverage, status: "complete" }, model: ARTICLE_AI_WEEKLY_MODEL };
     }
     const candidateUsable = manifest.candidates.filter((input) => !input.exclusionReason && fullText(input).length > 0);
@@ -1554,21 +1588,21 @@ export async function runArticleAiWeeklyAssessment(
     const candidatePlans = prepareBatches("candidate_evaluation", candidateUsable, Math.max(8_192, batchBytes - WEEKLY_STRUCTURED_SCHEMA_OVERHEAD_BYTES - 20_000));
     if (!historyPlans.length) {
       await markInsufficient(assessment.id, assessmentToken, manifest.coverage);
-      return { status: "insufficient", domain: payload.domain, targetWeekKey: calendar.targetWeekKey,
+      return { status: "insufficient", domain, targetWeekKey: calendar.targetWeekKey,
         selectionCount: 0, coverage: { ...manifest.coverage, status: "complete" }, model: ARTICLE_AI_WEEKLY_MODEL };
     }
     const existingProfile = claimed.profile_json && typeof claimed.profile_json === "object"
       && typeof (claimed.profile_json as { summary?: unknown }).summary === "string"
       ? (claimed.profile_json as { summary: string }).summary
       : null;
-    await preflightDag(assessment.id, assessmentToken, payload.domain, assessment.id, historyPlans, candidatePlans, existingProfile);
+    await preflightDag(assessment.id, assessmentToken, domain, assessment.id, historyPlans, candidatePlans, existingProfile);
     const historyLeaves: MergeChild[] = [];
     for (const plan of historyPlans) {
-      const executed = await executeLeafBatch(job, claimed, assessmentToken, payload.domain, plan, null);
+      const executed = await executeLeafBatch(job, claimed, assessmentToken, domain, plan, null);
       const output = executed.output as ArticleAiWeeklyHistoryBatchResult;
       historyLeaves.push({ stableBatchId: plan.stableBatchId, outputHash: executed.outputHash, output });
     }
-    const historyTree = await runMergeTree(job, claimed, assessmentToken, payload.domain, "history", historyLeaves);
+    const historyTree = await runMergeTree(job, claimed, assessmentToken, domain, "history", historyLeaves);
     if (!historyTree.root) throw new WeeklyCoverageError("Weekly history DAG produced no root");
     await markManifestKindProcessed(assessment.id, assessmentToken, "history");
     await persistRunningCoverage(assessment.id, assessmentToken, {
@@ -1592,12 +1626,12 @@ export async function runArticleAiWeeklyAssessment(
     const candidateLeaves: Array<{ plan: PreparedBatch; output: ArticleAiWeeklyCandidateBatchResult }> = [];
     const candidateChildren: MergeChild[] = [];
     for (const plan of candidatePlans) {
-      const executed = await executeLeafBatch(job, claimed, assessmentToken, payload.domain, plan, historyProfile);
+      const executed = await executeLeafBatch(job, claimed, assessmentToken, domain, plan, historyProfile);
       const output = executed.output as ArticleAiWeeklyCandidateBatchResult;
       candidateLeaves.push({ plan, output });
       candidateChildren.push({ stableBatchId: plan.stableBatchId, outputHash: executed.outputHash, output });
     }
-    const candidateTree = await runMergeTree(job, claimed, assessmentToken, payload.domain, "candidate", candidateChildren);
+    const candidateTree = await runMergeTree(job, claimed, assessmentToken, domain, "candidate", candidateChildren);
     await markManifestKindProcessed(assessment.id, assessmentToken, "candidate");
     const coverage: ArticleAiWeeklyCoverage = {
       ...manifest.coverage,
@@ -1608,21 +1642,34 @@ export async function runArticleAiWeeklyAssessment(
       mergeNodesCompleted: historyTree.nodeCount + candidateTree.nodeCount,
       status: "complete",
     };
-    return publishReady(assessment, assessmentToken, calendar, payload.domain, manifest, historyProfile,
+    return publishReady(assessment, assessmentToken, calendar, domain, manifest, historyProfile,
       candidateUsable, candidateTree.root, candidateLeaves, coverage);
   } catch (error) {
     if (error instanceof JobLeaseLostError) throw error;
     if (error instanceof WeeklyWindowExpiredError) {
-      return { status: "expired", domain: payload.domain, targetWeekKey: calendar.targetWeekKey,
+      return { status: "expired", domain, targetWeekKey: calendar.targetWeekKey,
         selectionCount: 0, coverage: coverageFromAssessment(assessment), model: ARTICLE_AI_WEEKLY_MODEL };
     }
     if (error instanceof WeeklyBudgetExhaustedError) {
       const current = await readAssessment(assessment.id);
-      return { status: "budget_exhausted", domain: payload.domain, targetWeekKey: calendar.targetWeekKey,
+      return { status: "budget_exhausted", domain, targetWeekKey: calendar.targetWeekKey,
         selectionCount: 0, coverage: current ? coverageFromAssessment(current) : { ...coverageFromAssessment(assessment), status: "incomplete" },
         model: ARTICLE_AI_WEEKLY_MODEL };
     }
     await markAssessmentError(assessment.id, assessmentToken, error);
     throw error;
   }
+  });
+}
+
+export async function runArticleAiWeeklyAssessment(
+  job: ClaimedBackgroundJob,
+  payload: ArticleAiWeeklyJobPayload,
+): Promise<ArticleAiWeeklyRunResult> {
+  const calendar = getArticleAiWeeklyCalendar(payload.targetWeekKey);
+  return runArticleAiAssessmentWithRuntime(job, payload.domain, calendar, {
+    policyVersion: ARTICLE_AI_WEEKLY_POLICY_VERSION,
+    promptVersion: ARTICLE_AI_WEEKLY_PROMPT_VERSION,
+    manifestLoader: loadWeeklyManifestInputs,
+  });
 }

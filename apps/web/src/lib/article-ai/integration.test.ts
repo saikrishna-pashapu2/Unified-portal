@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { getArticleAiWeeklyCalendar, getNextArticleAiWeeklySchedule } from "./weekly-calendar";
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -17,12 +18,14 @@ const creditArticleIds: number[] = [];
 const assessmentIds = { esg: randomUUID(), credit: randomUUID() };
 const rolloverAssessmentIds: string[] = [];
 const sharedIds = { esg: "", credit: "" };
-const targetWeekKey = "2026-11-16";
-const now = new Date("2026-11-16T06:00:00Z");
-const completedAt = new Date("2026-11-15T20:00:00Z");
-const since = new Date("2026-11-09T00:00:00Z");
-const until = new Date("2026-11-14T00:00:00Z");
-const selectionExpiresAt = new Date("2026-11-23T00:00:00Z");
+// Feedback locks use PostgreSQL's current clock, so both simulated cohorts need live validity.
+const { targetWeekKey } = getNextArticleAiWeeklySchedule();
+const calendar = getArticleAiWeeklyCalendar(targetWeekKey);
+const nextKey = new Date(calendar.emailAt.getTime() + 7 * 86400000).toISOString().slice(0, 10);
+const rollover = getArticleAiWeeklyCalendar(nextKey);
+const now = new Date(calendar.emailAt.getTime() + 3600000);
+const completedAt = new Date(targetWeekKey + "T00:00:00+04:00");
+const { sourceStart: since, sourceEnd: until, validUntil: selectionExpiresAt } = calendar;
 const digestWindow = { since, until, targetWeekKey };
 
 integration("shared domain article AI service", () => {
@@ -69,7 +72,7 @@ integration("shared domain article AI service", () => {
     `;
     esgArticleIds.push(esgArticle.id);
     creditArticleIds.push(creditArticle.id);
-    const publishedAt = "2026-11-15T20:00:00.000Z";
+    const publishedAt = completedAt.toISOString();
     const esgHash = weeklyArticleContentHash({ domain: "esg", articleId: esgArticle.id, title: `Shared ESG example ${suffix}`, summary: "Transition risk evidence.", content: null, source: "QA", url: `https://example.test/${suffix}/esg`, publishedAt });
     const creditHash = weeklyArticleContentHash({ domain: "credit", articleId: creditArticle.id, title: `Shared Credit example ${suffix}`, summary: "Credit evidence.", content: "Rating methodology evidence.", source: "QA", url: `https://example.test/${suffix}/credit`, publishedAt });
     await esg.$executeRaw`INSERT INTO likes (user_id, content_type, content_id, created_at) VALUES (${curator.id}, 'article', ${esgArticle.id}, ${now})`;
@@ -82,8 +85,8 @@ integration("shared domain article AI service", () => {
           (id, domain, assessment_date, policy_version, status, profile_source, history_count, completed_at,
            source_start_at, source_cutoff_at, processing_at, email_at, valid_until, phase, coverage_json)
         VALUES (${assessmentId}::uuid, ${domain}, ${targetWeekKey}::date, 3, 'ready', 'domain', 1, ${completedAt},
-          ${since}, ${until}, '2026-11-13T20:15:00Z'::timestamptz, '2026-11-16T05:00:00Z'::timestamptz,
-          '2026-11-23T00:00:00Z'::timestamptz, 'finalize', '{"status":"complete"}'::jsonb)
+          ${since}, ${until}, ${calendar.processingAt}, ${calendar.emailAt},
+          ${calendar.validUntil}, 'finalize', '{"status":"complete"}'::jsonb)
       `;
     }
     const [esgSelection] = await esg.$queryRaw<Array<{ id: string }>>`
@@ -176,10 +179,10 @@ integration("shared domain article AI service", () => {
       INSERT INTO article_ai_domain_assessments
         (id, domain, assessment_date, policy_version, status, profile_source, history_count, completed_at,
          source_start_at, source_cutoff_at, processing_at, email_at, valid_until, phase, coverage_json)
-      VALUES (${rolloverAssessmentId}::uuid, 'credit', '2026-11-23'::date,
+      VALUES (${rolloverAssessmentId}::uuid, 'credit', ${nextKey}::date,
         3, 'ready', 'domain', 1, ${now}, ${since}, ${until},
-        '2026-11-21T20:15:00Z'::timestamptz, '2026-11-23T05:00:00Z'::timestamptz,
-        '2026-11-30T00:00:00Z'::timestamptz, 'finalize', '{"status":"complete"}'::jsonb)
+        ${rollover.processingAt}, ${rollover.emailAt},
+        ${rollover.validUntil}, 'finalize', '{"status":"complete"}'::jsonb)
     `;
     const [{ content_hash: creditHash }] = await esg.$queryRaw<Array<{ content_hash: string }>>`
       SELECT content_hash FROM article_ai_domain_selections WHERE id = ${sharedIds.credit}::uuid
@@ -187,14 +190,14 @@ integration("shared domain article AI service", () => {
     const [rolloverSelection] = await esg.$queryRaw<Array<{ id: string }>>`
       INSERT INTO article_ai_domain_selections
         (assessment_id, domain, article_id, reason, selected_at, expires_at, content_hash, relevance_score)
-      VALUES (${rolloverAssessmentId}::uuid, 'credit', ${creditArticleIds[0]}, 'Rollover Credit evidence.', ${now}, ${new Date(now.getTime() + 2 * 86_400_000)}, ${creditHash}, 0.95)
+      VALUES (${rolloverAssessmentId}::uuid, 'credit', ${creditArticleIds[0]}, 'Rollover Credit evidence.', ${now}, ${rollover.validUntil}, ${creditHash}, 0.95)
       RETURNING id::text
     `;
     const delayedWeekendPicks = await service.getArticleAiDigestPicks(
       recipient,
       ["credit"],
       digestWindow,
-      new Date("2026-11-22T18:00:00Z"),
+      new Date(calendar.validUntil.getTime() - 2 * 3600000),
     );
     expect(delayedWeekendPicks).toHaveLength(1);
     expect(delayedWeekendPicks[0]).toMatchObject({
@@ -208,7 +211,7 @@ integration("shared domain article AI service", () => {
     expect(picksBeforeLateCompletion).toHaveLength(1);
     await esg.$executeRaw`
       UPDATE article_ai_domain_assessments
-      SET completed_at = '2026-11-16T06:00:00Z'::timestamptz
+      SET completed_at = ${now}
       WHERE id = ${assessmentIds.credit}::uuid
     `;
     try {

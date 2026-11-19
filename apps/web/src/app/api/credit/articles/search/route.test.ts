@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ auth: vi.fn(), search: vi.fn() }));
+const mocks = vi.hoisted(() => ({ auth: vi.fn(), search: vi.fn(), dailyPickIds: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/api-auth", () => ({ requireUserSession: mocks.auth }));
+vi.mock("@/lib/article-ai/daily-feed", () => ({ getDailyArticlePickIds: mocks.dailyPickIds }));
 vi.mock("@/lib/credit-article-search/repository", () => ({ searchCreditArticles: mocks.search }));
 
 import { resetCreditArticleSearchRateForTests } from "@/lib/credit-article-search/rate-limit";
@@ -17,6 +18,7 @@ beforeEach(() => {
   resetCreditArticleSearchRateForTests();
   mocks.auth.mockResolvedValue({ userId: 7, session: { user: { id: "7" } } });
   mocks.search.mockResolvedValue(result);
+  mocks.dailyPickIds.mockResolvedValue([101, 202]);
 });
 
 describe("GET /api/credit/articles/search", () => {
@@ -45,6 +47,16 @@ describe("GET /api/credit/articles/search", () => {
     expect(response.status).toBe(503);
     expect(response.headers.get("cache-control")).toContain("no-store");
     expect(await response.text()).not.toContain("sensitive");
+  });
+
+  it("scopes suggestions to shared daily picks before applying the limit", async () => {
+    const response = await GET(request("?q=BBB-&suggest=1&ai=true"));
+    expect(response.status).toBe(200);
+    expect(mocks.dailyPickIds).toHaveBeenCalledWith("credit");
+    expect(mocks.search).toHaveBeenCalledWith(
+      expect.objectContaining({ q: "BBB-", sort: "relevance", page: 1 }),
+      { suggest: true, articleIds: [101, 202] },
+    );
   });
 
   it("shares the per-user request budget between suggestions and full results", async () => {

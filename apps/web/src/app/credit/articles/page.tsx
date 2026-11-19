@@ -27,6 +27,8 @@ import CreditArticleRowCard from "@/components/articles/CreditArticleRowCard";
 import CreditArticleSearch from "@/components/articles/CreditArticleSearch";
 import ArticleAiProvider from "@/components/articles/ArticleAiProvider";
 import ArticleAiControls from "@/components/articles/ArticleAiControls";
+import ArticleAiOnlyFilter from "@/components/articles/ArticleAiOnlyFilter";
+import { getDailyArticlePickIds } from "@/lib/article-ai/daily-feed";
 import { getLikeCounts, getUserLikedSet } from "@/lib/likes";
 import { requireUserSession } from "@/lib/api-auth";
 
@@ -42,6 +44,7 @@ type SearchParams = {
   date?: string;
   dateFrom?: string;
   dateTo?: string;
+  ai?: string;
 };
 
 type RegionItem = {
@@ -124,6 +127,7 @@ export default async function CreditArticlesPage({
   }
   const resolvedSearchParams = await searchParams;
   const userId = auth.userId;
+  const aiOnly = resolvedSearchParams.ai === "1" || resolvedSearchParams.ai === "true";
   const parsedSearch = parseCreditArticleSearchParams(resolvedSearchParams);
   const searchFilters: CreditArticleSearchFilters = parsedSearch.ok ? parsedSearch.filters : {
     q: "", region: "", sector: "", source: "", from: "", to: "", sort: "newest", page: 1,
@@ -134,7 +138,13 @@ export default async function CreditArticlesPage({
   const { page, from: selectedDateFrom, to: selectedDateTo } = searchFilters;
   const [sourceData, archive] = await Promise.allSettled([
     parsedSearch.ok ? fetchCreditSources({ region: selectedRegion, sector: selectedSector }) : Promise.resolve([]),
-    parsedSearch.ok ? searchCreditArticles(searchFilters) : Promise.resolve(null),
+    parsedSearch.ok
+      ? aiOnly
+        ? getDailyArticlePickIds("credit").then((dailyPickIds) =>
+            searchCreditArticles(searchFilters, { articleIds: dailyPickIds }),
+          )
+        : searchCreditArticles(searchFilters)
+      : Promise.resolve(null),
   ]);
   const sourcesUnavailable = sourceData.status === "rejected";
   const sources = sourceData.status === "fulfilled" ? sourceData.value : [];
@@ -189,6 +199,7 @@ export default async function CreditArticlesPage({
     from: canonicalSearchParams.get("from") ?? undefined,
     to: canonicalSearchParams.get("to") ?? undefined,
     sort: canonicalSearchParams.get("sort") ?? undefined,
+    ai: aiOnly ? "1" : undefined,
   };
   
   // Create display label for the date(s)
@@ -327,7 +338,10 @@ export default async function CreditArticlesPage({
         </aside>
 
         <main className="col-span-12 md:col-span-9">
-          <CreditArticleSearch filters={searchFilters} sources={sourceOptions} />
+          <CreditArticleSearch filters={searchFilters} sources={sourceOptions} aiOnly={aiOnly} />
+          <div className="mt-4">
+            <ArticleAiOnlyFilter domain="credit" />
+          </div>
           <div className="h-5" aria-hidden="true" />
           <CreditArticlesHeader
             regionLabel={regionMeta.label}

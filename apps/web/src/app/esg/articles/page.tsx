@@ -13,6 +13,7 @@ import {
   Users,
 } from "lucide-react";
 import ArticleAiControls from "@/components/articles/ArticleAiControls";
+import ArticleAiOnlyFilter from "@/components/articles/ArticleAiOnlyFilter";
 import ArticleAiProvider from "@/components/articles/ArticleAiProvider";
 import ArticleAiSelection from "@/components/articles/ArticleAiSelection";
 import ArticleSearchHighlight from "@/components/articles/ArticleSearchHighlight";
@@ -23,6 +24,7 @@ import { fetchSources } from "@/lib/articles";
 import { requireUserSession } from "@/lib/api-auth";
 import { getLikeCounts, getUserLikedSet } from "@/lib/likes";
 import { parseKeywords } from "@/lib/keywords";
+import { getDailyArticlePickIds } from "@/lib/article-ai/daily-feed";
 import { articleSearchParams, parseArticleSearchParams } from "@/lib/esg-article-search/query";
 import { searchEsgArticles } from "@/lib/esg-article-search/repository";
 import type {
@@ -44,6 +46,12 @@ const EMPTY_FILTERS: ArticleSearchFilters = {
 };
 
 type ArticlePageSearchParams = Record<string, string | string[] | undefined>;
+
+function hasAiOnlyFilter(searchParams: ArticlePageSearchParams) {
+  const value = searchParams.ai;
+  const normalized = Array.isArray(value) ? value[0] : value;
+  return normalized === "1" || normalized === "true";
+}
 
 function emptySearchResponse(filters: ArticleSearchFilters): ArticleSearchResponse {
   return {
@@ -78,13 +86,15 @@ function formatDate(value: string | null) {
   }).format(date);
 }
 
-function articleBackPath(filters: ArticleSearchFilters) {
-  const query = articleSearchParams(filters).toString();
+function articleBackPath(filters: ArticleSearchFilters, aiOnly = false) {
+  const params = articleSearchParams(filters);
+  if (aiOnly) params.set("ai", "1");
+  const query = params.toString();
   return `/esg/articles${query ? `?${query}` : ""}`;
 }
 
-function articleHref(item: EsgArticleSearchItem, filters: ArticleSearchFilters) {
-  return `/esg/articles/${encodeURIComponent(String(item.id))}?back=${encodeURIComponent(articleBackPath(filters))}`;
+function articleHref(item: EsgArticleSearchItem, filters: ArticleSearchFilters, aiOnly = false) {
+  return `/esg/articles/${encodeURIComponent(String(item.id))}?back=${encodeURIComponent(articleBackPath(filters, aiOnly))}`;
 }
 
 function SearchError({ title, children }: { title: string; children: string }) {
@@ -107,11 +117,13 @@ function dateRangeLabel(filters: ArticleSearchFilters) {
 function ArticleCard({
   item,
   filters,
+  aiOnly,
   liked,
   likeCount,
 }: {
   item: EsgArticleSearchItem;
   filters: ArticleSearchFilters;
+  aiOnly: boolean;
   liked: boolean;
   likeCount: number;
 }) {
@@ -129,7 +141,7 @@ function ArticleCard({
         <div className="min-w-0 flex-1">
           <h2 className="break-words text-lg font-semibold leading-7 text-slate-950 sm:text-xl">
             <Link
-              href={articleHref(item, filters)}
+              href={articleHref(item, filters, aiOnly)}
               className="rounded-sm outline-none transition-colors hover:text-emerald-800 focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"
             >
               <ArticleSearchHighlight text={item.title ?? "Untitled article"} query={filters.q} />
@@ -232,6 +244,7 @@ export default async function EsgArticlesPage({
   const resolvedSearchParams = await searchParams;
   const parsed = parseArticleSearchParams(resolvedSearchParams);
   const filters = parsed.ok ? parsed.filters : EMPTY_FILTERS;
+  const aiOnly = hasAiOnlyFilter(resolvedSearchParams);
   let sources: string[] = [];
   let sourcesUnavailable = false;
   try {
@@ -244,7 +257,12 @@ export default async function EsgArticlesPage({
   let searchUnavailable: string | null = null;
   if (parsed.ok) {
     try {
-      searchResult = await searchEsgArticles(filters);
+      if (aiOnly) {
+        const dailyPickIds = await getDailyArticlePickIds("esg");
+        searchResult = await searchEsgArticles(filters, { articleIds: dailyPickIds });
+      } else {
+        searchResult = await searchEsgArticles(filters);
+      }
     } catch {
       searchUnavailable = "The article archive is temporarily unavailable. Please try again in a moment.";
     }
@@ -301,7 +319,12 @@ export default async function EsgArticlesPage({
 
           <section aria-labelledby="article-search-heading" className="mb-8">
             <h2 id="article-search-heading" className="sr-only">Search ESG articles</h2>
-            <EsgArticleSearch filters={filters} sources={sources} />
+            <EsgArticleSearch
+              filters={filters}
+              sources={sources}
+              extraQueryParams={{ ai: aiOnly ? "1" : undefined }}
+            />
+            <ArticleAiOnlyFilter domain="esg" />
             <ArticleAiControls domain="esg" className="mt-4" />
           </section>
 
@@ -366,6 +389,7 @@ export default async function EsgArticlesPage({
                     key={item.id}
                     item={item}
                     filters={filters}
+                    aiOnly={aiOnly}
                     liked={likedSet.has(Number(item.id))}
                     likeCount={countMap[Number(item.id)] ?? 0}
                   />

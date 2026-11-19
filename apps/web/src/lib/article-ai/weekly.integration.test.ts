@@ -13,6 +13,7 @@ import type {
   ArticleAiWeeklyMergeResult,
 } from "./types";
 import type { ArticleAiWeeklyCalendar } from "./weekly-calendar";
+import { getDueArticleAiDailySourceDay } from "./daily-calendar";
 import type { ClaimedBackgroundJob } from "@/lib/jobs/queue";
 
 vi.mock("server-only", () => ({}));
@@ -25,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   volume: false,
   getCalendar: vi.fn(),
   loadManifest: vi.fn(),
+  dailyManifest: vi.fn(),
   historyProvider: vi.fn(),
   candidateProvider: vi.fn(),
   mergeProvider: vi.fn(),
@@ -39,6 +41,11 @@ vi.mock("./weekly-calendar", async () => {
 vi.mock("./weekly-inputs", async () => {
   const actual = await vi.importActual<typeof import("./weekly-inputs")>("./weekly-inputs");
   return { ...actual, loadWeeklyManifestInputs: mocks.loadManifest };
+});
+
+vi.mock("./daily-inputs", async () => {
+  const actual = await vi.importActual<typeof import("./daily-inputs")>("./daily-inputs");
+  return { ...actual, loadDailyManifestInputs: mocks.dailyManifest };
 });
 
 vi.mock("./weekly-provider", async () => {
@@ -70,6 +77,7 @@ const targets = {
 let esg: (typeof import("@esgcredit/db-esg"))["esgPrisma"];
 let credit: (typeof import("@esgcredit/db-credit"))["creditPrisma"];
 let runWeekly: typeof import("./weekly")["runArticleAiWeeklyAssessment"];
+let runDaily: typeof import("./daily")["runArticleAiDailyAssessment"];
 let userId: number;
 
 function controlledCalendar(targetWeekKey: string): ArticleAiWeeklyCalendar {
@@ -243,6 +251,20 @@ function makeJob(domain: "esg" | "credit", targetWeekKey: string): ClaimedBackgr
   };
 }
 
+function makeDailyJob(domain: "esg" | "credit", sourceDayKey: string): ClaimedBackgroundJob {
+  const id = randomUUID();
+  return {
+    id,
+    jobType: domain === "esg" ? "article_ai_esg_v4" : "article_ai_credit_v4",
+    userId,
+    payload: { domain, sourceDayKey, policyVersion: 4 },
+    inputData: null, outputData: null, result: null, status: "processing", progress: 0, progressData: null,
+    attempts: 1, maxAttempts: 4, availableAt: new Date(), leaseOwner: `daily-integration-${marker}`,
+    leaseExpiresAt: new Date(Date.now() + 300_000), cancelRequested: false, lastError: null,
+    createdAt: new Date(), updatedAt: new Date(), completedAt: null,
+  };
+}
+
 async function run(domain: "esg" | "credit", targetWeekKey: string) {
   mocks.manifestVariant = "shared";
   return runWeekly(makeJob(domain, targetWeekKey), {
@@ -250,6 +272,10 @@ async function run(domain: "esg" | "credit", targetWeekKey: string) {
     targetWeekKey,
     policyVersion: 3,
   });
+}
+
+async function runDailyAssessment(domain: "esg" | "credit", sourceDayKey: string) {
+  return runDaily(makeDailyJob(domain, sourceDayKey), { domain, sourceDayKey, policyVersion: 4 });
 }
 
 async function assessmentFor(domain: "esg" | "credit", targetWeekKey: string) {
@@ -299,11 +325,13 @@ integration("weekly Article AI generation lifecycle", () => {
     await credit.$queryRaw`SELECT 1`;
     await clearOwnedCohorts();
     ({ runArticleAiWeeklyAssessment: runWeekly } = await import("./weekly"));
+    ({ runArticleAiDailyAssessment: runDaily } = await import("./daily"));
 
     vi.stubEnv("ARTICLE_AI_ENABLED", "true");
     vi.stubEnv("ARTICLE_AI_EMAIL_ENABLED", "true");
     mocks.getCalendar.mockImplementation((targetWeekKey: string) => controlledCalendar(targetWeekKey));
     mocks.loadManifest.mockImplementation(async (domain: "esg" | "credit") => fixtureManifest(domain));
+    mocks.dailyManifest.mockImplementation(async (domain: "esg" | "credit") => fixtureManifest(domain));
     mocks.historyProvider.mockImplementation(async (request: ArticleAiWeeklyHistoryBatchRequest) => {
       if (mocks.mode === "stale-assessment") {
         await esg.$executeRaw`
@@ -406,6 +434,46 @@ integration("weekly Article AI generation lifecycle", () => {
     expect(mocks.historyProvider).toHaveBeenCalledTimes(callsBeforeTerminalRetry.history);
     expect(mocks.candidateProvider).toHaveBeenCalledTimes(callsBeforeTerminalRetry.candidate);
     expect(mocks.mergeProvider).toHaveBeenCalledTimes(callsBeforeTerminalRetry.merge);
+  });
+
+  it("runs policy-4 daily ESG and Credit through the complete DAG and replays idempotently", async () => {
+    const now = new Date();
+    const sourceDay = getDueArticleAiDailySourceDay(now)
+      ?? getDueArticleAiDailySourceDay(new Date(now.getTime() - 60 * 60 * 1_000));
+    if (!sourceDay) return;
+    try {
+      resetProviderMocks();
+      const esgResult = await runDailyAssessment("esg", sourceDay);
+      const creditResult = await runDailyAssessment("credit", sourceDay);
+      expect(esgResult).toMatchObject({ status: "ready", domain: "esg", sourceDayKey: sourceDay, selectionCount: 1, model: "gpt-6-luna" });
+      expect(creditResult).toMatchObject({ status: "ready", domain: "credit", sourceDayKey: sourceDay, selectionCount: 1, model: "gpt-6-luna" });
+      expect(esgResult.coverage).toMatchObject({ historyResolved: 1, historyProcessed: 1, candidateProcessed: 1, status: "complete" });
+      expect(creditResult.coverage).toMatchObject({ historyResolved: 1, historyProcessed: 1, candidateProcessed: 1, status: "complete" });
+      const callsBeforeReplay = {
+        history: mocks.historyProvider.mock.calls.length,
+        candidate: mocks.candidateProvider.mock.calls.length,
+        merge: mocks.mergeProvider.mock.calls.length,
+      };
+      expect((await runDailyAssessment("esg", sourceDay)).status).toBe("ready");
+      expect((await runDailyAssessment("credit", sourceDay)).status).toBe("ready");
+      expect(mocks.historyProvider).toHaveBeenCalledTimes(callsBeforeReplay.history);
+      expect(mocks.candidateProvider).toHaveBeenCalledTimes(callsBeforeReplay.candidate);
+      expect(mocks.mergeProvider).toHaveBeenCalledTimes(callsBeforeReplay.merge);
+      const [rows] = await esg.$queryRaw<Array<{ count: number; ready: number }>>`
+        SELECT count(*)::int AS count, count(*) FILTER (WHERE status = 'ready')::int AS ready
+        FROM article_ai_domain_assessments
+        WHERE policy_version = 4 AND assessment_date = ${sourceDay}::date
+      `;
+      expect(rows).toEqual({ count: 2, ready: 2 });
+    } finally {
+      await esg.$executeRaw`
+        DELETE FROM article_ai_weekly_batch_cache WHERE policy_version = 4
+      `;
+      await esg.$executeRaw`
+        DELETE FROM article_ai_domain_assessments WHERE policy_version = 4
+          AND assessment_date = ${sourceDay}::date
+      `;
+    }
   });
 
   it("reuses completed batch cache work on a new cohort without provider calls", async () => {

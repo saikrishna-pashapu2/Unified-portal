@@ -1,4 +1,4 @@
-# Weekly LLM article assessment and opt-in email
+# Daily AI article picks and weekly opt-in email
 
 ESG and Credit each have a shared AI assessment learned from articles human users
 have liked in that domain. Personal like counts, account-team assignments, and
@@ -6,8 +6,9 @@ the recipient's own interests do not determine the assessment. A user with no
 likes can view the same shared picks as everyone else in that domain.
 
 The independent, per-user ESG and Credit switches only control AI inclusion in
-that user's own weekly email and default to off. AI selections do not increment
-ordinary likes or enter Community rankings/reports. An explicit **Keep & like**
+that user's own weekly email and default to off. The articles filter and Community pages show the last 30 source days of published
+AI picks. Admin displays run status, counts and selected articles for each domain.
+Human likes and their Community rankings are recorded separately. An explicit **Keep & like**
 action creates an ordinary human like that can inform later shared assessments.
 Dismissals remain private to the user and are not negative training examples.
 
@@ -53,8 +54,10 @@ can overlap between databases. Repeated IDs and canonical article URLs are
 deduplicated, with human selections taking priority. Titles, sources, and AI
 explanations are HTML-escaped; only HTTP(S) article links are rendered.
 
-AI items must belong to the email's exact target Monday. Newer or older ready
-assessments cannot substitute for that cohort. If AI results are unavailable at
+For each domain the Monday digest draws from completed daily assessments for the
+preceding Monday through Sunday. A run must have finished by 09:00 Dubai on the
+target Monday. During transition, an existing eligible weekly assessment for that
+Monday may supply picks when there are no complete daily assessments for the week. If AI results are unavailable at
 assembly, the weekly human digest can still be assembled. There is no second
 supplemental email when AI later becomes ready.
 An empty selection never queues an email or records a successful delivery.
@@ -83,32 +86,20 @@ human-liked article is necessary to have any evidence. AI choices never become
 positive examples on their own; absence of a like and private dismissals are not
 negative examples. The model can still abstain when new candidates are weak.
 
-The worker schedules separate `article_ai_esg_v3` and `article_ai_credit_v3`
-jobs. A queue's user identifier is only an accounting foreign key to an existing
-account; it never supplies learning preferences. Legacy v1/v2 jobs are drained
-without provider requests. Pending legacy Credit confirmations still finish
-through their original outbox.
+The worker schedules a shared assessment per domain and Dubai source date.
+At 00:15 each day it can review articles from the preceding calendar day, including
+weekends. For example, the Friday run covers Thursday 00:00 inclusive through
+Friday 00:00 exclusive in Dubai. Policy 4 uses the source date as the assessment
+identity. Existing policy 3 assessments retain their original Monday identity.
+Already queued weekly jobs can finish during rollout.
 
-Every run has a fixed target email Monday. For example, articles from Monday
-16 November through Friday 20 November 2026 are processed Saturday 21 November
-at 00:15 Dubai time for the Monday 23 November 09:00 email. The source interval
-is inclusive Monday 00:00 and exclusive Saturday 00:00. Weekend recovery ends
-at the Monday email deadline. Deployment after that deadline starts with the next
-cohort, without backfilling an old week. Selections remain valid through the
-target email week to support delayed delivery and expire the following Monday
-00:00. Dubai is UTC+04:00; processing is Friday 20:15 UTC and sending is Monday
-05:00 UTC.
-
-Each domain/target Monday/policy has one durable assessment shared by all
-recipients. The existing assessment is the parent of immutable input manifests,
-checkpointed batches, shared selections, and sparse private feedback. The
-assessment owns the lease and weekly budget. Private switches never create
-additional model work. Credit work remains unclaimed when Credit is unavailable
-and ESG continues.
+Each assessment owns its input manifest, lease, request budget and results.
+The queue user is an accounting reference only. An opt-in change never starts a
+model run. Credit work waits when the Credit database is unavailable.
 
 `gpt-6-luna` reads complete historical inputs in bounded batches and combines
 their assessments hierarchically. It then evaluates every eligible unliked
-weekday candidate against that domain assessment. There is no keyword scoring
+daily candidate against that domain assessment. There is no keyword scoring
 or candidate shortlist. Oversized text is segmented with complete coverage.
 Unchanged history batches can reuse a cache tied to domain, model, policy,
 prompt, and full input hash. A removed human like is excluded from subsequent
@@ -130,15 +121,17 @@ planning reserves space for these fields. Candidate ranking also requires one
 decision per direct-child survivor and a literal output hash for each direct
 child. Selection and elimination arrays are derived from those single decisions,
 so an article cannot appear in both. Ranking reasons are limited to 80 characters.
-This response-format contract uses prompt version `weekly-v4-keyed-coverage-2`,
+This response-format contract uses prompt version `weekly-v4-keyed-coverage-2` with the `:daily-v1` cache scope for daily assessments,
 invalidating older production caches.
 
-Publication time determines weekday eligibility, while first observation or
+Publication time determines source-day eligibility, while first observation or
 known ingestion time determines whether a late import must carry into the next
 cohort. ESG uses publication time with save time as fallback. Credit uses its
 calendar date in Dubai with immutable creation time as fallback. A mutable
-updated timestamp is never a publication fallback. Carryover keeps its original
-source period and cannot introduce a pre-rollout historical backlog. Failed
+updated timestamp is never a publication fallback. The daily snapshot records
+both the original publication time and the first known ingestion time. Daily runs
+can recover unreviewed candidates from the preceding seven days after rollout.
+The first run starts with its own source day. Failed
 partial runs do not mark candidates as completely reviewed.
 If ingestion time is unknown, the manifest records that explicitly and includes
 the article when its publication date is eligible and it is available in the
@@ -196,8 +189,8 @@ ARTICLE_AI_WEEKLY_BATCH_OUTPUT_TOKENS=8192
 ARTICLE_AI_WEEKLY_MERGE_INPUT_BYTES=60000
 ```
 
-The weekly policy fixes the model to `gpt-6-luna`; it does not fall back to an
-ESG driver or another model. The schedule is fixed in `weekly-calendar.ts`.
+The assessment policy fixes the model to `gpt-6-luna`; it does not fall back to an
+ESG driver or another model. The worker evaluates the schedule in Dubai time.
 Use the existing `OPENAI_API_KEY` and optional `OPENAI_ORG_ID`. Model requests run
 only in the background worker, never on a settings read or page render.
 

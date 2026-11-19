@@ -268,8 +268,12 @@ function countValue(row: CountRow | undefined): number {
   return Math.min(Math.trunc(value), Number.MAX_SAFE_INTEGER);
 }
 
-function articleSearchKey(filters: ArticleSearchFilters, capabilities: SearchCapabilities): string {
-  return JSON.stringify([filters, capabilities.typoTolerance, capabilities.hasFullTextIndex]);
+function articleSearchKey(
+  filters: ArticleSearchFilters,
+  capabilities: SearchCapabilities,
+  articleIds?: readonly number[],
+): string {
+  return JSON.stringify([filters, capabilities.typoTolerance, capabilities.hasFullTextIndex, articleIds ?? null]);
 }
 
 function cloneResponse(response: ArticleSearchResponse): ArticleSearchResponse {
@@ -299,10 +303,13 @@ async function executeLiteralSearch(
   filters: ArticleSearchFilters,
   capabilities: SearchCapabilities,
   suggest: boolean,
+  articleIds?: readonly number[],
 ): Promise<ArticleSearchResponse> {
   const pageSize = suggest ? ARTICLE_SEARCH_SUGGEST_PAGE_SIZE : ARTICLE_SEARCH_PAGE_SIZE;
   const limit = pageSize + (suggest ? 1 : 0);
   const offset = suggest ? 0 : (filters.page - 1) * ARTICLE_SEARCH_PAGE_SIZE;
+  const articleIdFilterEnabled = articleIds !== undefined;
+  const articleIdList = articleIds ?? [];
   const requiredPatterns = buildLiteralRequiredPatterns(filters.q);
   const scorePattern = `(${requiredPatterns.join("|")})`;
   const phrasePattern = buildLiteralPhrasePattern(filters.q);
@@ -337,6 +344,7 @@ async function executeLiteralSearch(
           )) AS search_text
         ) AS searchable
         WHERE (${filters.source} = '' OR a.source = ${filters.source})
+          AND (${articleIdFilterEnabled} = FALSE OR a.id = ANY(${articleIdList}::int[]))
           AND (
             ${filters.from} = ''
             OR COALESCE(a.published, a.save_time::date) >= CAST(NULLIF(${filters.from}, '') AS date)
@@ -386,6 +394,7 @@ async function executeLiteralSearch(
         )) AS search_text
       ) AS searchable
       WHERE (${filters.source} = '' OR a.source = ${filters.source})
+        AND (${articleIdFilterEnabled} = FALSE OR a.id = ANY(${articleIdList}::int[]))
         AND (
           ${filters.from} = ''
           OR COALESCE(a.published, a.save_time::date) >= CAST(NULLIF(${filters.from}, '') AS date)
@@ -418,10 +427,13 @@ async function executeSearch(
   filters: ArticleSearchFilters,
   capabilities: SearchCapabilities,
   suggest: boolean,
+  articleIds?: readonly number[],
 ): Promise<ArticleSearchResponse> {
   const pageSize = suggest ? ARTICLE_SEARCH_SUGGEST_PAGE_SIZE : ARTICLE_SEARCH_PAGE_SIZE;
   const limit = pageSize + (suggest ? 1 : 0);
   const offset = suggest ? 0 : (filters.page - 1) * ARTICLE_SEARCH_PAGE_SIZE;
+  const articleIdFilterEnabled = articleIds !== undefined;
+  const articleIdList = articleIds ?? [];
   const hasQuery = Boolean(filters.q);
   const { tsQuery, precedingTsQuery, lastTerm } = hasQuery
     ? buildTsQuery(filters.q)
@@ -429,7 +441,7 @@ async function executeSearch(
   const fuzzyEnabled = capabilities.typoTolerance && Boolean(lastTerm);
 
   if (hasQuery && !capabilities.hasFullTextIndex) {
-    return executeLiteralSearch(filters, capabilities, suggest);
+    return executeLiteralSearch(filters, capabilities, suggest, articleIds);
   }
 
   return withReadOnlyTransaction(async (tx) => {
@@ -445,6 +457,7 @@ async function executeSearch(
           a.matched_keywords
         FROM esg_articles AS a
         WHERE (${filters.source} = '' OR a.source = ${filters.source})
+          AND (${articleIdFilterEnabled} = FALSE OR a.id = ANY(${articleIdList}::int[]))
           AND (
             ${filters.from} = ''
             OR COALESCE(a.published, a.save_time::date) >= CAST(NULLIF(${filters.from}, '') AS date)
@@ -474,6 +487,7 @@ async function executeSearch(
         SELECT COUNT(*)::bigint AS total
         FROM esg_articles AS a
         WHERE (${filters.source} = '' OR a.source = ${filters.source})
+          AND (${articleIdFilterEnabled} = FALSE OR a.id = ANY(${articleIdList}::int[]))
           AND (
             ${filters.from} = ''
             OR COALESCE(a.published, a.save_time::date) >= CAST(NULLIF(${filters.from}, '') AS date)
@@ -534,6 +548,7 @@ async function executeSearch(
                 END AS relevance
             FROM article_search
             WHERE (${filters.source} = '' OR article_search.source = ${filters.source})
+              AND (${articleIdFilterEnabled} = FALSE OR article_search.id = ANY(${articleIdList}::int[]))
               AND (
                 ${filters.from} = ''
                 OR article_search.article_date >= CAST(NULLIF(${filters.from}, '') AS date)
@@ -594,6 +609,7 @@ async function executeSearch(
                 END AS relevance
             FROM article_search
             WHERE (${filters.source} = '' OR article_search.source = ${filters.source})
+              AND (${articleIdFilterEnabled} = FALSE OR article_search.id = ANY(${articleIdList}::int[]))
               AND (
                 ${filters.from} = ''
                 OR article_search.article_date >= CAST(NULLIF(${filters.from}, '') AS date)
@@ -644,6 +660,7 @@ async function executeSearch(
           SELECT COUNT(*)::bigint AS total
           FROM article_search
           WHERE (${filters.source} = '' OR article_search.source = ${filters.source})
+            AND (${articleIdFilterEnabled} = FALSE OR article_search.id = ANY(${articleIdList}::int[]))
             AND (
               ${filters.from} = ''
               OR article_search.article_date >= CAST(NULLIF(${filters.from}, '') AS date)
@@ -680,6 +697,7 @@ async function executeSearch(
           SELECT COUNT(*)::bigint AS total
           FROM article_search
           WHERE (${filters.source} = '' OR article_search.source = ${filters.source})
+            AND (${articleIdFilterEnabled} = FALSE OR article_search.id = ANY(${articleIdList}::int[]))
             AND (
               ${filters.from} = ''
               OR article_search.article_date >= CAST(NULLIF(${filters.from}, '') AS date)
@@ -706,14 +724,26 @@ async function executeSearch(
 
 export async function searchEsgArticles(
   filters: ArticleSearchFilters,
-  options?: { suggest?: boolean },
+  options?: { suggest?: boolean; articleIds?: readonly number[] },
 ): Promise<ArticleSearchResponse> {
   const suggest = options?.suggest === true;
+  const articleIds = options?.articleIds;
+  if (articleIds?.length === 0) {
+    return {
+      items: [],
+      total: 0,
+      page: filters.page,
+      pageSize: suggest ? ARTICLE_SEARCH_SUGGEST_PAGE_SIZE : ARTICLE_SEARCH_PAGE_SIZE,
+      hasMore: false,
+      query: filters.q,
+      typoTolerance: false,
+    };
+  }
   const capabilities = await getSearchCapabilities();
 
-  if (!suggest) return executeSearch(filters, capabilities, false);
+  if (!suggest) return executeSearch(filters, capabilities, false, articleIds);
 
-  const key = articleSearchKey(filters, capabilities);
+  const key = articleSearchKey(filters, capabilities, articleIds);
   const now = Date.now();
   trimSuggestionCache(now);
 
@@ -723,7 +753,7 @@ export async function searchEsgArticles(
   const existing = suggestionInFlight.get(key);
   if (existing) return cloneResponse(await existing);
 
-  const promise = executeSearch(filters, capabilities, true).then((response) => {
+  const promise = executeSearch(filters, capabilities, true, articleIds).then((response) => {
     trimSuggestionCache(Date.now());
     suggestionCache.set(key, {
       expiresAt: Date.now() + SUGGESTION_CACHE_TTL_MS,

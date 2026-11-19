@@ -28,6 +28,7 @@ export default function AdminLayout({
     { name: "System Health", href: "/admin/health", icon: "💚" },
     { name: "Test Alerts", href: "/admin/test-alerts", icon: "🧪" },
     { name: "Weekly Digest", href: "/admin/weekly-digest", icon: "📰" },
+    { name: "Daily AI Picks", href: "/admin/daily-ai", icon: "✨" },
   ];
 
   return (

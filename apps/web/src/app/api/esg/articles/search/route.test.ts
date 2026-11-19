@@ -4,10 +4,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   search: vi.fn(),
+  dailyPickIds: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/api-auth", () => ({ requireUserSession: mocks.auth }));
+vi.mock("@/lib/article-ai/daily-feed", () => ({ getDailyArticlePickIds: mocks.dailyPickIds }));
 vi.mock("@/lib/esg-article-search/repository", () => ({ searchEsgArticles: mocks.search }));
 
 import { resetEsgArticleSearchRateForTests } from "@/lib/esg-article-search/rate-limit";
@@ -32,6 +34,7 @@ beforeEach(() => {
   resetEsgArticleSearchRateForTests();
   mocks.auth.mockResolvedValue({ userId: 7, session: { user: { id: "7" } } });
   mocks.search.mockResolvedValue(result);
+  mocks.dailyPickIds.mockResolvedValue([101, 202]);
 });
 
 describe("GET /api/esg/articles/search", () => {
@@ -76,6 +79,16 @@ describe("GET /api/esg/articles/search", () => {
     expect(mocks.search).toHaveBeenCalledWith(
       expect.objectContaining({ q: "climat", sort: "relevance", page: 1 }),
       { suggest: true },
+    );
+  });
+
+  it("scopes suggestions to shared daily picks before applying the limit", async () => {
+    const response = await GET(request("?q=climat&suggest=1&ai=1"));
+    expect(response.status).toBe(200);
+    expect(mocks.dailyPickIds).toHaveBeenCalledWith("esg");
+    expect(mocks.search).toHaveBeenCalledWith(
+      expect.objectContaining({ q: "climat", sort: "relevance", page: 1 }),
+      { suggest: true, articleIds: [101, 202] },
     );
   });
 

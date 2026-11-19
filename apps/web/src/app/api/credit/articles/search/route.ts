@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { requireUserSession } from "@/lib/api-auth";
+import { getDailyArticlePickIds } from "@/lib/article-ai/daily-feed";
 import { parseCreditArticleSearchParams } from "@/lib/credit-article-search/query";
 import { consumeCreditArticleSearchRate } from "@/lib/credit-article-search/rate-limit";
 import { searchCreditArticles } from "@/lib/credit-article-search/repository";
@@ -28,7 +29,13 @@ export async function GET(request: Request): Promise<NextResponse> {
     return jsonResponse({ error: "Credit article search rate limit exceeded" }, 429, { "Retry-After": String(retryAfter) });
   }
   try {
-    const result = await searchCreditArticles(parsed.filters, { suggest: params.get("suggest") === "1" || params.get("suggest") === "true" });
+    const suggest = params.get("suggest") === "1" || params.get("suggest") === "true";
+    const articleIds = params.get("ai") === "1" || params.get("ai") === "true"
+      ? await getDailyArticlePickIds("credit")
+      : undefined;
+    const result = articleIds
+      ? await searchCreditArticles(parsed.filters, { suggest, articleIds })
+      : await searchCreditArticles(parsed.filters, { suggest });
     return jsonResponse(result);
   } catch {
     return jsonResponse({ error: "Credit article search is temporarily unavailable" }, 503);

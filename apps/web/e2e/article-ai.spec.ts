@@ -116,6 +116,7 @@ async function mockArticleAiApis(
     weeklyReadyZero?: boolean;
     weeklyPartial?: boolean;
     weeklyError?: boolean;
+    dailyEsg?: boolean;
   } = {},
 ) {
   const sharedHistoryCount = options.sharedHistoryCount ?? 20;
@@ -153,6 +154,10 @@ async function mockArticleAiApis(
         enabled: options.esgEnabled,
         status: options.esgEnabled ? "ready" : "off",
       }),
+      ...(options.dailyEsg ? {
+        weekly: null,
+        daily: { sourceDay: "2026-11-18", status: "ready", selectionCount: 1 },
+      } : {}),
     }),
     credit: preference("credit", {
       weeklyDigestConfigured: options.creditWeeklyDigestConfigured ?? true,
@@ -172,7 +177,9 @@ async function mockArticleAiApis(
       ? []
       : options.includePendingEsg
       ? [selectionFor("esg", 101), selectionFor("esg", 102, { pendingConfirmation: true })]
-      : [selectionFor("esg", 101)],
+      : [selectionFor("esg", 101, options.dailyEsg
+        ? { policyVersion: 4, assessmentDate: "2026-11-18", targetWeekKey: null }
+        : {})],
     credit: options.weeklyReadyZero
       ? []
       : options.resolveCreditPending
@@ -281,8 +288,8 @@ test("keeps ESG and Credit switches independent, batches selections, and preserv
   await expect(page.getByTestId("article-ai-controls-credit").first()).toBeVisible();
   await expect(page.getByText(/configure an existing weekly article email for this domain/)).toBeVisible();
   await expect(page.getByText("AI email inclusion is currently unavailable here.")).toBeVisible();
-  await expect(page.getByTestId("article-ai-weekly-status-esg")).toContainText("Ready for the Monday email");
-  await expect(page.getByTestId("article-ai-weekly-status-credit")).toContainText("Ready for the Monday email");
+  await expect(page.getByTestId("article-ai-weekly-status-esg")).toContainText("Last weekly pass ready");
+  await expect(page.getByTestId("article-ai-weekly-status-credit")).toContainText("Last weekly pass ready");
   expect(selectionCalls).toEqual({ esg: 1, credit: 1 });
 
   const esgSwitch = page.getByTestId("article-ai-toggle-esg");
@@ -317,6 +324,24 @@ test("keeps shared picks visible when private email inclusion is off", async ({ 
   await expect(sharedPick).toBeVisible();
   await expect(sharedPick.getByRole("button", { name: "Keep & like" })).toBeVisible();
   await expect(sharedPick.getByRole("button", { name: "Dismiss" })).toBeVisible();
+});
+
+test("renders the latest daily policy 4 assessment and badge without digest wording", async ({ page }) => {
+  await mockArticleAiApis(page, { dailyEsg: true });
+  await page.goto("/articles");
+
+  const controls = page.getByTestId("article-ai-controls-esg");
+  const daily = controls.getByTestId("article-ai-daily-esg");
+  await expect(daily).toBeVisible();
+  await expect(daily.getByTestId("article-ai-daily-status-esg")).toContainText("Ready to review");
+  await expect(daily).toContainText("Nov 18, 2026");
+  await expect(daily).toContainText("1 selected");
+  await expect(controls.getByTestId("article-ai-weekly-esg")).toHaveCount(0);
+
+  const dailyPick = page.getByTestId("article-ai-selection-101");
+  await expect(dailyPick).toContainText("Daily AI pick");
+  await expect(dailyPick).toContainText("Daily assessment 2026-11-18 · Dubai");
+  await expect(dailyPick).not.toContainText("digest");
 });
 
 test("handles dismiss, confirmation, pending state, and a stale feedback version", async ({ page }) => {
@@ -394,7 +419,7 @@ test("shows the fixed Dubai schedule and upcoming weekly window for both domains
 
   for (const domain of ["esg", "credit"] as const) {
     const weekly = page.getByTestId(`article-ai-weekly-${domain}`);
-    await expect(weekly).toContainText("Target week");
+    await expect(weekly).toContainText("Last target week");
     await expect(weekly).toContainText("Nov 16, 2026");
     await expect(weekly).toContainText("Nov 9, 2026");
     await expect(weekly).toContainText("Nov 13, 2026");
@@ -425,7 +450,7 @@ test("shows a completed weekly pass with zero shared selections", async ({ page 
   await mockArticleAiApis(page, { weeklyReadyZero: true });
   await page.goto("/articles");
   const readyZero = page.getByTestId("article-ai-weekly-esg");
-  await expect(readyZero.getByTestId("article-ai-weekly-status-esg")).toContainText("Ready for the Monday email");
+  await expect(readyZero.getByTestId("article-ai-weekly-status-esg")).toContainText("Last weekly pass ready");
   await expect(readyZero).toContainText("completed without selecting a shared pick");
   await expect(page.getByTestId("article-ai-selection-101")).toHaveCount(0);
 });
@@ -436,7 +461,7 @@ test("shows a failed weekly outcome without claiming complete input review", asy
   const failed = page.getByTestId("article-ai-weekly-esg");
   await expect(failed.getByTestId("article-ai-weekly-status-esg")).toContainText("Weekly assessment needs attention");
   await expect(failed).toContainText("do not claim that every input was reviewed");
-  await expect(failed).not.toContainText("Ready for the Monday email");
+  await expect(failed).not.toContainText("Last weekly pass ready");
 });
 
 test("explains a missing subscription without changing it", async ({ page }) => {

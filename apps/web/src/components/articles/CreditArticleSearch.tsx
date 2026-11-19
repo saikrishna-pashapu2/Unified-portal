@@ -14,6 +14,7 @@ import type { CreditArticleSearchFilters } from "@/lib/credit-article-search/typ
 type CreditArticleSearchProps = {
   filters: CreditArticleSearchFilters;
   sources: string[];
+  aiOnly?: boolean;
 };
 
 /**
@@ -23,13 +24,15 @@ type CreditArticleSearchProps = {
 export default function CreditArticleSearch({
   filters,
   sources,
+  aiOnly = false,
 }: CreditArticleSearchProps) {
   const extraQueryParams = useMemo(
     () => ({
       region: filters.region || undefined,
       sector: filters.sector || undefined,
+      ai: aiOnly ? "1" : undefined,
     }),
-    [filters.region, filters.sector],
+    [aiOnly, filters.region, filters.sector],
   );
 
   const searchParamsBuilder = useMemo(
@@ -50,10 +53,10 @@ export default function CreditArticleSearch({
         page: 1,
         region: filters.region,
         sector: filters.sector,
-      }).toString()}`;
+      }).toString()}${aiOnly ? "&ai=1" : ""}`;
       return `/credit/articles/${encodeURIComponent(String(item.id))}?back=${encodeURIComponent(backUrl)}`;
     },
-    [filters.region, filters.sector],
+    [aiOnly, filters.region, filters.sector],
   );
 
   return (

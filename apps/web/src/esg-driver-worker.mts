@@ -77,7 +77,7 @@ const baseJobTypes: readonly BackgroundJobType[] = esgDriversOnly
       ...PDFX_V2_QUEUE_JOB_TYPES,
       ...(process.env.ARTICLE_AI_ENABLED === "true" ? [
         "article_ai_esg_v1" as const, "article_ai_esg_v2" as const, "article_ai_esg_v3" as const,
-        "article_ai_credit_v1" as const, "article_ai_credit_v2" as const,
+        "article_ai_esg_v4" as const, "article_ai_credit_v1" as const, "article_ai_credit_v2" as const,
       ] : []),
     ];
 let enabledJobTypes: BackgroundJobType[] = [...baseJobTypes];
@@ -224,7 +224,7 @@ async function refreshCreditCapability(): Promise<void> {
     await creditPrisma.$queryRaw`SELECT user_id, content_id, content_type, created_at FROM likes LIMIT 0`;
     const restored = !creditReady;
     creditReady = true;
-    enabledJobTypes = [...baseJobTypes, 'article_ai_credit_v3'];
+    enabledJobTypes = [...baseJobTypes, 'article_ai_credit_v3', 'article_ai_credit_v4'];
     if (restored) console.log('[esg-driver-worker] Credit article AI ready');
   } catch {
     creditReady = false;
@@ -257,6 +257,7 @@ async function executeJob(job: ClaimedBackgroundJob): Promise<void> {
       : job.jobType === "article_ai_esg_v1" || job.jobType === "article_ai_credit_v1"
         || job.jobType === "article_ai_esg_v2" || job.jobType === "article_ai_credit_v2"
         || job.jobType === "article_ai_esg_v3" || job.jobType === "article_ai_credit_v3"
+        || job.jobType === "article_ai_esg_v4" || job.jobType === "article_ai_credit_v4"
         ? await runArticleAiJob(job)
       : job.jobType === "xlsx_translation_v1"
         ? await processExcelTranslation(job)
@@ -275,7 +276,8 @@ async function executeJob(job: ClaimedBackgroundJob): Promise<void> {
       throw new JobLeaseLostError();
     }
   } catch (error) {
-    if ((job.jobType === 'article_ai_credit_v1' || job.jobType === 'article_ai_credit_v2' || job.jobType === 'article_ai_credit_v3') && isTransientPrismaConnectivityError(error)) {
+    if ((job.jobType === 'article_ai_credit_v1' || job.jobType === 'article_ai_credit_v2' || job.jobType === 'article_ai_credit_v3'
+      || job.jobType === 'article_ai_credit_v4') && isTransientPrismaConnectivityError(error)) {
       creditReady = false;
       enabledJobTypes = [...baseJobTypes];
       await creditPrisma.$disconnect().catch(() => undefined);

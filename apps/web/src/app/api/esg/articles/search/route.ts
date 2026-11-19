@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { requireUserSession } from "@/lib/api-auth";
+import { getDailyArticlePickIds } from "@/lib/article-ai/daily-feed";
 import { parseArticleSearchParams } from "@/lib/esg-article-search/query";
 import { consumeEsgArticleSearchRate } from "@/lib/esg-article-search/rate-limit";
 import { searchEsgArticles } from "@/lib/esg-article-search/repository";
@@ -8,7 +9,7 @@ import { searchEsgArticles } from "@/lib/esg-article-search/repository";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function isSuggestionRequest(value: string | null): boolean {
+function isEnabledFlag(value: string | null): boolean {
   return value === "1" || value === "true";
 }
 
@@ -33,7 +34,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   const parsed = parseArticleSearchParams(params);
   if (!parsed.ok) return jsonResponse({ error: parsed.error }, 400);
 
-  const suggest = isSuggestionRequest(params.get("suggest"));
+  const suggest = isEnabledFlag(params.get("suggest"));
   const retryAfter = consumeEsgArticleSearchRate(auth.userId);
   if (retryAfter !== null) {
     return jsonResponse(
@@ -44,7 +45,12 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
 
   try {
-    const result = await searchEsgArticles(parsed.filters, { suggest });
+    const articleIds = isEnabledFlag(params.get("ai"))
+      ? await getDailyArticlePickIds("esg")
+      : undefined;
+    const result = articleIds
+      ? await searchEsgArticles(parsed.filters, { suggest, articleIds })
+      : await searchEsgArticles(parsed.filters, { suggest });
     return jsonResponse(result);
   } catch {
     // Keep database errors out of the response: raw SQL errors can include

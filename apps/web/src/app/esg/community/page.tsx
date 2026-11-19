@@ -19,11 +19,13 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import WeeklyDigest from "@/components/community/WeeklyDigest";
+import DailyAiPicksPanel from "@/components/community/DailyAiPicksPanel";
+import { getDailyArticlePickFeed } from "@/lib/article-ai/daily-feed";
 
 type Sort = "latest" | "top";
 type Range = "7d" | "30d" | "60d";
 type Scope = "all" | "mine";
-type Tab = "articles" | "digest";
+type Tab = "articles" | "digest" | "daily-ai";
 
 const RANGE_TO_DAYS: Record<Range, number> = { "7d": 7, "30d": 30, "60d": 60 };
 
@@ -146,6 +148,15 @@ export default async function CommunityPage({
     console.error("Error fetching weekly digests:", error);
   }
 
+  let dailyAi: Awaited<ReturnType<typeof getDailyArticlePickFeed>> = { runs: [], picks: [] };
+  if (tab === "daily-ai") {
+    try {
+      dailyAi = await getDailyArticlePickFeed(domain, { limit: 20 });
+    } catch (error) {
+      console.error("Error fetching ESG daily AI picks:", error);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-50/50">
       {/* Header Section */}
@@ -204,6 +215,18 @@ export default async function CommunityPage({
               >
                 <Sparkles className="w-4 h-4" />
                 Weekly Digest
+              </Link>
+              <Link
+                href={`/esg/community?tab=daily-ai&sort=${sort}&range=${range}&scope=${scope}`}
+                className={cn(
+                  "px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-2",
+                  tab === "daily-ai"
+                    ? "bg-slate-900 text-white shadow-sm"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                )}
+              >
+                <Sparkles className="w-4 h-4" />
+                Daily AI Picks
               </Link>
             </div>
           </div>
@@ -281,6 +304,9 @@ export default async function CommunityPage({
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         {/* Weekly Digest Tab */}
         {tab === "digest" && <WeeklyDigest digests={digests} />}
+
+        {/* Shared daily AI picks; separate from human community rankings. */}
+        {tab === "daily-ai" && <DailyAiPicksPanel domain="esg" feed={dailyAi} />}
         
         {/* Liked Articles Tab */}
         {tab === "articles" && (rows.length === 0 ? (

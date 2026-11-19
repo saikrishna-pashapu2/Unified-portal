@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Check, Loader2, Sparkles, X } from "lucide-react";
+import { ARTICLE_AI_DAILY_POLICY_VERSION } from "@/lib/article-ai/types";
 import { useArticleAi } from "./ArticleAiProvider";
 
 export default function ArticleAiSelection({ articleId }: { articleId: number }) {
@@ -17,10 +18,15 @@ export default function ArticleAiSelection({ articleId }: { articleId: number })
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const selection = selectionFor(articleId);
 
-  if (!isAuthenticated || !preference || !selection || selection.state === "dismissed") {
+  if (!isAuthenticated || !selection || selection.state === "dismissed") {
     return null;
   }
 
+  // Policy 4 is the daily shared assessment. It is deliberately independent
+  // of the private weekly-email preference: users can review daily picks even
+  // when they have opted out of AI email inclusion.
+  const isDailySelection = selection.policyVersion === ARTICLE_AI_DAILY_POLICY_VERSION;
+  const emailOptedIn = preference?.enabled === true;
   const isPending = pendingArticleIds.has(articleId) || selection.pendingConfirmation;
   const feedbackUnavailable = !selection.sharedSelectionId;
   const canCheckAgain =
@@ -28,6 +34,33 @@ export default function ArticleAiSelection({ articleId }: { articleId: number })
     pendingPollingExhausted.has(articleId) &&
     !pendingArticleIds.has(articleId);
   const isConfirmed = selection.state === "confirmed" && !selection.pendingConfirmation;
+  const sourceDay = isDailySelection
+    ? selection.assessmentDate ?? selection.targetWeekKey
+    : selection.targetWeekKey;
+
+  const title = canCheckAgain
+    ? isDailySelection
+      ? "Daily AI pick is still processing"
+      : "AI pick is still processing"
+    : isPending
+      ? isDailySelection
+        ? "Saving your daily AI pick…"
+        : "Saving your AI pick…"
+      : feedbackUnavailable
+        ? isDailySelection
+          ? "Daily AI pick needs a refresh"
+          : "Shared AI pick needs a refresh"
+        : isDailySelection
+          ? isConfirmed
+            ? "Daily AI pick confirmed"
+            : "Daily AI pick"
+          : isConfirmed
+            ? emailOptedIn
+              ? "AI pick confirmed for your digest"
+              : "Shared AI pick confirmed"
+            : emailOptedIn
+              ? "AI pick for your digest"
+              : "Shared AI pick";
 
   const handleFeedback = async (action: "confirm" | "dismiss") => {
     if (isPending || feedbackUnavailable) return;
@@ -56,19 +89,7 @@ export default function ArticleAiSelection({ articleId }: { articleId: number })
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <p className="text-xs font-semibold text-slate-900">
-              {canCheckAgain
-                ? "AI pick is still processing"
-                : isPending
-                ? "Saving your AI pick…"
-                : feedbackUnavailable
-                  ? "Shared AI pick needs a refresh"
-                : isConfirmed
-                  ? preference.enabled
-                    ? "AI pick confirmed for your digest"
-                    : "Shared AI pick confirmed"
-                  : preference.enabled
-                    ? "AI pick for your digest"
-                    : "Shared AI pick"}
+              {title}
             </p>
             {!isConfirmed ? (
               <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-amber-800">
@@ -77,9 +98,9 @@ export default function ArticleAiSelection({ articleId }: { articleId: number })
             ) : null}
           </div>
           <p className="mt-1 text-xs leading-5 text-slate-700">{selection.reason}</p>
-          {selection.targetWeekKey ? (
+          {sourceDay ? (
             <p className="mt-1 text-[10px] font-medium uppercase tracking-[0.1em] text-slate-500">
-              Shared week {selection.targetWeekKey} · Dubai
+              {isDailySelection ? `Daily assessment ${sourceDay} · Dubai` : `Shared week ${sourceDay} · Dubai`}
             </p>
           ) : null}
 

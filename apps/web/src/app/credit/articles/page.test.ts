@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   search: vi.fn(),
   counts: vi.fn(),
   liked: vi.fn(),
+  dailyPickIds: vi.fn(),
   searchControl: vi.fn(),
   rowCard: vi.fn(),
 }));
@@ -17,6 +18,7 @@ vi.mock("@/lib/api-auth", () => ({ requireUserSession: mocks.auth }));
 vi.mock("@/lib/articles", () => ({ fetchCreditSources: mocks.sources }));
 vi.mock("@/lib/credit-article-search/repository", () => ({ searchCreditArticles: mocks.search }));
 vi.mock("@/lib/likes", () => ({ getLikeCounts: mocks.counts, getUserLikedSet: mocks.liked }));
+vi.mock("@/lib/article-ai/daily-feed", () => ({ getDailyArticlePickIds: mocks.dailyPickIds }));
 vi.mock("next/navigation", () => ({
   redirect: (url: string) => {
     throw new Error(`redirect:${url}`);
@@ -64,6 +66,9 @@ vi.mock("@/components/articles/ArticleAiProvider", () => ({
 vi.mock("@/components/articles/ArticleAiControls", () => ({
   default: () => createElement("div", null, "Existing AI controls"),
 }));
+vi.mock("@/components/articles/ArticleAiOnlyFilter", () => ({
+  default: () => createElement("div", null, "AI picks filter"),
+}));
 
 import Page from "./page";
 
@@ -96,6 +101,7 @@ beforeEach(() => {
   mocks.sources.mockResolvedValue(["Archive Journal"]);
   mocks.counts.mockResolvedValue({ 101: 2 });
   mocks.liked.mockResolvedValue(new Set([101]));
+  mocks.dailyPickIds.mockResolvedValue([101]);
   mocks.search.mockResolvedValue(defaultSearchResponse);
 });
 
@@ -166,6 +172,16 @@ describe("Credit article search page", () => {
     expect(html).toContain("%26page%3D2");
     expect(html).not.toContain("dateFrom");
     expect(html).not.toContain("dateTo");
+  });
+
+  it("uses the shared daily pick ids for the server-side AI-only filter", async () => {
+    await Page({ searchParams: Promise.resolve({ ai: "1", region: "MiddleEast", page: "2" }) });
+
+    expect(mocks.dailyPickIds).toHaveBeenCalledWith("credit");
+    expect(mocks.search).toHaveBeenCalledWith(
+      expect.objectContaining({ region: "MiddleEast", page: 2 }),
+      { articleIds: [101] },
+    );
   });
 
   it("normalizes legacy dateFrom/dateTo parameters for the full-archive search", async () => {

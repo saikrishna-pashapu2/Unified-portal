@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import type {
   ArticleAiDomain,
+  ArticleAiPreference,
   ArticleAiWeeklyStatus,
   ArticleAiWeeklySummary,
 } from "@/lib/article-ai/types";
@@ -67,7 +68,7 @@ function weeklyStatusLabel(status: ArticleAiWeeklyStatus | undefined) {
     case "merging_candidates":
       return "Combining candidate review";
     case "ready":
-      return "Ready for the Monday email";
+      return "Last weekly pass ready";
     case "error":
       return "Weekly assessment needs attention";
     case "budget_exhausted":
@@ -79,9 +80,9 @@ function weeklyStatusLabel(status: ArticleAiWeeklyStatus | undefined) {
     case "cancelled":
       return "Weekly assessment cancelled";
     case "queued":
-      return "Queued for the next weekly pass";
+      return "Weekly email pass queued";
     default:
-      return "Weekly status is not available yet";
+      return "Weekly email status is not available yet";
   }
 }
 
@@ -105,6 +106,118 @@ function weeklyCoverageCopy(weekly: ArticleAiWeeklySummary) {
     : `Reviewed ${history} and ${candidates} so far.`;
 }
 
+function dailyStatusLabel(status: string | undefined) {
+  switch (status) {
+    case "manifest":
+    case "manifesting":
+      return "Preparing this source day";
+    case "history_profile":
+    case "assessing_history":
+      return "Reviewing shared liked history";
+    case "history_merge":
+    case "merging_history":
+      return "Combining history review";
+    case "candidate_evaluation":
+    case "evaluating_candidates":
+      return "Reviewing current candidates";
+    case "candidate_merge":
+    case "merging_candidates":
+      return "Combining candidate review";
+    case "finalize":
+      return "Finalizing shared picks";
+    case "queued":
+      return "Queued for assessment";
+    case "running":
+    case "processing":
+      return "Assessing this source day";
+    case "ready":
+      return "Ready to review";
+    case "insufficient":
+    case "insufficient_history":
+      return "Needs one usable human-liked article";
+    case "budget_exhausted":
+      return "Paused at the AI budget";
+    case "error":
+      return "Assessment needs attention";
+    case "expired":
+      return "Assessment window expired";
+    case "cancelled":
+      return "Assessment cancelled";
+    default:
+      return "Daily status is not available yet";
+  }
+}
+
+function dailyStatusTone(status: string | undefined) {
+  if (status === "ready") return "bg-emerald-100 text-emerald-800";
+  if (status === "error" || status === "budget_exhausted" || status === "cancelled") return "bg-rose-100 text-rose-800";
+  if (status === "insufficient" || status === "insufficient_history" || status === "expired") return "bg-amber-100 text-amber-800";
+  return "bg-sky-100 text-sky-800";
+}
+
+function DailySummary({
+  domain,
+  daily,
+}: {
+  domain: ArticleAiDomain;
+  daily: ArticleAiPreference["daily"];
+}) {
+  const status = daily?.status;
+  const sourceDay = daily?.sourceDay ? formatDubaiDate(daily.sourceDay) : null;
+
+  return (
+    <div
+      className="mt-4 rounded-xl border border-slate-200 bg-slate-50/80 p-3.5"
+      data-testid={`article-ai-daily-${domain}`}
+      data-source-day={daily?.sourceDay ?? undefined}
+      aria-label={`Daily ${domain.toUpperCase()} AI assessment`}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="flex min-w-0 items-start gap-2.5">
+          <span className="mt-0.5 rounded-lg bg-slate-200 p-2 text-slate-700">
+            <Sparkles className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-700">
+              Daily shared assessment
+            </p>
+            <p className="mt-1 text-xs leading-5 text-slate-600">
+              This domain-wide result is visible in the archive whether your private email switch is on or off.
+            </p>
+          </div>
+        </div>
+        <span
+          className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] ${dailyStatusTone(status)}`}
+          data-testid={`article-ai-daily-status-${domain}`}
+        >
+          {dailyStatusLabel(status)}
+        </span>
+      </div>
+
+      {daily ? (
+        <div className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
+          <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+            <p className="font-semibold text-slate-700">Source day · Dubai</p>
+            <p className="mt-0.5 text-slate-600">{sourceDay ?? daily.sourceDay}</p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+            <p className="font-semibold text-slate-700">Shared AI picks</p>
+            <p className="mt-0.5 text-slate-600" data-selection-count={daily.selectionCount}>{formatCount(daily.selectionCount)} selected</p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+            <p className="font-semibold text-slate-700">Archive visibility</p>
+            <p className="mt-0.5 text-slate-600">Available in the Only AI picks filter</p>
+          </div>
+        </div>
+      ) : (
+        <p className="mt-3 text-xs leading-5 text-slate-600">
+          The first daily assessment is not available yet. New source days are assessed after 12:15 am Dubai; completed shared picks appear in the article archive.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function WeeklySummary({
   domain,
   weekly,
@@ -121,7 +234,7 @@ function WeeklySummary({
     <div
       className="mt-4 rounded-xl border border-slate-200 bg-slate-50/80 p-3.5"
       data-testid={`article-ai-weekly-${domain}`}
-      aria-label={`Weekly ${domain.toUpperCase()} AI assessment`}
+      aria-label={`Weekly ${domain.toUpperCase()} email schedule and last AI assessment`}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="flex min-w-0 items-start gap-2.5">
@@ -130,10 +243,10 @@ function WeeklySummary({
           </span>
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-700">
-              Shared weekly assessment
+              Weekly email assessment
             </p>
             <p className="mt-1 text-xs leading-5 text-slate-600">
-              This status and these shared picks are visible whether your private email switch is on or off.
+              Daily AI picks are assessed separately. This panel shows the last weekly email pass and schedule; it does not control the Only AI picks filter.
             </p>
           </div>
         </div>
@@ -147,9 +260,9 @@ function WeeklySummary({
 
       <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-          <p className="font-semibold text-slate-700">Target week · Monday delivery</p>
+          <p className="font-semibold text-slate-700">Last target week · Monday delivery</p>
           <p className="mt-0.5 text-slate-600">
-            {weekly ? formatDubaiDate(weekly.targetWeekKey) : "Next Monday"}
+            {weekly ? formatDubaiDate(weekly.targetWeekKey) : "Next scheduled email"}
           </p>
         </div>
         <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
@@ -241,7 +354,7 @@ function WeeklySummary({
         </>
       ) : (
         <p className="mt-3 text-xs leading-5 text-slate-600">
-          The next shared pass reviews Monday–Friday inputs, processes them Saturday at 12:15 am Dubai, and prepares the shared result for Monday at 9:00 am Dubai.
+          The next weekly email pass reviews Monday–Friday inputs, processes them Saturday at 12:15 am Dubai, and prepares the email for Monday at 9:00 am Dubai. Daily AI picks are available independently in the article filters.
         </p>
       )}
     </div>
@@ -351,6 +464,7 @@ export default function ArticleAiControls({
 
   const profileMessage = `The shared ${domain.toUpperCase()} profile learns from all human-liked articles in this domain. Your switch controls only whether shared picks appear in your private weekly email.`;
   const emailReady = preference.emailInclusionEnabled && preference.weeklyDigestConfigured && !preference.scheduleMismatch;
+  const daily = preference.daily;
 
   return (
     <section
@@ -398,11 +512,15 @@ export default function ArticleAiControls({
       <div className="mt-4 grid gap-2 text-xs sm:grid-cols-2">
         <p className="rounded-lg bg-slate-50 px-3 py-2 leading-5 text-slate-600">{profileMessage}</p>
         <p className="rounded-lg bg-slate-50 px-3 py-2 leading-5 text-slate-600">
-          This is a shared weekly result. It is not a personal-like threshold, and turning this switch on does not start a separate AI run.
+          The weekly status below is for email delivery. Daily shared picks remain available in the article filters, and turning this switch on does not start a separate AI run.
         </p>
       </div>
 
-      <WeeklySummary domain={domain} weekly={preference.weekly} />
+      {preference.weekly && !daily ? (
+        <WeeklySummary domain={domain} weekly={preference.weekly} />
+      ) : (
+        <DailySummary domain={domain} daily={daily} />
+      )}
 
       {!preference.emailInclusionEnabled ? (
         <p className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
@@ -433,7 +551,7 @@ export default function ArticleAiControls({
         </p>
       ) : null}
 
-      {preference.enabled && preference.weekly?.status === "ready" && emailReady ? (
+      {preference.enabled && preference.status === "ready" && emailReady ? (
         <p className="mt-3 flex items-center gap-2 text-[11px] font-medium text-emerald-700">
           <Check className="h-3.5 w-3.5" aria-hidden="true" />
           Your opted-in AI picks will be included in the next compatible Monday 9:00 am Dubai email.

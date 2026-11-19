@@ -4,6 +4,8 @@ export type ArticleAiDomain = "esg" | "credit";
 /** Policy 2 is retained only for draining the retired daily implementation. */
 export const ARTICLE_AI_V2_POLICY_VERSION = 2;
 export const ARTICLE_AI_WEEKLY_POLICY_VERSION = 3;
+/** Daily shared domain assessments. Human history is pooled by domain. */
+export const ARTICLE_AI_DAILY_POLICY_VERSION = 4;
 export const ARTICLE_AI_POLICY_VERSION = ARTICLE_AI_WEEKLY_POLICY_VERSION;
 export const ARTICLE_AI_DOMAIN_HISTORY_MINIMUM = 1;
 export const ARTICLE_AI_MAX_SHARED_SELECTIONS = 20;
@@ -88,6 +90,8 @@ export interface ArticleAiPreference {
   emailInclusionEnabled: boolean;
   /** Shared weekly run state; independent of this user's enabled switch. */
   weekly: ArticleAiWeeklySummary | null;
+  /** Latest shared daily run; the source day is a Dubai calendar date. */
+  daily?: { sourceDay: string; status: ArticleAiWeeklyStatus; selectionCount: number };
   /** True when the recipient's alert schedule is not the canonical Monday 09:00 Dubai schedule. */
   scheduleMismatch: boolean;
 }
@@ -151,6 +155,13 @@ export interface ArticleAiWeeklyJobPayload {
   policyVersion: typeof ARTICLE_AI_WEEKLY_POLICY_VERSION;
 }
 
+/** Daily jobs process the preceding Dubai calendar day. */
+export interface ArticleAiDailyJobPayload {
+  domain: ArticleAiDomain;
+  sourceDayKey: string;
+  policyVersion: typeof ARTICLE_AI_DAILY_POLICY_VERSION;
+}
+
 export interface ArticleAiWeeklyInputSnapshot {
   manifestId: string;
   kind: ArticleAiWeeklyInputKind;
@@ -192,7 +203,8 @@ export interface ArticleAiWeeklyManifestResult {
 
 export interface ArticleAiWeeklyHistoryBatchRequest {
   domain: ArticleAiDomain;
-  policyVersion: typeof ARTICLE_AI_WEEKLY_POLICY_VERSION;
+  /** The keyed provider contract is shared by weekly v3 and daily v4. */
+  policyVersion: number;
   model: "gpt-6-luna";
   runId: string;
   batchId: string;
@@ -215,7 +227,7 @@ export interface ArticleAiWeeklyHistoryBatchResult {
 
 export interface ArticleAiWeeklyCandidateBatchRequest {
   domain: ArticleAiDomain;
-  policyVersion: typeof ARTICLE_AI_WEEKLY_POLICY_VERSION;
+  policyVersion: number;
   model: "gpt-6-luna";
   runId: string;
   batchId: string;
@@ -247,7 +259,7 @@ export interface ArticleAiWeeklyCandidateBatchResult {
 
 export interface ArticleAiWeeklyMergeRequest {
   domain: ArticleAiDomain;
-  policyVersion: typeof ARTICLE_AI_WEEKLY_POLICY_VERSION;
+  policyVersion: number;
   model: "gpt-6-luna";
   runId: string;
   batchId: string;
@@ -276,4 +288,8 @@ export function isArticleAiDomain(value: unknown): value is ArticleAiDomain {
 
 export function isArticleAiWeeklyPolicy(value: unknown): value is typeof ARTICLE_AI_WEEKLY_POLICY_VERSION {
   return value === ARTICLE_AI_WEEKLY_POLICY_VERSION;
+}
+
+export function isArticleAiDailyPolicy(value: unknown): value is typeof ARTICLE_AI_DAILY_POLICY_VERSION {
+  return value === ARTICLE_AI_DAILY_POLICY_VERSION;
 }
