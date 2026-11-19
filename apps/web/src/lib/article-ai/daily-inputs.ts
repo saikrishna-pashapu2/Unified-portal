@@ -167,13 +167,16 @@ export async function loadDailyManifestInputs(
   async function readSnapshot(database: Pick<typeof esgPrisma, "$queryRaw">): Promise<WeeklySourceRow[]> {
     const sizes = domain === "esg"
       ? await database.$queryRaw<Array<{ rows: bigint; bytes: bigint }>>`
-          WITH human_ids AS (
+          WITH history_ids AS (
             SELECT DISTINCT content_id FROM likes
             WHERE COALESCE(content_type, 'article') = 'article'
               AND (created_at IS NULL OR created_at AT TIME ZONE 'UTC' <= ${observedAt})
+            UNION
+            SELECT article_id AS content_id FROM article_ai_esg_learning_examples
+            WHERE created_at <= ${observedAt}
           ), inputs AS (
             SELECT a.title, a.summary, NULL::text AS content, a.source, a.link AS url
-            FROM human_ids h LEFT JOIN esg_articles a ON a.id = h.content_id
+            FROM history_ids h LEFT JOIN esg_articles a ON a.id = h.content_id
             UNION ALL
             SELECT a.title, a.summary, NULL::text, a.source, a.link
             FROM esg_articles a
@@ -183,7 +186,7 @@ export async function loadDailyManifestInputs(
               OR (a.save_time AT TIME ZONE 'UTC' >= ${calendar.sourceStart}
                 AND a.save_time AT TIME ZONE 'UTC' < ${calendar.sourceEnd})
             )
-              AND NOT EXISTS (SELECT 1 FROM human_ids h WHERE h.content_id = a.id)
+              AND NOT EXISTS (SELECT 1 FROM history_ids h WHERE h.content_id = a.id)
               AND NOT (a.id = ANY(${reviewedIds}::int[]))
           )
           SELECT COUNT(*)::bigint AS rows,
@@ -225,17 +228,20 @@ export async function loadDailyManifestInputs(
     }
     return domain === "esg"
       ? await database.$queryRaw<WeeklySourceRow[]>`
-          WITH human_ids AS (
+          WITH history_ids AS (
             SELECT DISTINCT content_id FROM likes
             WHERE COALESCE(content_type, 'article') = 'article'
               AND (created_at IS NULL OR created_at AT TIME ZONE 'UTC' <= ${observedAt})
+            UNION
+            SELECT article_id AS content_id FROM article_ai_esg_learning_examples
+            WHERE created_at <= ${observedAt}
           )
           SELECT 'history'::text AS kind, h.content_id AS id, a.id IS NOT NULL AS resolved,
             a.title, a.summary, NULL::text AS content, a.source, a.link AS url,
             a.published::timestamp AT TIME ZONE 'Asia/Dubai' AS published_at,
             COALESCE(a.published::timestamp AT TIME ZONE 'Asia/Dubai', a.save_time AT TIME ZONE 'UTC') AS eligible_at,
             a.save_time AT TIME ZONE 'UTC' AS first_seen_at
-          FROM human_ids h LEFT JOIN esg_articles a ON a.id = h.content_id
+          FROM history_ids h LEFT JOIN esg_articles a ON a.id = h.content_id
           UNION ALL
           SELECT 'candidate'::text, a.id, TRUE, a.title, a.summary, NULL::text,
             a.source, a.link, a.published::timestamp AT TIME ZONE 'Asia/Dubai',
@@ -248,7 +254,7 @@ export async function loadDailyManifestInputs(
             OR (a.save_time AT TIME ZONE 'UTC' >= ${calendar.sourceStart}
               AND a.save_time AT TIME ZONE 'UTC' < ${calendar.sourceEnd})
           )
-            AND NOT EXISTS (SELECT 1 FROM human_ids h WHERE h.content_id = a.id)
+            AND NOT EXISTS (SELECT 1 FROM history_ids h WHERE h.content_id = a.id)
             AND NOT (a.id = ANY(${reviewedIds}::int[]))
           ORDER BY kind, id
         `

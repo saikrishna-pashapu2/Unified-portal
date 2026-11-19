@@ -81,8 +81,14 @@ accounts. Each distinct article is counted once. Historical examples have no
 recency cutoff or fixed sample limit; ESG and Credit never share their history
 or assessment. Missing and unusable records are counted as explicit exclusions.
 
-There is no personal-like minimum or five-article team gate. At least one usable
-human-liked article is necessary to have any evidence. AI choices never become
+Daily ESG assessments also read recovered historical examples from
+`article_ai_esg_learning_examples`. Each record holds an article ID and the time
+it was recovered. If an article also has a current human like, it counts once.
+Recovered examples supply learning history only. Human like counts, Community
+rankings, and the human-liked section of the weekly email still use `likes`.
+
+There is no personal-like minimum or five-article team gate. Assessments need at
+least one usable human-liked article or recovered learning example. AI choices never become
 positive examples on their own; absence of a like and private dismissals are not
 negative examples. The model can still abstain when new candidates are weak.
 
@@ -103,7 +109,8 @@ daily candidate against that domain assessment. There is no keyword scoring
 or candidate shortlist. Oversized text is segmented with complete coverage.
 Unchanged history batches can reuse a cache tied to domain, model, policy,
 prompt, and full input hash. A removed human like is excluded from subsequent
-assessment manifests.
+assessment manifests unless the article is also a recovered example or another
+user still likes it.
 
 Every candidate decision and intermediate elimination is persisted. Leaf
 responses must account for their exact assigned inputs; merge responses must

@@ -96,6 +96,15 @@ model likes {
   @@index([user_id], map: "ix_likes_user_id")
 }
 
+// Identity-free historical examples retained for the shared ESG AI profile.
+// This table intentionally has no user relation and is independent from the
+// scraper-owned article and normal likes tables. A row is retained even when
+// the originating user account is deleted.
+model article_ai_esg_learning_examples {
+  article_id Int      @id
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+}
+
 model pdf_translation_v2_jobs {
   id               String                     @id @db.Uuid
   user_id          Int
