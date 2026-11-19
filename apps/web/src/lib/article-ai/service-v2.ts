@@ -168,7 +168,9 @@ async function getLatestWeeklyAssessment(domain: ArticleAiDomain): Promise<Weekl
            a.profile_source, a.history_count, a.profile_json, a.content_hash, a.model,
            a.completed_at, a.source_start_at, a.source_cutoff_at, a.processing_at,
            a.email_at, a.valid_until, a.phase, a.coverage_json,
-           (SELECT COUNT(*)::int FROM article_ai_domain_selections ds WHERE ds.assessment_id = a.id) AS selection_count
+           (SELECT COUNT(*)::int FROM article_ai_domain_selections ds
+            WHERE ds.assessment_id = a.id
+              AND (a.policy_version <> ${ARTICLE_AI_DAILY_POLICY_VERSION} OR ds.expires_at > now())) AS selection_count
     FROM article_ai_domain_assessments a
     WHERE a.domain = ${domain} AND a.policy_version IN (${ARTICLE_AI_WEEKLY_POLICY_VERSION}, ${ARTICLE_AI_DAILY_POLICY_VERSION})
     ORDER BY a.created_at DESC

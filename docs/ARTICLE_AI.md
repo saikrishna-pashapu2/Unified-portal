@@ -87,6 +87,13 @@ it was recovered. If an article also has a current human like, it counts once.
 Recovered examples supply learning history only. Human like counts, Community
 rankings, and the human-liked section of the weekly email still use `likes`.
 
+When publishing daily picks, ESG and Credit each keep one article per distinct
+body text across that domain’s active 30-day feed. The comparison uses the full
+article content when available and falls back to the summary. It normalizes
+Unicode, letter case, and whitespace so a copied article with a different
+headline or URL can still be recognized. Separate reporting on the same topic
+remains eligible. All candidate evaluations stay in the run history.
+
 There is no personal-like minimum or five-article team gate. Assessments need at
 least one usable human-liked article or recovered learning example. AI choices never become
 positive examples on their own; absence of a like and private dismissals are not

@@ -23,6 +23,7 @@ import {
   requestWeeklyMerge,
 } from "./weekly-provider";
 import {
+  ARTICLE_AI_DAILY_POLICY_VERSION,
   ARTICLE_AI_MAX_SHARED_SELECTIONS,
   ARTICLE_AI_WEEKLY_POLICY_VERSION,
   type ArticleAiDomain,
@@ -129,6 +130,39 @@ interface PreparedBatch {
   databaseManifestIds: string[];
   providerInputs: ArticleAiWeeklyInputSnapshot[];
   fragments: ArticleAiWeeklyTextFragment[];
+}
+
+export interface ArticleAiSelectionCandidate {
+  input: ArticleAiWeeklyInputSnapshot;
+  confidence: number;
+  reason: string;
+}
+
+interface DailyBodyKey {
+  article_id: number;
+  current_run: boolean;
+  body_key: string | null;
+}
+
+/** Input order is the model ranking, with article ID breaking confidence ties. */
+export function deduplicateDailySelections(
+  ranked: readonly ArticleAiSelectionCandidate[],
+  rows: readonly DailyBodyKey[],
+): ArticleAiSelectionCandidate[] {
+  const current = new Map<number, string | null>();
+  const seen = new Set<string>();
+  for (const row of rows) {
+    if (row.current_run) current.set(row.article_id, row.body_key);
+    else if (row.body_key) seen.add(row.body_key);
+  }
+  return ranked.filter(({ input }) => {
+    if (!current.has(input.articleId)) throw new WeeklyCoverageError("Daily selection is missing its input snapshot");
+    const key = current.get(input.articleId);
+    if (!key) return true;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 interface MergeChild {
@@ -1523,12 +1557,16 @@ async function publishReady(
       if (typeof item.manifestId === "string" && typeof item.reason === "string") rootReasons.set(item.manifestId, item.reason);
     }
   }
-  const selected = Array.from(new Set(selectedManifestIds)).map((manifestId) => {
+  const candidateSelected = Array.from(new Set(selectedManifestIds)).map((manifestId) => {
     const input = byManifest.get(manifestId);
     const decision = leafDecisions.get(manifestId);
     return input ? { input, confidence: decision?.confidence ?? 0, reason: rootReasons.get(manifestId) ?? decision?.reason ?? "Selected by the shared weekly domain assessment" } : null;
   }).filter((item): item is { input: ArticleAiWeeklyInputSnapshot; confidence: number; reason: string } => Boolean(item))
-    .sort((a, b) => b.confidence - a.confidence).slice(0, ARTICLE_AI_MAX_SHARED_SELECTIONS);
+    .sort((a, b) => b.confidence - a.confidence
+      || a.input.articleId - b.input.articleId
+      || stableInputId(a.input).localeCompare(stableInputId(b.input)))
+    .slice(0, ARTICLE_AI_MAX_SHARED_SELECTIONS);
+  let selected = candidateSelected;
   const profileHash = hashValue({ manifestHash: manifest.manifestHash, profile: historyProfile });
   let expired = false;
   await esgPrisma.$transaction(async (tx) => {
@@ -1548,6 +1586,51 @@ async function publishReady(
       `;
       expired = true;
       return;
+    }
+    if (policyVersion() === ARTICLE_AI_DAILY_POLICY_VERSION) {
+      // Serialize daily publication for a domain so two source days cannot
+      // commit the same body text concurrently.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`article-ai-daily-finalize:${domain}`}))`;
+      const keys = await tx.$queryRaw<DailyBodyKey[]>`
+        WITH picked_inputs AS (
+          SELECT i.article_id, i.content, i.summary, true AS current_run
+          FROM article_ai_weekly_inputs i
+          WHERE i.assessment_id = ${assessment.id}::uuid AND i.kind = 'candidate'
+            AND i.article_id = ANY(${candidateSelected.map(item => item.input.articleId)}::int[])
+          UNION ALL
+          SELECT i.article_id, i.content, i.summary, false AS current_run
+          FROM article_ai_domain_selections s
+          JOIN article_ai_domain_assessments a ON a.id = s.assessment_id
+          JOIN article_ai_weekly_inputs i
+            ON i.assessment_id = a.id AND i.kind = 'candidate' AND i.article_id = s.article_id
+          WHERE a.domain = ${domain} AND a.policy_version = ${ARTICLE_AI_DAILY_POLICY_VERSION}
+            AND a.status = 'ready' AND a.coverage_json->>'status' = 'complete'
+            AND a.assessment_date >= (now() AT TIME ZONE 'Asia/Dubai')::date - 30
+            AND a.assessment_date < (now() AT TIME ZONE 'Asia/Dubai')::date
+            AND a.assessment_date <> ${calendar.targetWeekKey}::date
+            AND a.valid_until > now() AND s.expires_at > now()
+        )
+        SELECT i.article_id, i.current_run, encode(sha256(convert_to(canonical.body, 'UTF8')), 'hex') AS body_key
+        FROM picked_inputs i
+        LEFT JOIN LATERAL (
+          SELECT body FROM (
+            SELECT priority, btrim(regexp_replace(
+              lower(normalize(translate(value, chr(8203) || chr(65279), ''), NFKC)),
+              '[[:space:]]+', ' ', 'g')) AS body
+            FROM (VALUES (1, i.content), (2, i.summary)) AS sources(priority, value)
+          ) normalized
+          WHERE body <> '' ORDER BY priority LIMIT 1
+        ) canonical ON true
+      `;
+      selected = deduplicateDailySelections(candidateSelected, keys);
+      const selectedArticleIds = selected.map((item) => item.input.articleId);
+      await tx.$executeRaw`
+        UPDATE article_ai_domain_selections
+        SET expires_at = LEAST(expires_at, now()), updated_at = now()
+        WHERE assessment_id = ${assessment.id}::uuid
+          AND expires_at > now()
+          AND NOT (article_id = ANY(${selectedArticleIds}::int[]))
+      `;
     }
     for (const item of selected) {
       const contentHash = item.input.contentHash ?? weeklyArticleContentHash(item.input);

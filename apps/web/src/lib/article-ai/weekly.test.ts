@@ -9,6 +9,7 @@ vi.mock("./weekly-inputs", () => ({ loadWeeklyManifestInputs: vi.fn() }));
 import {
   articleAiMergeInputHash,
   countArticleAiWeeklyMergeNodes,
+  deduplicateDailySelections,
   estimateArticleAiWeeklyStructuredOutputBytes,
   planArticleAiWeeklyLeafBatches,
 } from "./weekly";
@@ -40,6 +41,20 @@ function productionShapedInput(kind: "history" | "candidate", articleId: number,
 }
 
 describe("weekly Article AI DAG planning", () => {
+  it("keeps the strongest eligible copy in rank order and allows articles without body text", () => {
+    const picks = [10, 11, 12, 13].map((id) => ({
+      input: productionShapedInput("candidate", id, 10), confidence: 1, reason: "relevant",
+    }));
+    const keys = [
+      { article_id: 9, current_run: false, body_key: "published" },
+      { article_id: 10, current_run: true, body_key: "new" },
+      { article_id: 11, current_run: true, body_key: "new" },
+      { article_id: 12, current_run: true, body_key: "published" },
+      { article_id: 13, current_run: true, body_key: null },
+    ];
+    expect(deduplicateDailySelections(picks, keys).map(pick => pick.input.articleId)).toEqual([10, 13]);
+  });
+
   it("isolates history merge caches from the previous response format while retaining candidate keys", () => {
     const child = { stableBatchId: "batch-1", outputHash: "child-hash" };
     const previousKey = (mergeKind: string) => createHash("sha256").update(JSON.stringify({
