@@ -8,6 +8,23 @@ import { getArticleAiDailyCalendar } from "./daily-calendar";
 import { buildDailyManifestInputs } from "./daily-inputs";
 
 describe("daily article manifest late ingestion", () => {
+  it("keeps unchanged human-liked evidence reusable across daily runs", () => {
+    const history = {
+      kind: "history" as const, id: 77, resolved: true, title: "Liquidity coverage",
+      summary: "Historical evidence", content: null, source: "Wire", url: "https://example.test/history",
+      published_at: null, eligible_at: null, first_seen_at: null,
+    };
+    const snapshots = ["2026-11-18", "2026-11-19"].map(day => {
+      const calendar = getArticleAiDailyCalendar(day);
+      return buildDailyManifestInputs("credit", calendar, calendar.processingAt, [history]).history[0];
+    });
+    expect(snapshots[0].contentHash).toBe(snapshots[1].contentHash);
+    for (const snapshot of snapshots) {
+      expect(snapshot.sourcePeriodStart).toBeNull();
+      expect(snapshot.sourcePeriodEnd).toBeNull();
+    }
+  });
+
   it("keeps an old publication that arrived during the source day", () => {
     const calendar = getArticleAiDailyCalendar("2026-11-18");
     const result = buildDailyManifestInputs("esg", calendar, new Date("2026-11-18T20:15:00.000Z"), [

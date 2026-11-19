@@ -723,6 +723,16 @@ async function reusableLeaf(
   return { stableBatchId: plan.stableBatchId, outputHash: cached.outputHash, output: cached.output };
 }
 
+export function articleAiMergeInputHash(
+  mergeKind: "history" | "candidate", children: readonly Pick<MergeChild, "stableBatchId" | "outputHash">[],
+): string {
+  return hashValue({
+    promptVersion: promptVersion(), mergeKind,
+    ...(mergeKind === "history" ? { responseFormat: "history-profile-child-hashes-v1" } : {}),
+    children: children.map(child => ({ id: child.stableBatchId, hash: child.outputHash })),
+  });
+}
+
 async function reusableMerge(
   assessmentId: string,
   domain: ArticleAiDomain,
@@ -731,8 +741,7 @@ async function reusableMerge(
   batchIndex: number,
   children: MergeChild[],
 ): Promise<{ child: MergeChild | null; inputHash: string; inputBytes: number }> {
-  const inputHash = hashValue({ promptVersion: promptVersion(), mergeKind,
-    children: children.map((child) => ({ id: child.stableBatchId, hash: child.outputHash })) });
+  const inputHash = articleAiMergeInputHash(mergeKind, children);
   const phase = mergeKind === "history" ? "history_merge" : "candidate_merge" as const;
   const request = buildMergeRequestInput(domain, assessmentId, "preflight", inputHash, mergeKind, children);
   const plan: PreparedBatch = { phase, level, batchIndex, inputHash, stableBatchId: `${mergeKind}_merge:${level}:${batchIndex}:${inputHash.slice(0, 16)}`, databaseManifestIds: [], providerInputs: [], fragments: [] };
@@ -1249,8 +1258,7 @@ async function executeMergeNode(
   if (children.some((child) => Buffer.byteLength(JSON.stringify(child.output), "utf8") > MAX_MERGE_OUTPUT_BYTES)) {
     throw new WeeklyCoverageError("Weekly merge child output exceeds the bounded merge contract");
   }
-  const inputHash = hashValue({ promptVersion: promptVersion(), mergeKind,
-    children: children.map((child) => ({ id: child.stableBatchId, hash: child.outputHash })) });
+  const inputHash = articleAiMergeInputHash(mergeKind, children);
   const stableBatchId = `${mergeKind}_merge:${level}:${batchIndex}:${inputHash.slice(0, 16)}`;
   const plan: PreparedBatch = {
     phase: mergeKind === "history" ? "history_merge" : "candidate_merge",

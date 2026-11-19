@@ -84,8 +84,9 @@ export function buildDailyManifestInputs(
       // immutable daily source cohort in this period pair. A late scraper
       // arrival can therefore be audited without being mistaken for a new
       // publication day.
-      sourcePeriodStart: calendar.sourceStart.toISOString(),
-      sourcePeriodEnd: calendar.sourceEnd.toISOString(),
+      // Historical evidence belongs to the domain across days. Keep its cache identity stable.
+      sourcePeriodStart: row.kind === "candidate" ? calendar.sourceStart.toISOString() : null,
+      sourcePeriodEnd: row.kind === "candidate" ? calendar.sourceEnd.toISOString() : null,
       carryoverFromWeek: null,
       exclusionReason,
     };

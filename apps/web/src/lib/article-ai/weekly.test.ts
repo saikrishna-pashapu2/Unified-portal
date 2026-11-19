@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
@@ -6,6 +7,7 @@ vi.mock("@/lib/jobs/queue", () => ({ JobLeaseLostError: class extends Error {}, 
 vi.mock("./weekly-inputs", () => ({ loadWeeklyManifestInputs: vi.fn() }));
 
 import {
+  articleAiMergeInputHash,
   countArticleAiWeeklyMergeNodes,
   estimateArticleAiWeeklyStructuredOutputBytes,
   planArticleAiWeeklyLeafBatches,
@@ -38,6 +40,15 @@ function productionShapedInput(kind: "history" | "candidate", articleId: number,
 }
 
 describe("weekly Article AI DAG planning", () => {
+  it("isolates history merge caches from the previous response format while retaining candidate keys", () => {
+    const child = { stableBatchId: "batch-1", outputHash: "child-hash" };
+    const previousKey = (mergeKind: string) => createHash("sha256").update(JSON.stringify({
+      promptVersion: "weekly-v4-keyed-coverage-2", mergeKind, children: [{ id: child.stableBatchId, hash: child.outputHash }],
+    })).digest("hex");
+    expect(articleAiMergeInputHash("history", [child])).not.toBe(previousKey("history"));
+    expect(articleAiMergeInputHash("candidate", [child])).toBe(previousKey("candidate"));
+  });
+
   it.each([[0, 0], [1, 0], [2, 1], [3, 2], [4, 3], [99, 98]])(
     "uses a deterministic binary merge tree for %i leaves",
     (leaves, expected) => expect(countArticleAiWeeklyMergeNodes(leaves)).toBe(expected),
